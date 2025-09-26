@@ -87,10 +87,15 @@ class FetchWithAuth {
             
             console.log(`APIレスポンス: ${response.status} ${response.statusText}`);
             
-            // 401/403の場合はログイン画面にリダイレクト
+            // 401/403の場合はログイン画面にリダイレクト（ログイン画面以外の場合のみ）
             if (response.status === 401 || response.status === 403) {
-                console.log('認証エラー: ログイン画面にリダイレクト');
-                this.redirectToLogin();
+                const loginContainer = document.getElementById('loginContainer');
+                if (!loginContainer || loginContainer.style.display === 'none') {
+                    console.log('認証エラー: ログイン画面にリダイレクト');
+                    this.redirectToLogin();
+                } else {
+                    console.log('認証エラー: ログイン画面表示中なのでリダイレクトをスキップ');
+                }
                 throw new Error('認証が必要です');
             }
 

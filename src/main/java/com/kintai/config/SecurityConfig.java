@@ -91,6 +91,8 @@ public class SecurityConfig {
                 .requestMatchers("/h2-console/**").denyAll()
                 // ヘルスチェックエンドポイント
                 .requestMatchers("/api/health").permitAll()
+                // 認証関連エンドポイントは認証なし
+                .requestMatchers("/api/auth/**").permitAll()
                 // 従業員用エンドポイント
                 .requestMatchers("/api/attendance/**", "/api/vacation/**").hasRole("EMPLOYEE")
                 // 管理者用エンドポイント
