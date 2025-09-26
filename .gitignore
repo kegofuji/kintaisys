@@ -1,0 +1,30 @@
+# Java/Maven
+/target/
+*.class
+*.jar
+*.war
+
+# IDE/Editor
+/.idea/
+/.vscode/
+*.iml
+
+# Logs
+*.log
+server.log
+app.log
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# FastAPI tmp/PDF
+fastapi_pdf_service/tmp/
+fastapi_pdf_service/*.pdf
+/reports/
+*.pdf
+
+# OS
+.DS_Store

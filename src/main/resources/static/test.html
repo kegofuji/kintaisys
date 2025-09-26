@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>勤怠管理システム - テスト</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .test-container {
+            max-width: 1200px;
+            margin: 20px auto;
+            padding: 20px;
+        }
+        .test-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+        }
+        .test-button {
+            margin: 5px;
+        }
+        .test-result {
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .test-success {
+            background-color: #d1edff;
+            border: 1px solid #0dcaf0;
+            color: #055160;
+        }
+        .test-error {
+            background-color: #f8d7da;
+            border: 1px solid #dc3545;
+            color: #721c24;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1 class="text-center mb-4">
+            <i class="fas fa-clock me-2"></i>勤怠管理システム - テストページ
+        </h1>
+
+        <!-- ログインテスト -->
+        <div class="test-section">
+            <h3><i class="fas fa-sign-in-alt me-2"></i>ログインテスト</h3>
+            <div class="row">
+                <div class="col-md-6">
+                    <h5>一般ユーザー</h5>
+                    <button class="btn btn-primary test-button" onclick="testLogin('emp1', 'pass')">
+                        <i class="fas fa-user me-1"></i>emp1/pass でログイン
+                    </button>
+                </div>
+                <div class="col-md-6">
+                    <h5>管理者</h5>
+                    <button class="btn btn-success test-button" onclick="testLogin('admin', 'pass')">
+                        <i class="fas fa-user-shield me-1"></i>admin/pass でログイン
+                    </button>
+                </div>
+            </div>
+            <div id="loginResult" class="test-result" style="display: none;"></div>
+        </div>
+
+        <!-- 画面遷移テスト -->
+        <div class="test-section">
+            <h3><i class="fas fa-route me-2"></i>画面遷移テスト</h3>
+            <div class="row">
+                <div class="col-md-3">
+                    <button class="btn btn-outline-primary test-button w-100" onclick="testNavigation('/dashboard')">
+                        <i class="fas fa-tachometer-alt me-1"></i>ダッシュボード
+                    </button>
+                </div>
+                <div class="col-md-3">
+                    <button class="btn btn-outline-primary test-button w-100" onclick="testNavigation('/history')">
+                        <i class="fas fa-history me-1"></i>勤怠履歴
+                    </button>
+                </div>
+                <div class="col-md-3">
+                    <button class="btn btn-outline-primary test-button w-100" onclick="testNavigation('/vacation')">
+                        <i class="fas fa-calendar-alt me-1"></i>有給申請
+                    </button>
+                </div>
+                <div class="col-md-3">
+                    <button class="btn btn-outline-primary test-button w-100" onclick="testNavigation('/adjustment')">
+                        <i class="fas fa-edit me-1"></i>打刻修正
+                    </button>
+                </div>
+            </div>
+            <div class="row mt-3">
+                <div class="col-md-3">
+                    <button class="btn btn-outline-success test-button w-100" onclick="testNavigation('/admin')">
+                        <i class="fas fa-user-shield me-1"></i>管理者ダッシュボード
+                    </button>
+                </div>
+                <div class="col-md-3">
+                    <button class="btn btn-outline-success test-button w-100" onclick="testNavigation('/admin/employees')">
+                        <i class="fas fa-users me-1"></i>社員管理
+                    </button>
+                </div>
+                <div class="col-md-3">
+                    <button class="btn btn-outline-success test-button w-100" onclick="testNavigation('/admin/attendance')">
+                        <i class="fas fa-clock me-1"></i>勤怠管理
+                    </button>
+                </div>
+                <div class="col-md-3">
+                    <button class="btn btn-outline-success test-button w-100" onclick="testNavigation('/admin/approvals')">
+                        <i class="fas fa-check-circle me-1"></i>申請承認
+                    </button>
+                </div>
+            </div>
+            <div id="navigationResult" class="test-result" style="display: none;"></div>
+        </div>
+
+        <!-- API接続テスト -->
+        <div class="test-section">
+            <h3><i class="fas fa-plug me-2"></i>API接続テスト</h3>
+            <div class="row">
+                <div class="col-md-3">
+                    <button class="btn btn-info test-button w-100" onclick="testApi('/api/auth/session', 'GET')">
+                        <i class="fas fa-check me-1"></i>セッション確認
+                    </button>
+                </div>
+                <div class="col-md-3">
+                    <button class="btn btn-info test-button w-100" onclick="testApi('/api/attendance/history/1', 'GET')">
+                        <i class="fas fa-history me-1"></i>勤怠履歴取得
+                    </button>
+                </div>
+                <div class="col-md-3">
+                    <button class="btn btn-info test-button w-100" onclick="testApi('/api/admin/employees', 'GET')">
+                        <i class="fas fa-users me-1"></i>社員一覧取得
+                    </button>
+                </div>
+                <div class="col-md-3">
+                    <button class="btn btn-info test-button w-100" onclick="testApi('/api/attendance/csrf-token', 'GET')">
+                        <i class="fas fa-shield-alt me-1"></i>CSRFトークン取得
+                    </button>
+                </div>
+            </div>
+            <div class="row mt-2">
+                <div class="col-md-4">
+                    <button class="btn btn-success test-button w-100" onclick="testLoginApi()">
+                        <i class="fas fa-sign-in-alt me-1"></i>ログインAPI
+                    </button>
+                </div>
+                <div class="col-md-4">
+                    <button class="btn btn-success test-button w-100" onclick="testClockInApi()">
+                        出勤打刻API
+                    </button>
+                </div>
+                <div class="col-md-4">
+                    <button class="btn btn-success test-button w-100" onclick="testPdfReportApi()">
+                        <i class="fas fa-file-pdf me-1"></i>PDFレポートAPI
+                    </button>
+                </div>
+            </div>
+            <div id="apiResult" class="test-result" style="display: none;"></div>
+        </div>
+
+        <!-- 機能テスト -->
+        <div class="test-section">
+            <h3><i class="fas fa-cogs me-2"></i>機能テスト</h3>
+            <div class="row">
+                <div class="col-md-3">
+                    <button class="btn btn-warning test-button w-100" onclick="testClockIn()">
+                        出勤打刻テスト
+                    </button>
+                </div>
+                <div class="col-md-3">
+                    <button class="btn btn-warning test-button w-100" onclick="testClockOut()">
+                        退勤打刻テスト
+                    </button>
+                </div>
+                <div class="col-md-3">
+                    <button class="btn btn-warning test-button w-100" onclick="testVacationRequest()">
+                        <i class="fas fa-calendar-plus me-1"></i>有給申請テスト
+                    </button>
+                </div>
+                <div class="col-md-3">
+                    <button class="btn btn-warning test-button w-100" onclick="testPdfDownload()">
+                        <i class="fas fa-file-pdf me-1"></i>PDF出力テスト
+                    </button>
+                </div>
+            </div>
+            <div id="functionResult" class="test-result" style="display: none;"></div>
+        </div>
+
+        <!-- レスポンシブテスト -->
+        <div class="test-section">
+            <h3><i class="fas fa-mobile-alt me-2"></i>レスポンシブテスト</h3>
+            <div class="row">
+                <div class="col-md-4">
+                    <button class="btn btn-secondary test-button w-100" onclick="testResponsive('mobile')">
+                        <i class="fas fa-mobile-alt me-1"></i>モバイル表示
+                    </button>
+                </div>
+                <div class="col-md-4">
+                    <button class="btn btn-secondary test-button w-100" onclick="testResponsive('tablet')">
+                        <i class="fas fa-tablet-alt me-1"></i>タブレット表示
+                    </button>
+                </div>
+                <div class="col-md-4">
+                    <button class="btn btn-secondary test-button w-100" onclick="testResponsive('desktop')">
+                        <i class="fas fa-desktop me-1"></i>デスクトップ表示
+                    </button>
+                </div>
+            </div>
+            <div id="responsiveResult" class="test-result" style="display: none;"></div>
+        </div>
+
+        <!-- テスト結果表示エリア -->
+        <div class="test-section">
+            <h3><i class="fas fa-clipboard-list me-2"></i>テスト結果</h3>
+            <div id="testLog" class="test-result" style="background-color: #f8f9fa; border: 1px solid #dee2e6;">
+                <p class="mb-0">テストを実行すると結果がここに表示されます。</p>
+            </div>
+            <button class="btn btn-outline-danger mt-2" onclick="clearTestLog()">
+                <i class="fas fa-trash me-1"></i>ログをクリア
+            </button>
+        </div>
+    </div>
+
+    <!-- メインアプリケーションを読み込み -->
+    <script src="js/utils/fetchWithAuth.js"></script>
+    <script src="js/utils/router.js"></script>
+    <script src="js/screens/login.js"></script>
+    <script src="js/screens/dashboard.js"></script>
+    <script src="js/screens/history.js"></script>
+    <script src="js/screens/vacation.js"></script>
+    <script src="js/screens/adjustment.js"></script>
+    <script src="js/screens/admin.js"></script>
+    <script src="js/app.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+        // テスト用のJavaScript関数
+        function testLogin(username, password) {
+            logTest('ログインテスト開始', 'info');
+            
+            // モックログイン処理
+            window.currentUser = username;
+            window.currentEmployeeId = username === 'admin' ? 999 : 1;
+            
+            const resultDiv = document.getElementById('loginResult');
+            resultDiv.style.display = 'block';
+            resultDiv.className = 'test-result test-success';
+            resultDiv.innerHTML = `<i class="fas fa-check me-1"></i>ログイン成功: ${username}`;
+            
+            logTest(`ログイン成功: ${username}`, 'success');
+        }
+
+        function testNavigation(path) {
+            logTest(`画面遷移テスト: ${path}`, 'info');
+            
+            if (window.router) {
+                window.router.navigate(path);
+                const resultDiv = document.getElementById('navigationResult');
+                resultDiv.style.display = 'block';
+                resultDiv.className = 'test-result test-success';
+                resultDiv.innerHTML = `<i class="fas fa-check me-1"></i>画面遷移成功: ${path}`;
+                logTest(`画面遷移成功: ${path}`, 'success');
+            } else {
+                logTest('ルーターが初期化されていません', 'error');
+            }
+        }
+
+        async function testApi(url, method) {
+            logTest(`API接続テスト: ${method} ${url}`, 'info');
+            
+            try {
+                const response = await fetch(url, {
+                    method: method,
+                    credentials: 'include'
+                });
+                
+                const resultDiv = document.getElementById('apiResult');
+                resultDiv.style.display = 'block';
+                
+                if (response.ok) {
+                    resultDiv.className = 'test-result test-success';
+                    resultDiv.innerHTML = `<i class="fas fa-check me-1"></i>API接続成功: ${response.status}`;
+                    logTest(`API接続成功: ${response.status}`, 'success');
+                } else {
+                    resultDiv.className = 'test-result test-error';
+                    resultDiv.innerHTML = `<i class="fas fa-times me-1"></i>API接続失敗: ${response.status}`;
+                    logTest(`API接続失敗: ${response.status}`, 'error');
+                }
+            } catch (error) {
+                const resultDiv = document.getElementById('apiResult');
+                resultDiv.style.display = 'block';
+                resultDiv.className = 'test-result test-error';
+                resultDiv.innerHTML = `<i class="fas fa-times me-1"></i>API接続エラー: ${error.message}`;
+                logTest(`API接続エラー: ${error.message}`, 'error');
+            }
+        }
+
+        async function testLoginApi() {
+            logTest('ログインAPIテスト', 'info');
+            
+            try {
+                const response = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    credentials: 'include',
+                    body: JSON.stringify({ username: 'emp1', password: 'pass' })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok && data.success) {
+                    logTest('ログインAPI成功', 'success');
+                } else {
+                    logTest(`ログインAPI失敗: ${data.message || response.status}`, 'error');
+                }
+            } catch (error) {
+                logTest(`ログインAPIエラー: ${error.message}`, 'error');
+            }
+        }
+
+        async function testClockInApi() {
+            logTest('出勤打刻APIテスト', 'info');
+            
+            try {
+                const response = await fetch('/api/attendance/clock-in', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    credentials: 'include',
+                    body: JSON.stringify({ employeeId: 1 })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok && data.success) {
+                    logTest('出勤打刻API成功', 'success');
+                } else {
+                    logTest(`出勤打刻API失敗: ${data.message || response.status}`, 'error');
+                }
+            } catch (error) {
+                logTest(`出勤打刻APIエラー: ${error.message}`, 'error');
+            }
+        }
+
+        async function testPdfReportApi() {
+            logTest('PDFレポート生成APIテスト', 'info');
+            
+            try {
+                const response = await fetch('/api/reports/generate', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    credentials: 'include',
+                    body: JSON.stringify({ employeeId: 1, yearMonth: '2025-09' })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok && data.success) {
+                    logTest('PDFレポート生成API成功', 'success');
+                } else {
+                    logTest(`PDFレポート生成API失敗: ${data.message || response.status}`, 'error');
+                }
+            } catch (error) {
+                logTest(`PDFレポート生成APIエラー: ${error.message}`, 'error');
+            }
+        }
+
+        function testClockIn() {
+            logTest('出勤打刻テスト', 'info');
+            
+            if (window.dashboardScreen) {
+                // モック出勤打刻
+                logTest('出勤打刻テスト完了（モック）', 'success');
+            } else {
+                logTest('ダッシュボード画面が初期化されていません', 'error');
+            }
+        }
+
+        function testClockOut() {
+            logTest('退勤打刻テスト', 'info');
+            
+            if (window.dashboardScreen) {
+                // モック退勤打刻
+                logTest('退勤打刻テスト完了（モック）', 'success');
+            } else {
+                logTest('ダッシュボード画面が初期化されていません', 'error');
+            }
+        }
+
+        function testVacationRequest() {
+            logTest('有給申請テスト', 'info');
+            
+            if (window.vacationScreen) {
+                // モック有給申請
+                logTest('有給申請テスト完了（モック）', 'success');
+            } else {
+                logTest('有給申請画面が初期化されていません', 'error');
+            }
+        }
+
+        function testPdfDownload() {
+            logTest('PDF出力テスト', 'info');
+            
+            if (window.adminScreen) {
+                // モックPDF出力
+                logTest('PDF出力テスト完了（モック）', 'success');
+            } else {
+                logTest('管理者画面が初期化されていません', 'error');
+            }
+        }
+
+        function testResponsive(device) {
+            logTest(`レスポンシブテスト: ${device}`, 'info');
+            
+            const viewport = document.querySelector('meta[name="viewport"]');
+            if (!viewport) return;
+            
+            switch (device) {
+                case 'mobile':
+                    viewport.content = 'width=375, initial-scale=1.0';
+                    break;
+                case 'tablet':
+                    viewport.content = 'width=768, initial-scale=1.0';
+                    break;
+                case 'desktop':
+                    viewport.content = 'width=1200, initial-scale=1.0';
+                    break;
+            }
+            
+            logTest(`レスポンシブテスト完了: ${device}`, 'success');
+        }
+
+        function logTest(message, type) {
+            const logDiv = document.getElementById('testLog');
+            const timestamp = new Date().toLocaleTimeString();
+            const icon = type === 'success' ? 'check' : type === 'error' ? 'times' : 'info';
+            const color = type === 'success' ? 'text-success' : type === 'error' ? 'text-danger' : 'text-info';
+            
+            const logEntry = document.createElement('div');
+            logEntry.className = `mb-1 ${color}`;
+            logEntry.innerHTML = `<i class="fas fa-${icon} me-1"></i>[${timestamp}] ${message}`;
+            
+            logDiv.appendChild(logEntry);
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        function clearTestLog() {
+            const logDiv = document.getElementById('testLog');
+            logDiv.innerHTML = '<p class="mb-0">テストを実行すると結果がここに表示されます。</p>';
+        }
+
+        // ページ読み込み時の初期化
+        document.addEventListener('DOMContentLoaded', () => {
+            logTest('テストページが読み込まれました', 'info');
+        });
+    </script>
+</body>
+</html>
