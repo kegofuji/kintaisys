@@ -205,6 +205,7 @@ public class AdjustmentRequest {
     public enum AdjustmentStatus {
         PENDING,    // 申請中
         APPROVED,   // 承認済み
-        REJECTED    // 却下
+        REJECTED,   // 却下
+        CANCELLED   // 取消
     }
 }

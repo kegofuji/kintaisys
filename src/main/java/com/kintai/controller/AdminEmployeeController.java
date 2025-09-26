@@ -1,9 +1,15 @@
 package com.kintai.controller;
 
 import com.kintai.entity.Employee;
+import com.kintai.entity.AttendanceRecord;
+import com.kintai.entity.AdjustmentRequest;
+import com.kintai.entity.VacationRequest;
 import com.kintai.repository.EmployeeRepository;
 import com.kintai.entity.UserAccount;
 import com.kintai.repository.UserAccountRepository;
+import com.kintai.repository.AttendanceRecordRepository;
+import com.kintai.repository.AdjustmentRequestRepository;
+import com.kintai.repository.VacationRequestRepository;
 import com.kintai.service.AuthService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -28,6 +34,12 @@ public class AdminEmployeeController {
     private EmployeeRepository employeeRepository;
     @Autowired
     private UserAccountRepository userAccountRepository;
+    @Autowired
+    private AttendanceRecordRepository attendanceRecordRepository;
+    @Autowired
+    private AdjustmentRequestRepository adjustmentRequestRepository;
+    @Autowired
+    private VacationRequestRepository vacationRequestRepository;
     @Autowired
     private AuthService authService;
 
@@ -118,6 +130,10 @@ public class AdminEmployeeController {
             userAccountRepository.save(account);
             System.out.println("ユーザーアカウント作成完了: ID=" + account.getId());
 
+            // 新規社員の勤怠データをクリア（念のため）
+            clearNewEmployeeData(emp.getEmployeeId());
+            System.out.println("新規社員の勤怠データをクリアしました: EmployeeID=" + emp.getEmployeeId());
+
             Map<String, Object> body = new HashMap<>();
             body.put("success", true);
             body.put("message", "社員とユーザーアカウントを作成しました");
@@ -149,6 +165,31 @@ public class AdminEmployeeController {
         } while (employeeRepository.findByEmployeeCode(employeeCode).isPresent());
         
         return employeeCode;
+    }
+
+    /**
+     * 新規社員の勤怠データをクリアする
+     * @param employeeId 社員ID
+     */
+    private void clearNewEmployeeData(Long employeeId) {
+        try {
+            // 勤怠記録を削除
+            List<AttendanceRecord> attendanceRecords = attendanceRecordRepository.findByEmployeeIdOrderByAttendanceDateDesc(employeeId);
+            attendanceRecordRepository.deleteAll(attendanceRecords);
+            
+            // 打刻修正申請を削除
+            List<AdjustmentRequest> adjustmentRequests = adjustmentRequestRepository.findByEmployeeIdOrderByCreatedAtDesc(employeeId);
+            adjustmentRequestRepository.deleteAll(adjustmentRequests);
+            
+            // 有給申請を削除
+            List<VacationRequest> vacationRequests = vacationRequestRepository.findByEmployeeIdOrderByCreatedAtDesc(employeeId);
+            vacationRequestRepository.deleteAll(vacationRequests);
+            
+            System.out.println("新規社員の勤怠データをクリア完了: EmployeeID=" + employeeId);
+        } catch (Exception e) {
+            System.err.println("新規社員の勤怠データクリアエラー: " + e.getMessage());
+            // エラーが発生しても社員作成は継続する
+        }
     }
 
     /**

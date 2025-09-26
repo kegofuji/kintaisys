@@ -525,6 +525,10 @@
                                             <td><strong>申請状態:</strong></td>
                                             <td id="adjustmentDetailStatus">-</td>
                                         </tr>
+                                        <tr id="adjustmentRejectionRow" style="display: none;">
+                                            <td><strong>却下理由:</strong></td>
+                                            <td id="adjustmentDetailRejection">-</td>
+                                        </tr>
                                     </table>
                                 </div>
                             </div>
@@ -552,7 +556,60 @@
                                 </div>
                             </div>
                         </div>
-                        <div class="modal-footer">
+                        <div class="modal-footer gap-2">
+                            <button type="button" class="btn btn-primary" id="adjustmentResubmitButton" style="display: none;">再申請する</button>
+                            <button type="button" class="btn btn-danger" id="adjustmentCancelButton" style="display: none;">申請取消</button>
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">閉じる</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal fade" id="vacationDetailModal" tabindex="-1" aria-labelledby="vacationDetailModalLabel" aria-hidden="true">
+                <div class="modal-dialog modal-lg">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title" id="vacationDetailModalLabel">有給申請詳細</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="row">
+                                <div class="col-12">
+                                    <h6>申請情報</h6>
+                                    <table class="table table-sm">
+                                        <tr>
+                                            <td><strong>開始日:</strong></td>
+                                            <td id="vacationDetailStartDate">-</td>
+                                        </tr>
+                                        <tr>
+                                            <td><strong>終了日:</strong></td>
+                                            <td id="vacationDetailEndDate">-</td>
+                                        </tr>
+                                        <tr>
+                                            <td><strong>申請日数:</strong></td>
+                                            <td id="vacationDetailDays">-</td>
+                                        </tr>
+                                        <tr>
+                                            <td><strong>申請状態:</strong></td>
+                                            <td id="vacationDetailStatus">-</td>
+                                        </tr>
+                                        <tr id="vacationRejectionRow" style="display: none;">
+                                            <td><strong>却下理由:</strong></td>
+                                            <td id="vacationDetailRejection">-</td>
+                                        </tr>
+                                    </table>
+                                </div>
+                            </div>
+                            <div class="row mt-3">
+                                <div class="col-12">
+                                    <h6>申請理由</h6>
+                                    <div id="vacationDetailReason" class="border p-2 rounded bg-light">-</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="modal-footer gap-2">
+                            <button type="button" class="btn btn-primary" id="vacationResubmitButton" style="display: none;">再申請する</button>
+                            <button type="button" class="btn btn-danger" id="vacationCancelButton" style="display: none;">申請取消</button>
                             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">閉じる</button>
                         </div>
                     </div>
@@ -747,6 +804,30 @@
         </div>
     </div>
 
+
+    <!-- 管理者 承認確認モーダル -->
+    <div class="modal fade" id="adminApprovalConfirmModal" tabindex="-1" aria-labelledby="adminApprovalConfirmTitle" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="adminApprovalConfirmTitle">確認</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p id="adminApprovalConfirmMessage" class="mb-3"></p>
+                    <div id="adminApprovalReasonGroup" class="mb-3" style="display: none;">
+                        <label for="adminApprovalReason" class="form-label">却下理由 <span class="text-danger">*</span></label>
+                        <textarea class="form-control" id="adminApprovalReason" rows="3" placeholder="理由を入力してください"></textarea>
+                        <div class="invalid-feedback">却下理由は必須です。</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" id="adminApprovalCancelButton">キャンセル</button>
+                    <button type="button" class="btn btn-primary" id="adminApprovalConfirmButton">実行する</button>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <!-- アラート表示エリア -->
     <div id="alertContainer" class="position-fixed top-0 end-0 p-3" style="z-index: 1050;"></div>

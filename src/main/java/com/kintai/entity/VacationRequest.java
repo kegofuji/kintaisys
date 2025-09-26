@@ -30,7 +30,10 @@ public class VacationRequest {
     
     @Column(name = "reason")
     private String reason;
-    
+
+    @Column(name = "rejection_comment", length = 500)
+    private String rejectionComment;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false)
     private VacationStatus status = VacationStatus.PENDING;
@@ -110,9 +113,17 @@ public class VacationRequest {
     public String getReason() {
         return reason;
     }
-    
+
     public void setReason(String reason) {
         this.reason = reason;
+    }
+
+    public String getRejectionComment() {
+        return rejectionComment;
+    }
+
+    public void setRejectionComment(String rejectionComment) {
+        this.rejectionComment = rejectionComment;
     }
     
     public VacationStatus getStatus() {

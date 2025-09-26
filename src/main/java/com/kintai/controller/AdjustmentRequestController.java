@@ -7,6 +7,7 @@ import com.kintai.service.AdjustmentRequestService;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotNull;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -108,6 +109,37 @@ public class AdjustmentRequestController {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
         }
     }
+
+    /**
+     * 修正申請取消API
+     */
+    @PostMapping("/adjustment/{adjustmentRequestId}/cancel")
+    public ResponseEntity<Map<String, Object>> cancelAdjustmentRequest(
+            @PathVariable Long adjustmentRequestId,
+            @Valid @RequestBody CancelRequest request) {
+        try {
+            AdjustmentRequest cancelled = adjustmentRequestService
+                    .cancelAdjustmentRequest(adjustmentRequestId, request.getEmployeeId());
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", "修正申請を取消しました");
+            response.put("data", cancelled);
+            return ResponseEntity.ok(response);
+        } catch (AttendanceException e) {
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("success", false);
+            errorResponse.put("errorCode", e.getErrorCode());
+            errorResponse.put("message", e.getMessage());
+            return ResponseEntity.badRequest().body(errorResponse);
+        } catch (Exception e) {
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("success", false);
+            errorResponse.put("errorCode", "INTERNAL_ERROR");
+            errorResponse.put("message", "修正申請の取消に失敗しました");
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+        }
+    }
     
     /**
      * 修正申請一覧取得API（社員用）
@@ -133,6 +165,20 @@ public class AdjustmentRequestController {
             response.put("data", new ArrayList<>());
             response.put("count", 0);
             return ResponseEntity.ok(response);
+        }
+    }
+
+    /** 取消リクエストDTO */
+    public static class CancelRequest {
+        @NotNull(message = "従業員IDは必須です")
+        private Long employeeId;
+
+        public Long getEmployeeId() {
+            return employeeId;
+        }
+
+        public void setEmployeeId(Long employeeId) {
+            this.employeeId = employeeId;
         }
     }
 }

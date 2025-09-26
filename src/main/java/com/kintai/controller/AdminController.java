@@ -83,8 +83,12 @@ public class AdminController {
     @PostMapping("/vacation/approve")
     public ResponseEntity<Map<String, Object>> approveVacation(@RequestBody VacationApprovalRequest request) {
         try {
-            boolean success = adminService.approveVacation(request.getVacationId(), request.isApproved());
-            
+            boolean success = adminService.approveVacation(
+                    request.getVacationId(),
+                    request.isApproved(),
+                    request.getRejectionReason()
+            );
+
             Map<String, Object> response = new HashMap<>();
             if (success) {
                 response.put("success", true);
@@ -201,6 +205,7 @@ public class AdminController {
     public static class VacationApprovalRequest {
         private Long vacationId;
         private boolean approved;
+        private String rejectionReason;
         
         public Long getVacationId() {
             return vacationId;
@@ -216,6 +221,14 @@ public class AdminController {
         
         public void setApproved(boolean approved) {
             this.approved = approved;
+        }
+
+        public String getRejectionReason() {
+            return rejectionReason;
+        }
+
+        public void setRejectionReason(String rejectionReason) {
+            this.rejectionReason = rejectionReason;
         }
     }
 }

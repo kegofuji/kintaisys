@@ -15,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * 勤怠修正申請サービス
@@ -48,13 +49,7 @@ public class AdjustmentRequestService {
         employeeRepository.findById(employeeId)
                 .orElseThrow(() -> new AttendanceException("EMPLOYEE_NOT_FOUND", "従業員が見つかりません: " + employeeId));
         
-        // 2. 対象日のバリデーション（過去日または当日のみ）
-        LocalDate today = LocalDate.now();
-        if (targetDate.isAfter(today)) {
-            throw new AttendanceException("INVALID_DATE", "対象日は過去日または当日のみ指定可能です");
-        }
-        
-        // 3. 出勤時間と退勤時間のバリデーション（片側のみ許容、両方nullは不可）
+        // 2. 出勤時間と退勤時間のバリデーション（片側のみ許容、両方nullは不可）
         LocalDateTime newClockIn = requestDto.getNewClockIn();
         LocalDateTime newClockOut = requestDto.getNewClockOut();
         if (newClockIn == null && newClockOut == null) {
@@ -139,7 +134,37 @@ public class AdjustmentRequestService {
         adjustmentRequest.setRejectionComment(comment.trim());
         adjustmentRequest.setRejectedByEmployeeId(approverEmployeeId);
         adjustmentRequest.setRejectedAt(LocalDateTime.now());
-        
+       
+        return adjustmentRequestRepository.save(adjustmentRequest);
+    }
+
+    /**
+     * 修正申請を取消
+     * @param adjustmentRequestId 修正申請ID
+     * @param employeeId 申請者従業員ID
+     * @return 取消後の修正申請
+     */
+    public AdjustmentRequest cancelAdjustmentRequest(Long adjustmentRequestId, Long employeeId) {
+        AdjustmentRequest adjustmentRequest = adjustmentRequestRepository.findById(adjustmentRequestId)
+                .orElseThrow(() -> new AttendanceException(AttendanceException.REQUEST_NOT_FOUND,
+                        "修正申請が見つかりません: " + adjustmentRequestId));
+
+        if (!Objects.equals(adjustmentRequest.getEmployeeId(), employeeId)) {
+            throw new AttendanceException(AttendanceException.INVALID_REQUEST, "自身の申請のみ取消できます");
+        }
+
+        if (adjustmentRequest.getStatus() == AdjustmentRequest.AdjustmentStatus.REJECTED
+                || adjustmentRequest.getStatus() == AdjustmentRequest.AdjustmentStatus.CANCELLED) {
+            throw new AttendanceException(AttendanceException.REQUEST_NOT_CANCELLABLE, "取消できない状態です");
+        }
+
+        adjustmentRequest.setStatus(AdjustmentRequest.AdjustmentStatus.CANCELLED);
+        adjustmentRequest.setApprovedByEmployeeId(null);
+        adjustmentRequest.setApprovedAt(null);
+        adjustmentRequest.setRejectedByEmployeeId(null);
+        adjustmentRequest.setRejectedAt(null);
+        adjustmentRequest.setRejectionComment(null);
+
         return adjustmentRequestRepository.save(adjustmentRequest);
     }
     

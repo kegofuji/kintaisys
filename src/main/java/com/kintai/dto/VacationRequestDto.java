@@ -91,6 +91,7 @@ public class VacationRequestDto {
         private LocalDate endDate;
         private Integer days;
         private String status;
+        private String rejectionComment;
         
         // デフォルトコンストラクタ
         public VacationData() {
@@ -154,6 +155,14 @@ public class VacationRequestDto {
         
         public void setStatus(String status) {
             this.status = status;
+        }
+
+        public String getRejectionComment() {
+            return rejectionComment;
+        }
+
+        public void setRejectionComment(String rejectionComment) {
+            this.rejectionComment = rejectionComment;
         }
     }
 }

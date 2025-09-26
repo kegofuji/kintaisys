@@ -12,6 +12,13 @@ class HistoryScreen {
         this.attendanceData = [];
         this.vacationRequests = [];
         this.adjustmentRequests = [];
+        this.vacationRequestRawMap = new Map();
+        this.adjustmentCancelButton = null;
+        this.vacationCancelButton = null;
+        this.adjustmentResubmitButton = null;
+        this.vacationResubmitButton = null;
+        this.currentAdjustmentDetail = null;
+        this.currentVacationDetail = null;
         this.eventsBound = false;
     }
 
@@ -21,6 +28,7 @@ class HistoryScreen {
     async init() {
         this.initializeElements();
         this.setupEventListeners();
+        this.setupModalActions();
         this.generateMonthOptions();
         await this.loadCalendarData();
         this.generateCalendar();
@@ -43,6 +51,10 @@ class HistoryScreen {
         this.monthlySubmitHistoryBtn = document.getElementById('monthlySubmitHistoryBtn');
         this.historyTableBody = document.getElementById('historyTableBody');
         this.calendarGrid = document.getElementById('calendarGrid');
+        this.adjustmentCancelButton = document.getElementById('adjustmentCancelButton');
+        this.vacationCancelButton = document.getElementById('vacationCancelButton');
+        this.adjustmentResubmitButton = document.getElementById('adjustmentResubmitButton');
+        this.vacationResubmitButton = document.getElementById('vacationResubmitButton');
     }
 
     /**
@@ -66,6 +78,31 @@ class HistoryScreen {
             this.historyMonthSelect.addEventListener('change', () => this.handleMonthSelectChange());
         }
         this.eventsBound = true;
+    }
+
+    /**
+     * 詳細モーダルのイベント設定
+     */
+    setupModalActions() {
+        if (this.adjustmentCancelButton && !this.adjustmentCancelButton.dataset.bound) {
+            this.adjustmentCancelButton.addEventListener('click', () => this.handleAdjustmentCancel());
+            this.adjustmentCancelButton.dataset.bound = 'true';
+        }
+
+        if (this.vacationCancelButton && !this.vacationCancelButton.dataset.bound) {
+            this.vacationCancelButton.addEventListener('click', () => this.handleVacationCancel());
+            this.vacationCancelButton.dataset.bound = 'true';
+        }
+
+        if (this.adjustmentResubmitButton && !this.adjustmentResubmitButton.dataset.bound) {
+            this.adjustmentResubmitButton.addEventListener('click', () => this.handleAdjustmentResubmit());
+            this.adjustmentResubmitButton.dataset.bound = 'true';
+        }
+
+        if (this.vacationResubmitButton && !this.vacationResubmitButton.dataset.bound) {
+            this.vacationResubmitButton.addEventListener('click', () => this.handleVacationResubmit());
+            this.vacationResubmitButton.dataset.bound = 'true';
+        }
     }
 
     /**
@@ -160,11 +197,36 @@ class HistoryScreen {
     }
 
     /**
+     * 新規社員かどうかを判定する関数
+     * @returns {boolean} - 新規社員の場合true
+     */
+    isNewEmployee() {
+        // 現在のユーザーがemp1またはemp2の場合は既存社員（テスト用）
+        if (window.currentUser === 'emp1' || window.currentUser === 'emp2') {
+            return false;
+        }
+        
+        // emp3以降は新規社員として扱う（管理者画面で作成された社員）
+        if (window.currentUser && window.currentUser.startsWith('emp')) {
+            const empNumber = parseInt(window.currentUser.replace('emp', ''));
+            return empNumber >= 3;
+        }
+        
+        // その他の場合は新規社員として扱う
+        return true;
+    }
+
+    /**
      * モック勤怠データ生成
      * @param {string} month - 対象月（YYYY-MM形式）
      * @returns {Array} - モックデータ
      */
     generateMockAttendanceData(month = null) {
+        // 新規作成された社員の場合は空のデータを返す（勤怠データは存在しない）
+        if (this.isNewEmployee()) {
+            return [];
+        }
+        
         const data = [];
         const today = new Date();
         let targetDate = today;
@@ -453,42 +515,60 @@ class HistoryScreen {
             
             // 有給申請状況の表示（申請がある場合のみ）
             if (vacationRequest) {
-                const isApproved = vacationRequest.status === 'APPROVED';
-                const isPending = vacationRequest.status === 'PENDING';
-                const statusClass = isApproved ? 'bg-success' : 'bg-warning';
-                const label = isApproved ? '承認済' : '申請中';
-                const clickableClass = isPending ? 'vacation-badge clickable' : 'vacation-badge';
-                const title = isPending ? 'クリックして申請を取消' : '';
-                const dataAttrs = `data-vacation-id="${vacationRequest.vacationId || ''}" data-status="${vacationRequest.status}"`;
-                badges += `<span class="badge ${statusClass} badge-sm ${clickableClass}" ${dataAttrs} title="${title}">有給${label}</span>`;
+                const statusUpper = (vacationRequest.status || '').toUpperCase();
+                if (statusUpper !== 'CANCELLED') {
+                    let statusClass = 'bg-secondary';
+                    let label = '申請';
+                    switch (statusUpper) {
+                        case 'APPROVED':
+                            statusClass = 'bg-success';
+                            label = '承認済';
+                            break;
+                        case 'PENDING':
+                            statusClass = 'bg-warning';
+                            label = '申請中';
+                            break;
+                        case 'REJECTED':
+                            statusClass = 'bg-danger';
+                            label = '却下';
+                            break;
+                        default:
+                            statusClass = 'bg-secondary';
+                            label = statusUpper || '申請';
+                    }
+                    const dataAttrs = `data-vacation-id="${vacationRequest.vacationId || ''}" data-status="${vacationRequest.status}" data-date="${dateString}"`;
+                    badges += `<span class="badge ${statusClass} badge-sm vacation-badge clickable" ${dataAttrs} title="クリックして申請内容を確認">有給${label}</span>`;
+                }
             }
-            
+
             // 打刻修正申請状況の表示（申請がある場合のみ）
             if (adjustmentRequest) {
-                let statusClass, label, clickableClass, title;
-                
+                let statusClass, label, title;
+
                 switch (adjustmentRequest.status) {
                     case 'APPROVED':
                         statusClass = 'bg-success';
                         label = '承認済';
-                        clickableClass = 'adjustment-badge';
                         title = 'クリックして申請内容を確認';
                         break;
                     case 'REJECTED':
                         statusClass = 'bg-danger';
                         label = '却下';
-                        clickableClass = 'adjustment-badge clickable';
                         title = 'クリックして却下理由を確認';
+                        break;
+                    case 'CANCELLED':
+                        statusClass = 'bg-secondary';
+                        label = '取消';
+                        title = 'クリックして申請内容を確認';
                         break;
                     default: // PENDING
                         statusClass = 'bg-warning';
                         label = '申請中';
-                        clickableClass = 'adjustment-badge clickable';
                         title = 'クリックして申請内容を確認';
                 }
-                
+
                 const dataAttrs = `data-adjustment-date="${dateString}" data-status="${adjustmentRequest.status}" data-adjustment-id="${adjustmentRequest.adjustmentRequestId}" data-rejection-comment="${adjustmentRequest.rejectionComment || ''}"`;
-                badges += `<span class="badge ${statusClass} badge-sm ${clickableClass}" ${dataAttrs} title="${title}">打刻修正${label}</span>`;
+                badges += `<span class="badge ${statusClass} badge-sm adjustment-badge clickable" ${dataAttrs} title="${title}">打刻修正${label}</span>`;
             }
 
             calendarHtml += `
@@ -759,9 +839,24 @@ class HistoryScreen {
             const requests = (response && response.success && Array.isArray(response.data)) ? response.data : [];
 
             // 申請を日付ごとに展開
+            this.vacationRequestRawMap = new Map();
             const expanded = [];
             requests.forEach(req => {
                 if (!req.startDate || !req.endDate) return;
+
+                const statusUpper = (req.status || 'PENDING').toUpperCase();
+                if (statusUpper === 'CANCELLED') {
+                    return;
+                }
+
+                const requestId = (req.vacationId ?? req.id);
+                const requestIdStr = requestId !== undefined && requestId !== null
+                    ? String(requestId)
+                    : '';
+
+                if (requestIdStr) {
+                    this.vacationRequestRawMap.set(requestIdStr, req);
+                }
 
                 try {
                     const start = new Date(req.startDate);
@@ -773,15 +868,12 @@ class HistoryScreen {
                         const m = d.getMonth(); // 0-based
                         // 表示中の年月のみ保持
                         if (y === this.currentYear && m === this.currentMonth) {
-                            const status = req.status || 'PENDING';
-                            // 取消/CANCELLED のみ表示しない（却下/REJECTEDは表示する）
-                            if (status !== 'CANCELLED') {
-                                expanded.push({
-                                    date: this.formatDateString(d),
-                                    status: status,
-                                    vacationId: req.vacationId || req.id
-                                });
-                            }
+                            expanded.push({
+                                date: this.formatDateString(d),
+                                status: statusUpper,
+                                vacationId: requestIdStr,
+                                request: req
+                            });
                         }
                     }
                 } catch (dateError) {
@@ -807,50 +899,12 @@ class HistoryScreen {
         badges.forEach(badge => {
             badge.addEventListener('click', async (e) => {
                 e.stopPropagation();
-                const status = badge.getAttribute('data-status');
                 const vacationId = badge.getAttribute('data-vacation-id');
-
-                if (status === 'PENDING' || status === 'APPROVED') {
-                    if (!vacationId) return;
-                    const confirmed = window.confirm('この有給申請を取消しますか？');
-                    if (!confirmed) return;
-                    try {
-                        const data = await fetchWithAuth.handleApiCall(
-                            () => fetchWithAuth.put(`/api/vacation/${vacationId}/status`, { status: 'CANCELLED' }),
-                            '申請取消に失敗しました'
-                        );
-                        this.showAlert(data.message || '申請を取消しました', 'success');
-                        await this.loadCalendarData();
-                        this.generateCalendar();
-                    } catch (error) {
-                        this.showAlert(error.message, 'danger');
-                    }
-                } else {
-                    this.showAlert('この申請は取消できません', 'warning');
-                }
-            });
-        });
-    }
-
-    /**
-     * 打刻修正バッジのクリックイベント設定（申請詳細表示）
-     */
-    setupAdjustmentBadgeActions() {
-        if (!this.calendarGrid) return;
-        const badges = this.calendarGrid.querySelectorAll('.adjustment-badge');
-        badges.forEach(badge => {
-            badge.addEventListener('click', (e) => {
-                e.stopPropagation();
-                const adjustmentId = badge.getAttribute('data-adjustment-id');
-                const status = badge.getAttribute('data-status');
-                const rejectionComment = badge.getAttribute('data-rejection-comment');
-                
-                if (status === 'REJECTED' && rejectionComment) {
-                    // 却下理由を表示
-                    this.showRejectionCommentModal(rejectionComment);
-                } else if (status === 'APPROVED' || status === 'PENDING') {
-                    // 申請内容を表示（実装は必要に応じて）
-                    this.showAlert('申請内容の詳細表示機能は実装中です', 'info');
+                const dateString = badge.getAttribute('data-date');
+                try {
+                    await this.showVacationDetail(dateString, vacationId);
+                } catch (error) {
+                    this.showAlert(error.message || '申請詳細の表示に失敗しました', 'danger');
                 }
             });
         });
@@ -898,15 +952,13 @@ class HistoryScreen {
                     const d = new Date(dateField);
                     if (d.getFullYear() === this.currentYear && d.getMonth() === this.currentMonth) {
                         const status = req.status || 'PENDING';
-                        // 取消/CANCELLED のみ表示しない（却下/REJECTEDは表示する）
-                        if (status !== 'CANCELLED') {
-                            filtered.push({
-                                date: this.formatDateString(d),
-                                status: status,
-                                adjustmentRequestId: req.adjustmentRequestId || req.id,
-                                rejectionComment: req.rejectionComment
-                            });
-                        }
+                        filtered.push({
+                            date: this.formatDateString(d),
+                            status: status,
+                            adjustmentRequestId: req.adjustmentRequestId || req.id,
+                            rejectionComment: req.rejectionComment || '',
+                            request: req
+                        });
                     }
                 } catch (dateError) {
                     console.warn('打刻修正申請の日付解析エラー:', dateError, req);
@@ -983,16 +1035,14 @@ class HistoryScreen {
         badges.forEach(badge => {
             badge.addEventListener('click', async (e) => {
                 e.stopPropagation();
-                const status = badge.getAttribute('data-status');
                 const adjustmentDate = badge.getAttribute('data-adjustment-date');
+                const adjustmentId = badge.getAttribute('data-adjustment-id');
 
-                if (status === 'PENDING' || status === 'APPROVED' || status === 'REJECTED') {
-                    if (!adjustmentDate) return;
-                    try {
-                        await this.showAdjustmentDetail(adjustmentDate);
-                    } catch (error) {
-                        this.showAlert('申請詳細の取得に失敗しました', 'danger');
-                    }
+                if (!adjustmentDate) return;
+                try {
+                    await this.showAdjustmentDetail(adjustmentDate, adjustmentId);
+                } catch (error) {
+                    this.showAlert('申請詳細の取得に失敗しました', 'danger');
                 }
             });
         });
@@ -1200,7 +1250,7 @@ class HistoryScreen {
      * 打刻修正申請詳細表示
      * @param {string} dateString - 対象日付
      */
-    async showAdjustmentDetail(dateString) {
+    async showAdjustmentDetail(dateString, adjustmentRequestId = null) {
         if (!window.currentEmployeeId) {
             this.showAlert('従業員IDが取得できません', 'danger');
             return;
@@ -1234,17 +1284,25 @@ class HistoryScreen {
                 return;
             }
 
-            // 指定日の申請を検索
-            console.log('指定日で申請を検索中:', dateString);
-            console.log('利用可能な申請データ:', response.data);
-            
-            const adjustmentRequest = response.data.find(req => {
-                if (!req.targetDate) return false;
-                const reqDate = new Date(req.targetDate);
-                const targetDate = new Date(dateString);
-                console.log('比較:', reqDate.toDateString(), 'vs', targetDate.toDateString());
-                return reqDate.toDateString() === targetDate.toDateString();
-            });
+            // 対象申請を検索（ID優先、無ければ日付）
+            const targetId = adjustmentRequestId ? String(adjustmentRequestId) : null;
+            let adjustmentRequest = null;
+
+            if (targetId) {
+                adjustmentRequest = response.data.find(req => {
+                    const reqId = req.adjustmentRequestId ?? req.id;
+                    return reqId !== undefined && reqId !== null && String(reqId) === targetId;
+                });
+            }
+
+            if (!adjustmentRequest && dateString) {
+                adjustmentRequest = response.data.find(req => {
+                    if (!req.targetDate) return false;
+                    const reqDate = new Date(req.targetDate);
+                    const targetDate = new Date(dateString);
+                    return reqDate.toDateString() === targetDate.toDateString();
+                });
+            }
 
             console.log('見つかった申請:', adjustmentRequest);
 
@@ -1285,6 +1343,9 @@ class HistoryScreen {
                 case 'REJECTED':
                     statusText = '却下';
                     break;
+                case 'CANCELLED':
+                    statusText = '取消';
+                    break;
                 default:
                     statusText = adjustmentRequest.status || '-';
             }
@@ -1310,6 +1371,19 @@ class HistoryScreen {
             document.getElementById('adjustmentDetailReason').textContent = 
                 adjustmentRequest.reason || '理由は記載されていません';
 
+            const rejectionRow = document.getElementById('adjustmentRejectionRow');
+            const rejectionField = document.getElementById('adjustmentDetailRejection');
+            if (rejectionRow && rejectionField) {
+                const comment = adjustmentRequest.rejectionComment || '';
+                if (comment.trim()) {
+                    rejectionRow.style.display = '';
+                    rejectionField.textContent = comment.trim();
+                } else {
+                    rejectionRow.style.display = 'none';
+                    rejectionField.textContent = '-';
+                }
+            }
+
             // 承認情報を設定（承認済の場合のみ表示）
             const approvalInfo = document.getElementById('adjustmentApprovalInfo');
             if (adjustmentRequest.status === 'APPROVED') {
@@ -1323,6 +1397,35 @@ class HistoryScreen {
                 approvalInfo.style.display = 'none';
             }
 
+            // 取消ボタンの表示制御
+            this.currentAdjustmentDetail = {
+                request: adjustmentRequest,
+                dateString,
+                fallbackId: adjustmentRequestId ? String(adjustmentRequestId) : (adjustmentRequest.adjustmentRequestId != null ? String(adjustmentRequest.adjustmentRequestId) : (targetId || null))
+            };
+
+            if (this.adjustmentCancelButton) {
+                const reqIdValue = adjustmentRequest.adjustmentRequestId ?? adjustmentRequest.id;
+                const canCancel = adjustmentRequest.status === 'PENDING' || adjustmentRequest.status === 'APPROVED';
+                if (canCancel && reqIdValue !== undefined && reqIdValue !== null) {
+                    this.adjustmentCancelButton.style.display = 'inline-block';
+                    this.adjustmentCancelButton.disabled = false;
+                    this.adjustmentCancelButton.dataset.requestId = String(reqIdValue);
+                } else {
+                    this.adjustmentCancelButton.style.display = 'none';
+                    this.adjustmentCancelButton.removeAttribute('data-request-id');
+                }
+            }
+
+            if (this.adjustmentResubmitButton) {
+                if ((adjustmentRequest.status || '').toUpperCase() === 'REJECTED') {
+                    this.adjustmentResubmitButton.style.display = 'inline-block';
+                    this.adjustmentResubmitButton.disabled = false;
+                } else {
+                    this.adjustmentResubmitButton.style.display = 'none';
+                }
+            }
+
             // モーダルを表示
             const modalInstance = new bootstrap.Modal(modal);
             modalInstance.show();
@@ -1332,6 +1435,390 @@ class HistoryScreen {
             const errorMessage = error.message || '申請詳細の表示に失敗しました';
             this.showAlert(errorMessage, 'danger');
         }
+    }
+
+    /**
+     * 打刻修正申請の取消処理
+     */
+    async handleAdjustmentCancel() {
+        if (!this.adjustmentCancelButton) return;
+        const detail = this.currentAdjustmentDetail;
+        let requestId = null;
+
+        if (detail?.request) {
+            const resolved = detail.request.adjustmentRequestId ?? detail.request.id;
+            if (resolved !== undefined && resolved !== null) {
+                requestId = String(resolved);
+            }
+        }
+
+        if (!requestId && detail?.fallbackId) {
+            requestId = detail.fallbackId;
+        }
+
+        if (!requestId && this.adjustmentCancelButton.dataset.requestId) {
+            requestId = this.adjustmentCancelButton.dataset.requestId;
+        }
+
+        const normalizedId = (requestId || '').trim();
+
+        if (!normalizedId) {
+            this.showAlert('申請IDを取得できません。画面を再読み込みしてください。', 'warning');
+            return;
+        }
+        if (!window.currentEmployeeId) {
+            this.showAlert('従業員IDが取得できません', 'danger');
+            return;
+        }
+
+        const confirmed = window.confirm('この打刻修正申請を取消しますか？');
+        if (!confirmed) {
+            return;
+        }
+
+        let refreshRequired = false;
+        let closeModal = false;
+
+        try {
+            this.adjustmentCancelButton.disabled = true;
+            const data = await fetchWithAuth.handleApiCall(
+                () => fetchWithAuth.post(`/api/attendance/adjustment/${normalizedId}/cancel`, {
+                    employeeId: window.currentEmployeeId
+                }),
+                '修正申請の取消に失敗しました'
+            );
+
+            this.showAlert(data.message || '修正申請を取消しました', 'success');
+            refreshRequired = true;
+            closeModal = true;
+        } catch (error) {
+            console.error('打刻修正申請取消エラー:', error);
+            const message = error.message || '修正申請の取消に失敗しました';
+            const isMissing = message.includes('見つかりません') || message.includes('存在しません');
+            const isStateError = message.includes('取消できない');
+
+            if (isMissing || isStateError) {
+                this.showAlert(`${message}。最新の状態を反映します。`, 'warning');
+                refreshRequired = true;
+                closeModal = true;
+            } else {
+                this.showAlert(message, 'danger');
+            }
+        } finally {
+            this.adjustmentCancelButton.disabled = false;
+            this.adjustmentCancelButton.removeAttribute('data-request-id');
+            this.currentAdjustmentDetail = null;
+
+            if (closeModal) {
+                const modalElement = document.getElementById('adjustmentDetailModal');
+                if (modalElement && typeof bootstrap !== 'undefined') {
+                    const instance = bootstrap.Modal.getInstance(modalElement);
+                    instance?.hide();
+                }
+            }
+
+            if (refreshRequired) {
+                try {
+                    await this.loadCalendarData();
+                    this.generateCalendar();
+                } catch (refreshError) {
+                    console.error('修正申請取消後の再描画に失敗しました:', refreshError);
+                }
+            }
+        }
+    }
+
+    /**
+     * 有給申請詳細表示
+     */
+    async showVacationDetail(dateString, vacationId) {
+        if (!window.currentEmployeeId) {
+            this.showAlert('従業員IDが取得できません', 'danger');
+            return;
+        }
+
+        const targetId = vacationId ? String(vacationId) : null;
+        let request = null;
+
+        if (targetId && this.vacationRequestRawMap.has(targetId)) {
+            request = this.vacationRequestRawMap.get(targetId);
+        }
+
+        try {
+            if (!request) {
+                const response = await fetchWithAuth.handleApiCall(
+                    () => fetchWithAuth.get(`/api/vacation/${window.currentEmployeeId}`),
+                    '有給申請の取得に失敗しました'
+                );
+
+                const items = (response && response.success && Array.isArray(response.data)) ? response.data : [];
+                this.vacationRequestRawMap = new Map();
+                items.forEach(item => {
+                    const id = item.vacationId ?? item.id;
+                    if (id === undefined || id === null) return;
+                    const idStr = String(id);
+                    this.vacationRequestRawMap.set(idStr, item);
+                    if (!request && targetId && idStr === targetId) {
+                        request = item;
+                    }
+                });
+
+                if (!request && dateString) {
+                    const targetDate = new Date(dateString);
+                    for (const value of this.vacationRequestRawMap.values()) {
+                        if (!value.startDate || !value.endDate) continue;
+                        const start = new Date(value.startDate);
+                        const end = new Date(value.endDate);
+                        if (targetDate >= start && targetDate <= end) {
+                            request = value;
+                            break;
+                        }
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('有給申請詳細取得エラー:', error);
+            this.showAlert(error.message || '申請詳細の取得に失敗しました', 'danger');
+            return;
+        }
+
+        if (!request) {
+            this.showAlert('申請詳細が見つかりません', 'warning');
+            return;
+        }
+
+        const modal = document.getElementById('vacationDetailModal');
+        if (!modal) {
+            console.error('有給申請詳細モーダルが見つかりません');
+            return;
+        }
+
+        const formatDate = (value) => {
+            if (!value) return '-';
+            const date = new Date(value);
+            if (Number.isNaN(date.getTime())) return '-';
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            return `${year}/${month}/${day}`;
+        };
+
+        document.getElementById('vacationDetailStartDate').textContent = formatDate(request.startDate);
+        document.getElementById('vacationDetailEndDate').textContent = formatDate(request.endDate);
+        document.getElementById('vacationDetailDays').textContent = request.days != null ? `${request.days}日` : '-';
+
+        const statusElement = document.getElementById('vacationDetailStatus');
+        const statusMap = {
+            PENDING: '申請中',
+            APPROVED: '承認済',
+            REJECTED: '却下',
+            CANCELLED: '取消'
+        };
+        const statusText = statusMap[request.status] || (request.status || '-');
+        statusElement.textContent = statusText;
+
+        document.getElementById('vacationDetailReason').textContent = request.reason || '理由は記載されていません';
+
+        const vacationRejectionRow = document.getElementById('vacationRejectionRow');
+        const vacationRejectionField = document.getElementById('vacationDetailRejection');
+        if (vacationRejectionRow && vacationRejectionField) {
+            const comment = request.rejectionComment || request.rejectionReason || '';
+            if (comment.trim()) {
+                vacationRejectionRow.style.display = '';
+                vacationRejectionField.textContent = comment.trim();
+            } else {
+                vacationRejectionRow.style.display = 'none';
+                vacationRejectionField.textContent = '-';
+            }
+        }
+
+        this.currentVacationDetail = {
+            request,
+            dateString,
+            fallbackId: targetId || (request.vacationId != null ? String(request.vacationId) : null)
+        };
+
+        if (this.vacationCancelButton) {
+            const reqId = request.vacationId ?? request.id;
+            const canCancel = (request.status === 'PENDING' || request.status === 'APPROVED') && reqId !== undefined && reqId !== null;
+            if (canCancel) {
+                this.vacationCancelButton.style.display = 'inline-block';
+                this.vacationCancelButton.disabled = false;
+                this.vacationCancelButton.dataset.vacationId = String(reqId);
+            } else {
+                this.vacationCancelButton.style.display = 'none';
+                this.vacationCancelButton.removeAttribute('data-vacation-id');
+            }
+        }
+
+        if (this.vacationResubmitButton) {
+            if ((request.status || '').toUpperCase() === 'REJECTED') {
+                this.vacationResubmitButton.style.display = 'inline-block';
+                this.vacationResubmitButton.disabled = false;
+            } else {
+                this.vacationResubmitButton.style.display = 'none';
+            }
+        }
+
+        const modalInstance = new bootstrap.Modal(modal);
+        modalInstance.show();
+    }
+
+    /**
+     * 有給申請の取消処理
+     */
+    async handleVacationCancel() {
+        if (!this.vacationCancelButton) return;
+        const vacationDetail = this.currentVacationDetail;
+        let vacationId = null;
+
+        if (vacationDetail?.request) {
+            const resolved = vacationDetail.request.vacationId ?? vacationDetail.request.id;
+            if (resolved !== undefined && resolved !== null) {
+                vacationId = String(resolved);
+            }
+        }
+
+        if (!vacationId && vacationDetail?.fallbackId) {
+            vacationId = vacationDetail.fallbackId;
+        }
+
+        if (!vacationId && this.vacationCancelButton.dataset.vacationId) {
+            vacationId = this.vacationCancelButton.dataset.vacationId;
+        }
+
+        const normalizedId = (vacationId || '').trim();
+
+        if (!normalizedId) {
+            this.showAlert('申請IDを取得できません。画面を再読み込みしてください。', 'warning');
+            return;
+        }
+        if (!window.currentEmployeeId) {
+            this.showAlert('従業員IDが取得できません', 'danger');
+            return;
+        }
+
+        const confirmed = window.confirm('この有給申請を取消しますか？');
+        if (!confirmed) {
+            return;
+        }
+
+        let refreshRequired = false;
+        let closeModal = false;
+
+        try {
+            this.vacationCancelButton.disabled = true;
+            const data = await fetchWithAuth.handleApiCall(
+                () => fetchWithAuth.post(`/api/vacation/${normalizedId}/cancel`, {
+                    employeeId: window.currentEmployeeId
+                }),
+                '有給申請の取消に失敗しました'
+            );
+
+            this.showAlert(data.message || '有給申請を取消しました', 'success');
+            refreshRequired = true;
+            closeModal = true;
+        } catch (error) {
+            console.error('有給申請取消エラー:', error);
+            const message = error.message || '有給申請の取消に失敗しました';
+            const isMissing = message.includes('見つかりません') || message.includes('存在しません');
+            const isStateError = message.includes('取消できない');
+
+            if (isMissing || isStateError) {
+                this.showAlert(`${message}。最新の状態を反映します。`, 'warning');
+                refreshRequired = true;
+                closeModal = true;
+            } else {
+                this.showAlert(message, 'danger');
+            }
+        } finally {
+            this.vacationCancelButton.disabled = false;
+            this.vacationCancelButton.removeAttribute('data-vacation-id');
+            this.currentVacationDetail = null;
+            if (this.vacationResubmitButton) {
+                this.vacationResubmitButton.style.display = 'none';
+            }
+
+            if (closeModal) {
+                const modalElement = document.getElementById('vacationDetailModal');
+                if (modalElement && typeof bootstrap !== 'undefined') {
+                    const instance = bootstrap.Modal.getInstance(modalElement);
+                    instance?.hide();
+                }
+            }
+
+            if (refreshRequired) {
+                try {
+                    await this.loadCalendarData();
+                    this.generateCalendar();
+                } catch (refreshError) {
+                    console.error('有給申請取消後の再描画に失敗しました:', refreshError);
+                }
+            }
+        }
+    }
+
+    /**
+     * 打刻修正申請の再申請
+     */
+    handleAdjustmentResubmit() {
+        const detail = this.currentAdjustmentDetail?.request;
+        if (!detail) {
+            this.showAlert('再申請するデータが見つかりません', 'warning');
+            return;
+        }
+
+        const modalElement = document.getElementById('adjustmentDetailModal');
+        if (modalElement && typeof bootstrap !== 'undefined') {
+            const instance = bootstrap.Modal.getInstance(modalElement);
+            instance?.hide();
+        }
+
+        if (typeof showScreen === 'function') {
+            showScreen('adjustmentScreen');
+        }
+
+        setTimeout(() => {
+            if (window.adjustmentScreen && typeof window.adjustmentScreen.prefillForm === 'function') {
+                window.adjustmentScreen.prefillForm({
+                    date: detail.targetDate,
+                    clockIn: detail.newClockIn,
+                    clockOut: detail.newClockOut,
+                    reason: detail.reason || ''
+                });
+            }
+        }, 150);
+    }
+
+    /**
+     * 有給申請の再申請
+     */
+    handleVacationResubmit() {
+        const detail = this.currentVacationDetail?.request;
+        if (!detail) {
+            this.showAlert('再申請するデータが見つかりません', 'warning');
+            return;
+        }
+
+        const modalElement = document.getElementById('vacationDetailModal');
+        if (modalElement && typeof bootstrap !== 'undefined') {
+            const instance = bootstrap.Modal.getInstance(modalElement);
+            instance?.hide();
+        }
+
+        if (typeof showScreen === 'function') {
+            showScreen('vacationScreen');
+        }
+
+        setTimeout(() => {
+            if (window.vacationScreen && typeof window.vacationScreen.prefillForm === 'function') {
+                window.vacationScreen.prefillForm({
+                    startDate: detail.startDate,
+                    endDate: detail.endDate,
+                    reason: detail.reason || ''
+                });
+            }
+        }, 150);
     }
 
     /**

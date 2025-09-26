@@ -28,4 +28,6 @@ public class AttendanceException extends RuntimeException {
     public static final String RETIRED_EMPLOYEE = "RETIRED_EMPLOYEE";
     public static final String EMPLOYEE_NOT_FOUND = "EMPLOYEE_NOT_FOUND";
     public static final String INVALID_REQUEST = "INVALID_REQUEST";
+    public static final String REQUEST_NOT_FOUND = "REQUEST_NOT_FOUND";
+    public static final String REQUEST_NOT_CANCELLABLE = "REQUEST_NOT_CANCELLABLE";
 }

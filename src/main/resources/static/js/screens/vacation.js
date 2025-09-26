@@ -56,7 +56,7 @@ class VacationScreen {
      */
     async loadRemainingVacationDays() {
         if (!window.currentEmployeeId) {
-            this.showAlert('従業員IDが取得できません', 'danger');
+            // 管理者など従業員IDが紐付かないセッションでは何もしない
             return;
         }
 
@@ -127,23 +127,8 @@ class VacationScreen {
             // 残有給日数を再読み込み
             await this.loadRemainingVacationDays();
             
-
             // 履歴カレンダーを即時反映（存在する場合）
-            try {
-                if (window.historyScreen && typeof window.historyScreen.loadCalendarData === 'function') {
-                    await window.historyScreen.loadCalendarData();
-                    if (typeof window.historyScreen.generateCalendar === 'function') {
-                        window.historyScreen.generateCalendar();
-                    }
-                }
-                // 旧カレンダー画面にも反映（存在する場合）
-                if (window.calendarScreen && typeof window.calendarScreen.loadCalendarData === 'function') {
-                    await window.calendarScreen.loadCalendarData();
-                    if (typeof window.calendarScreen.generateCalendar === 'function') {
-                        window.calendarScreen.generateCalendar();
-                    }
-                }
-            } catch (_) { /* no-op */ }
+            await this.refreshAllScreens();
         } catch (error) {
             this.showAlert(error.message, 'danger');
         }
@@ -192,6 +177,64 @@ class VacationScreen {
         return true;
     }
 
+
+    /**
+     * 全画面を更新（リアルタイム反映）
+     */
+    async refreshAllScreens() {
+        try {
+            console.log('有給申請後の画面更新を開始します');
+            
+            // 履歴カレンダーを即時反映（存在する場合）
+            if (window.historyScreen) {
+                console.log('勤怠履歴画面を更新中...');
+                try {
+                    if (typeof window.historyScreen.loadCalendarData === 'function') {
+                        await window.historyScreen.loadCalendarData();
+                    }
+                    if (typeof window.historyScreen.generateCalendar === 'function') {
+                        window.historyScreen.generateCalendar();
+                    }
+                    console.log('勤怠履歴画面の更新完了');
+                } catch (error) {
+                    console.warn('勤怠履歴画面の更新に失敗:', error);
+                }
+            }
+            
+            // 旧カレンダー画面にも反映（存在する場合）
+            if (window.calendarScreen) {
+                console.log('カレンダー画面を更新中...');
+                try {
+                    if (typeof window.calendarScreen.loadCalendarData === 'function') {
+                        await window.calendarScreen.loadCalendarData();
+                    }
+                    if (typeof window.calendarScreen.generateCalendar === 'function') {
+                        window.calendarScreen.generateCalendar();
+                    }
+                    console.log('カレンダー画面の更新完了');
+                } catch (error) {
+                    console.warn('カレンダー画面の更新に失敗:', error);
+                }
+            }
+            
+            // ダッシュボード画面の更新
+            if (window.dashboardScreen) {
+                console.log('ダッシュボード画面を更新中...');
+                try {
+                    if (typeof window.dashboardScreen.loadTodayAttendance === 'function') {
+                        await window.dashboardScreen.loadTodayAttendance();
+                    }
+                    console.log('ダッシュボード画面の更新完了');
+                } catch (error) {
+                    console.warn('ダッシュボード画面の更新に失敗:', error);
+                }
+            }
+            
+            console.log('有給申請後の画面更新が完了しました');
+        } catch (error) {
+            console.warn('有給申請後の画面更新に失敗しました:', error);
+        }
+    }
 
     /**
      * アラート表示

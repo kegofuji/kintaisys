@@ -143,6 +143,25 @@ public class VacationController {
             return ResponseEntity.ok(response);
         }
     }
+
+    /**
+     * 有給申請の取消API
+     */
+    @PostMapping("/{vacationId}/cancel")
+    public ResponseEntity<VacationRequestDto> cancelVacationRequest(
+            @PathVariable Long vacationId,
+            @Valid @RequestBody CancelRequest request) {
+        try {
+            VacationRequestDto response = vacationService.cancelVacationRequest(vacationId, request.getEmployeeId());
+            return ResponseEntity.ok(response);
+        } catch (VacationException e) {
+            VacationRequestDto errorResponse = new VacationRequestDto(false, e.getErrorCode(), e.getMessage());
+            return ResponseEntity.badRequest().body(errorResponse);
+        } catch (Exception e) {
+            VacationRequestDto errorResponse = new VacationRequestDto(false, "INTERNAL_ERROR", "有給申請の取消に失敗しました");
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+        }
+    }
     
     /**
      * 残有給日数取得API（簡易実装）
@@ -231,6 +250,25 @@ public class VacationController {
         
         public void setReason(String reason) {
             this.reason = reason;
+        }
+    }
+
+    /**
+     * 取消リクエスト内部クラス
+     */
+    public static class CancelRequest {
+        @NotNull(message = "従業員IDは必須です")
+        private Long employeeId;
+
+        public CancelRequest() {
+        }
+
+        public Long getEmployeeId() {
+            return employeeId;
+        }
+
+        public void setEmployeeId(Long employeeId) {
+            this.employeeId = employeeId;
         }
     }
     

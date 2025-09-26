@@ -81,7 +81,7 @@ public class AdminService {
      * @param approved 承認する場合true、却下する場合false
      * @return 処理成功の場合true
      */
-    public boolean approveVacation(Long vacationId, boolean approved) {
+    public boolean approveVacation(Long vacationId, boolean approved, String rejectionReason) {
         try {
             VacationRequest vacationRequest = vacationRequestRepository.findById(vacationId)
                     .orElse(null);
@@ -93,8 +93,10 @@ public class AdminService {
             // ステータスを更新
             if (approved) {
                 vacationRequest.setStatus(VacationStatus.APPROVED);
+                vacationRequest.setRejectionComment(null);
             } else {
                 vacationRequest.setStatus(VacationStatus.REJECTED);
+                vacationRequest.setRejectionComment(rejectionReason != null ? rejectionReason.trim() : null);
             }
             
             vacationRequestRepository.save(vacationRequest);

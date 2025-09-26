@@ -336,8 +336,30 @@ async function loadAttendanceHistory() {
     }
 }
 
+// 新規社員かどうかを判定する関数
+function isNewEmployee() {
+    // 現在のユーザーがemp1またはemp2の場合は既存社員（テスト用）
+    if (window.currentUser === 'emp1' || window.currentUser === 'emp2') {
+        return false;
+    }
+    
+    // emp3以降は新規社員として扱う（管理者画面で作成された社員）
+    if (window.currentUser && window.currentUser.startsWith('emp')) {
+        const empNumber = parseInt(window.currentUser.replace('emp', ''));
+        return empNumber >= 3;
+    }
+    
+    // その他の場合は新規社員として扱う
+    return true;
+}
+
 // モック勤怠データ生成
 function generateMockAttendanceData() {
+    // 新規作成された社員の場合は空のデータを返す（勤怠データは存在しない）
+    if (isNewEmployee()) {
+        return [];
+    }
+    
     const data = [];
     const today = new Date();
     

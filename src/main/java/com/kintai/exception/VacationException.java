@@ -29,4 +29,5 @@ public class VacationException extends RuntimeException {
     public static final String INVALID_REQUEST = "INVALID_REQUEST";
     public static final String VACATION_NOT_FOUND = "VACATION_NOT_FOUND";
     public static final String INVALID_STATUS_CHANGE = "INVALID_STATUS_CHANGE";
+    public static final String VACATION_NOT_CANCELLABLE = "VACATION_NOT_CANCELLABLE";
 }

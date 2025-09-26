@@ -131,21 +131,7 @@ class AdjustmentScreen {
             this.setDefaultDate();
 
             // 履歴カレンダーを即時反映（存在する場合）
-            try {
-                if (window.historyScreen && typeof window.historyScreen.loadCalendarData === 'function') {
-                    await window.historyScreen.loadCalendarData();
-                    if (typeof window.historyScreen.generateCalendar === 'function') {
-                        window.historyScreen.generateCalendar();
-                    }
-                }
-                // 旧カレンダー画面にも反映（存在する場合）
-                if (window.calendarScreen && typeof window.calendarScreen.loadCalendarData === 'function') {
-                    await window.calendarScreen.loadCalendarData();
-                    if (typeof window.calendarScreen.generateCalendar === 'function') {
-                        window.calendarScreen.generateCalendar();
-                    }
-                }
-            } catch (_) { /* no-op */ }
+            await this.refreshAllScreens();
         } catch (error) {
             this.showAlert(error.message, 'danger');
         }
@@ -163,27 +149,12 @@ class AdjustmentScreen {
         // ローカル日付として比較できるように手動で生成する。
         const [y, m, d] = date.split('-').map(v => parseInt(v, 10));
         const selectedDate = new Date(y, (m || 1) - 1, d || 1);
+        if (Number.isNaN(selectedDate.getTime())) {
+            this.showAlert('有効な日付を入力してください', 'warning');
+            this.adjustmentDate.focus();
+            return false;
+        }
         selectedDate.setHours(0, 0, 0, 0);
-
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-
-        // 未来の日付は選択不可
-        if (selectedDate > today) {
-            this.showAlert('修正対象日は今日以前の日付を選択してください', 'warning');
-            this.adjustmentDate.focus();
-            return false;
-        }
-
-        // 30日より前の日付は選択不可（業務ルール）
-        const thirtyDaysAgo = new Date(today);
-        thirtyDaysAgo.setDate(today.getDate() - 30);
-        
-        if (selectedDate < thirtyDaysAgo) {
-            this.showAlert('修正対象日は30日以内の日付を選択してください', 'warning');
-            this.adjustmentDate.focus();
-            return false;
-        }
 
         return true;
     }
@@ -218,6 +189,64 @@ class AdjustmentScreen {
         }
 
         return true;
+    }
+
+    /**
+     * 全画面を更新（リアルタイム反映）
+     */
+    async refreshAllScreens() {
+        try {
+            console.log('打刻修正申請後の画面更新を開始します');
+            
+            // 履歴カレンダーを即時反映（存在する場合）
+            if (window.historyScreen) {
+                console.log('勤怠履歴画面を更新中...');
+                try {
+                    if (typeof window.historyScreen.loadCalendarData === 'function') {
+                        await window.historyScreen.loadCalendarData();
+                    }
+                    if (typeof window.historyScreen.generateCalendar === 'function') {
+                        window.historyScreen.generateCalendar();
+                    }
+                    console.log('勤怠履歴画面の更新完了');
+                } catch (error) {
+                    console.warn('勤怠履歴画面の更新に失敗:', error);
+                }
+            }
+            
+            // 旧カレンダー画面にも反映（存在する場合）
+            if (window.calendarScreen) {
+                console.log('カレンダー画面を更新中...');
+                try {
+                    if (typeof window.calendarScreen.loadCalendarData === 'function') {
+                        await window.calendarScreen.loadCalendarData();
+                    }
+                    if (typeof window.calendarScreen.generateCalendar === 'function') {
+                        window.calendarScreen.generateCalendar();
+                    }
+                    console.log('カレンダー画面の更新完了');
+                } catch (error) {
+                    console.warn('カレンダー画面の更新に失敗:', error);
+                }
+            }
+            
+            // ダッシュボード画面の更新
+            if (window.dashboardScreen) {
+                console.log('ダッシュボード画面を更新中...');
+                try {
+                    if (typeof window.dashboardScreen.loadTodayAttendance === 'function') {
+                        await window.dashboardScreen.loadTodayAttendance();
+                    }
+                    console.log('ダッシュボード画面の更新完了');
+                } catch (error) {
+                    console.warn('ダッシュボード画面の更新に失敗:', error);
+                }
+            }
+            
+            console.log('打刻修正申請後の画面更新が完了しました');
+        } catch (error) {
+            console.warn('打刻修正申請後の画面更新に失敗しました:', error);
+        }
     }
 
     /**
