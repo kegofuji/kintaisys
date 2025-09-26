@@ -360,11 +360,20 @@ class AdminScreen {
             submitAddEmployeeBtn.addEventListener('click', () => this.submitAddEmployee());
         }
 
+        // 社員追加フォーム送信（Enterキー対応）
+        const addEmployeeForm = document.getElementById('addEmployeeForm');
+        if (addEmployeeForm) {
+            addEmployeeForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                this.submitAddEmployee();
+            });
+        }
+
         // パスワード強度チェックは撤廃
 
-        // 編集・退職処理ボタン（イベント委譲）: アイコン<i>内クリックにも反応するようclosestを使用
+        // 編集・退職処理・削除ボタン（イベント委譲）: アイコン<i>内クリックにも反応するようclosestを使用
         document.addEventListener('click', (e) => {
-            const btn = e.target.closest('.edit-employee-btn, .deactivate-employee-btn');
+            const btn = e.target.closest('.edit-employee-btn, .deactivate-employee-btn, .delete-employee-btn');
             if (!btn) return;
             if (btn.classList.contains('edit-employee-btn')) {
                 const employeeId = btn.getAttribute('data-employee-id');
@@ -372,6 +381,9 @@ class AdminScreen {
             } else if (btn.classList.contains('deactivate-employee-btn')) {
                 const employeeId = btn.getAttribute('data-employee-id');
                 this.deactivateEmployee(parseInt(employeeId));
+            } else if (btn.classList.contains('delete-employee-btn')) {
+                const employeeId = btn.getAttribute('data-employee-id');
+                this.deleteEmployee(parseInt(employeeId));
             }
         });
     }
@@ -434,6 +446,8 @@ class AdminScreen {
 
             if (data.success) {
                 this.displayEmployees(data.data);
+                // 社員一覧更新後に次の社員番号も更新
+                this.updateNextEmployeeNumber();
             } else {
                 // フォールバック: emp1 のみ表示
                 const mockData = this.generateMockEmployeeData();
@@ -510,12 +524,18 @@ class AdminScreen {
                    </button>`
                 : '';
 
+            // 削除ボタン（全社員に表示）
+            const deleteButton = `<button class="btn btn-sm btn-outline-danger me-1 delete-employee-btn" data-employee-id="${employee.employeeId}">
+                     <i class="fas fa-trash"></i> 削除
+                   </button>`;
+
             row.innerHTML = `
                 <td>${username}</td>
                 <td><span class="${statusClass}">${statusText}</span></td>
                 <td>
                     ${vacationAdjustButton}
                     ${deactivateButton}
+                    ${deleteButton}
                 </td>
             `;
             this.employeesTableBody.appendChild(row);
@@ -955,6 +975,30 @@ class AdminScreen {
 
                 this.showAlert(data.message, 'success');
                 await this.loadEmployees();
+                // 社員一覧更新後に次の社員番号も更新
+                this.updateNextEmployeeNumber();
+            } catch (error) {
+                this.showAlert(error.message, 'danger');
+            }
+        }
+    }
+
+    /**
+     * 社員削除
+     * @param {number} employeeId - 社員ID
+     */
+    async deleteEmployee(employeeId) {
+        if (confirm('この社員を完全に削除しますか？この操作は取り消せません。')) {
+            try {
+                const data = await fetchWithAuth.handleApiCall(
+                    () => fetchWithAuth.delete(`/api/admin/employee-management/${employeeId}`),
+                    '社員削除に失敗しました'
+                );
+
+                this.showAlert(data.message, 'success');
+                await this.loadEmployees();
+                // 社員一覧更新後に次の社員番号も更新
+                this.updateNextEmployeeNumber();
             } catch (error) {
                 this.showAlert(error.message, 'danger');
             }
@@ -1337,15 +1381,64 @@ class AdminScreen {
     // 復職/退職はAPIに一本化（上の async deactivateEmployee を使用）
 
     /**
+     * 次の社員番号を取得
+     */
+    async getNextEmployeeNumber() {
+        try {
+            const response = await fetch('/api/admin/employee-management/next-number');
+            if (response.ok) {
+                const data = await response.json();
+                return data.nextNumber || '1';
+            }
+        } catch (error) {
+            console.error('次の社員番号の取得に失敗:', error);
+        }
+        return '1'; // デフォルト値
+    }
+
+    /**
+     * 次の社員番号を更新（社員一覧更新時に呼び出し）
+     */
+    async updateNextEmployeeNumber() {
+        try {
+            const nextNumber = await this.getNextEmployeeNumber();
+            console.log('次の社員番号を取得:', nextNumber);
+            const usernameField = document.getElementById('employeeUsername');
+            if (usernameField) {
+                usernameField.value = nextNumber;
+                console.log('ユーザー名フィールドを更新:', nextNumber);
+            } else {
+                console.warn('ユーザー名フィールドが見つかりません');
+            }
+        } catch (error) {
+            console.error('次の社員番号の更新に失敗:', error);
+        }
+    }
+
+    /**
      * 社員追加モーダル表示
      */
-    showAddEmployeeModal() {
+    async showAddEmployeeModal() {
         // フォームをリセット
         const form = document.getElementById('addEmployeeForm');
         if (form) {
             form.reset();
         }
 
+        // 次の社員番号を取得して表示
+        try {
+            const nextNumber = await this.getNextEmployeeNumber();
+            console.log('モーダル表示時の次の社員番号:', nextNumber);
+            const usernameField = document.getElementById('employeeUsername');
+            if (usernameField) {
+                usernameField.value = nextNumber;
+                console.log('モーダル内のユーザー名フィールドを更新:', nextNumber);
+            } else {
+                console.warn('モーダル内のユーザー名フィールドが見つかりません');
+            }
+        } catch (error) {
+            console.error('次の社員番号の取得に失敗:', error);
+        }
 
         // パスワード強度表示は撤廃
 
@@ -1367,15 +1460,11 @@ class AdminScreen {
 
         const formData = new FormData(form);
         const employeeData = {
-            username: formData.get('username')?.trim(),
+            username: 'emp', // ユーザー名はempで固定（バックエンドで自動採番）
             password: formData.get('password')?.trim()
         };
 
         // バリデーション
-        if (!employeeData.username) {
-            this.showAlert('ユーザー名は必須です', 'warning');
-            return;
-        }
         if (!employeeData.password) {
             this.showAlert('パスワードは必須です', 'warning');
             return;

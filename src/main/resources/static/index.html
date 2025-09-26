@@ -664,8 +664,11 @@
                             <form id="addEmployeeForm">
                                 <div class="mb-3">
                                     <label for="employeeUsername" class="form-label">ユーザー名 <span class="text-danger">*</span></label>
-                                    <input type="text" class="form-control" id="employeeUsername" name="username" required>
-                                    <div class="form-text">ログイン時に使用するユーザー名を入力してください</div>
+                                    <div class="input-group">
+                                        <span class="input-group-text">emp</span>
+                                        <input type="text" class="form-control" id="employeeUsername" name="username" placeholder="番号（自動採番）" readonly>
+                                    </div>
+                                    <div class="form-text">社員IDは自動で採番されます（emp1, emp2, emp3...）</div>
                                 </div>
                                 <div class="mb-3">
                                     <label for="employeePassword" class="form-label">パスワード <span class="text-danger">*</span></label>

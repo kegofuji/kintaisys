@@ -41,6 +41,31 @@ public class AdminEmployeeController {
     }
 
     /**
+     * 次の社員番号を取得
+     */
+    @GetMapping("/next-number")
+    public ResponseEntity<Map<String, Object>> getNextEmployeeNumber() {
+        try {
+            String nextCode = generateEmployeeCode();
+            // EMPプレフィックスを除去して番号のみを取得（ゼロパディングも除去）
+            String nextNumber = nextCode.replace("EMP", "");
+            // ゼロパディングを除去（"005" -> "5"）
+            nextNumber = String.valueOf(Integer.parseInt(nextNumber));
+            
+            Map<String, Object> body = new HashMap<>();
+            body.put("success", true);
+            body.put("nextNumber", nextNumber);
+            return ResponseEntity.ok(body);
+        } catch (Exception e) {
+            System.err.println("次の社員番号取得エラー: " + e.getMessage());
+            Map<String, Object> body = new HashMap<>();
+            body.put("success", false);
+            body.put("message", "次の社員番号の取得に失敗しました");
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(body);
+        }
+    }
+
+    /**
      * 社員追加（同時にログインアカウント作成）
      * 指定がない項目は自動補完するため、最低限 username と password があれば作成可能。
      */
@@ -67,18 +92,16 @@ public class AdminEmployeeController {
                 return ResponseEntity.badRequest().body(body);
             }
 
-            // ユーザー名の重複チェック
-            if (userAccountRepository.findByUsernameAndEnabled(req.username, true).isPresent()) {
-                System.out.println("ユーザー名重複: " + req.username);
-                Map<String, Object> body = new HashMap<>();
-                body.put("success", false);
-                body.put("message", "ユーザー名が既に使用されています");
-                return ResponseEntity.badRequest().body(body);
-            }
+            // ユーザー名の重複チェックは不要（自動生成のため）
 
-            // 入力が不足している場合はデフォルト値を補完
-            String employeeCode = req.employeeCode != null ? req.employeeCode : generateEmployeeCode(req.username);
+            // 社員コードを自動生成（EMP + 3桁番号）
+            String employeeCode = generateEmployeeCode();
             System.out.println("生成された社員コード: " + employeeCode);
+            
+            // ユーザー名はemp + 番号の形式（既存データと一貫性を保つ）
+            // EMP001 -> emp1, EMP002 -> emp2 の形式に変換
+            String numberPart = employeeCode.substring(3); // "001" -> "1"
+            String username = "emp" + Integer.parseInt(numberPart);
             
             // 社員コードの重複チェックは既にgenerateEmployeeCode内で実施済み
 
@@ -91,7 +114,7 @@ public class AdminEmployeeController {
             // ログインアカウント作成（社員ロール）
             System.out.println("ユーザーアカウント作成開始...");
             String encoded = authService.encodePassword(req.password);
-            UserAccount account = new UserAccount(req.username, encoded, UserAccount.UserRole.EMPLOYEE, emp.getEmployeeId());
+            UserAccount account = new UserAccount(username, encoded, UserAccount.UserRole.EMPLOYEE, emp.getEmployeeId());
             userAccountRepository.save(account);
             System.out.println("ユーザーアカウント作成完了: ID=" + account.getId());
 
@@ -112,17 +135,18 @@ public class AdminEmployeeController {
         }
     }
 
-    private String generateEmployeeCode(String base) {
-        // username から簡易に社員コードを生成
-        String baseCode = "E_" + base.replaceAll("[^A-Za-z0-9]", "").toUpperCase();
-        String employeeCode = baseCode;
+    private String generateEmployeeCode() {
+        // 社員コードを「EMP」で固定し、番号を自動採番（既存データと一貫性を保つ）
+        String baseCode = "EMP";
         
-        // 重複チェックとカウンター付加
+        // 重複チェックとカウンター付加（1からスタート）
         int counter = 1;
-        while (employeeRepository.findByEmployeeCode(employeeCode).isPresent()) {
-            employeeCode = baseCode + "_" + counter;
+        String employeeCode;
+        do {
+            // 3桁のゼロパディングで統一（EMP001, EMP002, ...）
+            employeeCode = baseCode + String.format("%03d", counter);
             counter++;
-        }
+        } while (employeeRepository.findByEmployeeCode(employeeCode).isPresent());
         
         return employeeCode;
     }
@@ -167,6 +191,45 @@ public class AdminEmployeeController {
         StatusUpdateRequest req = new StatusUpdateRequest();
         req.isActive = false;
         return updateStatus(employeeId, req);
+    }
+
+    /**
+     * 社員削除（データベースから完全削除）
+     */
+    @DeleteMapping("/{employeeId}")
+    public ResponseEntity<Map<String, Object>> deleteEmployee(@PathVariable Long employeeId) {
+        try {
+            // 社員が存在するかチェック
+            if (!employeeRepository.existsById(employeeId)) {
+                Map<String, Object> body = new HashMap<>();
+                body.put("success", false);
+                body.put("message", "従業員が見つかりません");
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(body);
+            }
+
+            // 関連するUserAccountを先に削除
+            userAccountRepository.findByEmployeeId(employeeId)
+                    .ifPresent(userAccount -> {
+                        userAccountRepository.delete(userAccount);
+                        System.out.println("Deleted user account for employee ID: " + employeeId);
+                    });
+
+            // 社員データを削除
+            employeeRepository.deleteById(employeeId);
+            System.out.println("Deleted employee with ID: " + employeeId);
+
+            Map<String, Object> body = new HashMap<>();
+            body.put("success", true);
+            body.put("message", "社員データを削除しました");
+            return ResponseEntity.ok(body);
+        } catch (Exception e) {
+            System.err.println("社員削除エラー: " + e.getClass().getSimpleName() + " - " + e.getMessage());
+            e.printStackTrace();
+            Map<String, Object> body = new HashMap<>();
+            body.put("success", false);
+            body.put("message", "削除に失敗しました: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(body);
+        }
     }
 
     /** リクエストDTO */
