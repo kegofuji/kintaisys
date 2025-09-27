@@ -475,9 +475,9 @@ class AdminScreen {
 
         // パスワード強度チェックは撤廃
 
-        // 編集・退職処理・削除ボタン（イベント委譲）: アイコン<i>内クリックにも反応するようclosestを使用
+        // 編集・退職処理ボタン（イベント委譲）: アイコン<i>内クリックにも反応するようclosestを使用
         document.addEventListener('click', (e) => {
-            const btn = e.target.closest('.edit-employee-btn, .deactivate-employee-btn, .delete-employee-btn');
+            const btn = e.target.closest('.edit-employee-btn, .deactivate-employee-btn');
             if (!btn) return;
             if (btn.classList.contains('edit-employee-btn')) {
                 const employeeId = btn.getAttribute('data-employee-id');
@@ -485,9 +485,6 @@ class AdminScreen {
             } else if (btn.classList.contains('deactivate-employee-btn')) {
                 const employeeId = btn.getAttribute('data-employee-id');
                 this.deactivateEmployee(parseInt(employeeId));
-            } else if (btn.classList.contains('delete-employee-btn')) {
-                const employeeId = btn.getAttribute('data-employee-id');
-                this.deleteEmployee(parseInt(employeeId));
             }
         });
     }
@@ -640,18 +637,12 @@ class AdminScreen {
                    </button>`
                 : '';
 
-            // 削除ボタン（全社員に表示）
-            const deleteButton = `<button class="btn btn-sm btn-outline-danger me-1 delete-employee-btn" data-employee-id="${employee.employeeId}">
-                     <i class="fas fa-trash"></i> 削除
-                   </button>`;
-
             row.innerHTML = `
                 <td>${username}</td>
                 <td><span class="${statusClass}">${statusText}</span></td>
                 <td>
                     ${vacationAdjustButton}
                     ${deactivateButton}
-                    ${deleteButton}
                 </td>
             `;
             this.employeesTableBody.appendChild(row);
