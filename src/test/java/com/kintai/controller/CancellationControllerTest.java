@@ -8,6 +8,8 @@ import com.kintai.entity.AttendanceRecord;
 import com.kintai.entity.Employee;
 import com.kintai.entity.VacationRequest;
 import com.kintai.entity.VacationStatus;
+import com.kintai.exception.AttendanceException;
+import com.kintai.exception.VacationException;
 import com.kintai.repository.AdjustmentRequestRepository;
 import com.kintai.repository.AttendanceRecordRepository;
 import com.kintai.repository.EmployeeRepository;
@@ -28,6 +30,7 @@ import java.time.LocalDateTime;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -202,5 +205,31 @@ class CancellationControllerTest {
 
         VacationRequest updated = vacationRequestRepository.findById(vacationId).orElseThrow();
         assertThat(updated.getStatus()).isEqualTo(VacationStatus.CANCELLED);
+    }
+
+    @Test
+    void cannotCreateVacationRequestOnHoliday() {
+        LocalDate sunday = LocalDate.of(2025, 9, 7);
+        assertThatThrownBy(() ->
+                vacationService.createVacationRequest(
+                        employee.getEmployeeId(), sunday, sunday, "休日申請"))
+                .isInstanceOf(VacationException.class)
+                .hasMessageContaining("土日祝日は有給申請できません");
+    }
+
+    @Test
+    void cannotCreateAdjustmentRequestOnHoliday() {
+        LocalDate sunday = LocalDate.of(2025, 9, 7);
+        AdjustmentRequestDto dto = new AdjustmentRequestDto(
+                employee.getEmployeeId(),
+                sunday,
+                LocalDateTime.of(2025, 9, 7, 9, 0),
+                LocalDateTime.of(2025, 9, 7, 18, 0),
+                "休日打刻修正"
+        );
+
+        assertThatThrownBy(() -> adjustmentRequestService.createAdjustmentRequest(dto))
+                .isInstanceOf(AttendanceException.class)
+                .hasMessageContaining("土日祝は打刻修正を申請できません");
     }
 }

@@ -228,6 +228,12 @@ class AdjustmentScreen {
         }
         selectedDate.setHours(0, 0, 0, 0);
 
+        if (!this.isBusinessDay(selectedDate)) {
+            this.showAlert('土日祝日は打刻修正を申請できません', 'warning');
+            this.adjustmentDate.focus();
+            return false;
+        }
+
         return true;
     }
 
@@ -261,6 +267,14 @@ class AdjustmentScreen {
         }
 
         return true;
+    }
+
+    isBusinessDay(date) {
+        if (typeof BusinessDayUtils !== 'undefined' && BusinessDayUtils) {
+            return BusinessDayUtils.isBusinessDay(date);
+        }
+        const day = date.getDay();
+        return day !== 0 && day !== 6;
     }
 
     /**

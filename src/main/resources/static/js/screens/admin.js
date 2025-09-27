@@ -1122,9 +1122,26 @@ class AdminScreen {
      * 社員編集
      * @param {number} employeeId - 社員ID
      */
-    editEmployee(employeeId) {
+    async editEmployee(employeeId) {
         // 有給調整ダイアログ
-        const deltaStr = prompt('有給日数の増減を入力してください（例: +2 または -1。単位: 日）');
+        let currentRemaining = null;
+        try {
+            const data = await fetchWithAuth
+                .handleApiCall(
+                    () => fetchWithAuth.get(`/api/vacation/remaining/${employeeId}`),
+                    '残有給日数の取得に失敗しました'
+                );
+            if (data && data.success && typeof data.remainingDays === 'number') {
+                currentRemaining = data.remainingDays;
+            }
+        } catch (error) {
+            console.warn('残有給日数の取得に失敗しました:', error);
+        }
+
+        const header = currentRemaining !== null
+            ? `現在の残有給日数: ${currentRemaining}日\n\n`
+            : '';
+        const deltaStr = prompt(`${header}有給日数の増減を入力してください（例: +2 または -1。単位: 日）`);
         if (deltaStr === null) return;
         const normalized = (deltaStr || '').trim();
         if (!/^[-+]?\d+$/.test(normalized)) {
@@ -1136,12 +1153,28 @@ class AdminScreen {
             this.showAlert('0日は処理不要です', 'info');
             return;
         }
-        const reason = prompt('調整理由を入力してください（必須）');
-        if (reason === null || !reason.trim()) {
-            this.showAlert('調整理由は必須です', 'warning');
+        let message;
+        if (currentRemaining !== null) {
+            const absDelta = Math.abs(delta);
+            const actionWord = delta > 0 ? '追加' : '減算';
+            const projected = currentRemaining + delta;
+            message = `現在の残有給日数: ${currentRemaining}日\n${absDelta}日${actionWord}して${projected}日になります。よろしいですか？`;
+        } else {
+            message = `${delta >= 0 ? '+' : ''}${delta}日調整します。よろしいですか？`;
+        }
+
+        const { confirmed } = await this.promptApprovalDialog({
+            title: '有給残数調整',
+            message,
+            confirmLabel: '調整する',
+            requireReason: false
+        });
+
+        if (!confirmed) {
             return;
         }
-        this.adjustVacationBalance(employeeId, delta, reason.trim());
+
+        this.adjustVacationBalance(employeeId, delta, '');
     }
 
     /**

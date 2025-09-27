@@ -22,7 +22,7 @@ class HistoryScreen {
         this.eventsBound = false;
         this.realtimeTimer = null;
         this.currentSnapshot = '';
-        this.pollIntervalMs = 10000;
+        this.pollIntervalMs = 5000;
         this.visibilityChangeHandler = null;
         this.pollingInProgress = false;
     }
@@ -38,7 +38,7 @@ class HistoryScreen {
         await this.loadCalendarData();
         this.generateCalendar();
         this.currentSnapshot = this.calculateSnapshot();
-        this.startRealtimePolling();
+        this.startRealtimePolling(true);
         // 初期の月末申請ボタン状態を反映（関数が存在する場合のみ）
         const selectedMonth = this.historyMonthSelect?.value;
         if (selectedMonth && typeof this.updateMonthlySubmitButton === 'function') {
@@ -1870,7 +1870,7 @@ class HistoryScreen {
         return `${serialize(this.vacationRequests, 'vacationId')}::${serialize(this.adjustmentRequests, 'adjustmentRequestId')}`;
     }
 
-    startRealtimePolling() {
+    startRealtimePolling(runImmediately = false) {
         if (this.realtimeTimer) {
             clearInterval(this.realtimeTimer);
         }
@@ -1878,7 +1878,6 @@ class HistoryScreen {
         const poll = async () => {
             if (this.pollingInProgress) return;
             if (document.hidden) return;
-            if (!this.hasPendingRequests()) return;
             const previousSnapshot = this.currentSnapshot;
             this.pollingInProgress = true;
             try {
@@ -1887,6 +1886,7 @@ class HistoryScreen {
                 if (newSnapshot !== previousSnapshot) {
                     console.log('申請データの更新を検知したためカレンダーを再描画します');
                     this.generateCalendar();
+                    this.currentSnapshot = newSnapshot;
                 } else {
                     this.currentSnapshot = newSnapshot;
                 }
@@ -1899,9 +1899,13 @@ class HistoryScreen {
 
         this.realtimeTimer = setInterval(poll, this.pollIntervalMs);
 
+        if (runImmediately) {
+            poll();
+        }
+
         if (!this.visibilityChangeHandler) {
             this.visibilityChangeHandler = () => {
-                if (!document.hidden && this.hasPendingRequests()) {
+                if (!document.hidden) {
                     poll();
                 }
             };

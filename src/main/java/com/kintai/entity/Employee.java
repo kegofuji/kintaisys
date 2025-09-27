@@ -24,6 +24,9 @@ public class Employee {
     
     @Column(name = "paid_leave_adjustment", nullable = false, columnDefinition = "INT DEFAULT 0")
     private Integer paidLeaveAdjustment = 0;
+
+    @Column(name = "paid_leave_base_days", nullable = false, columnDefinition = "INT DEFAULT 10")
+    private Integer paidLeaveBaseDays = 10;
     
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
@@ -35,6 +38,7 @@ public class Employee {
     public Employee() {
         this.isActive = true;
         this.paidLeaveAdjustment = 0;
+        this.paidLeaveBaseDays = 10;
     }
     
     // コンストラクタ
@@ -42,6 +46,7 @@ public class Employee {
         this.employeeCode = employeeCode;
         this.isActive = true;
         this.paidLeaveAdjustment = 0;
+        this.paidLeaveBaseDays = 10;
         this.createdAt = LocalDateTime.now();
         this.updatedAt = LocalDateTime.now();
     }
@@ -53,6 +58,9 @@ public class Employee {
         }
         if (paidLeaveAdjustment == null) {
             paidLeaveAdjustment = 0;
+        }
+        if (paidLeaveBaseDays == null) {
+            paidLeaveBaseDays = 10;
         }
         if (createdAt == null) {
             createdAt = LocalDateTime.now();
@@ -123,5 +131,13 @@ public class Employee {
 
     public void setPaidLeaveAdjustment(Integer paidLeaveAdjustment) {
         this.paidLeaveAdjustment = paidLeaveAdjustment == null ? 0 : paidLeaveAdjustment;
+    }
+
+    public Integer getPaidLeaveBaseDays() {
+        return paidLeaveBaseDays == null ? 10 : paidLeaveBaseDays;
+    }
+
+    public void setPaidLeaveBaseDays(Integer paidLeaveBaseDays) {
+        this.paidLeaveBaseDays = (paidLeaveBaseDays == null || paidLeaveBaseDays < 0) ? 10 : paidLeaveBaseDays;
     }
 }

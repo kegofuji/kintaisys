@@ -123,6 +123,10 @@ class VacationScreen {
             return;
         }
 
+        if (!this.remainingVacationDays) {
+            return;
+        }
+
         try {
             const data = await fetchWithAuth.handleApiCall(
                 () => fetchWithAuth.get(`/api/vacation/remaining/${window.currentEmployeeId}`),
@@ -130,15 +134,18 @@ class VacationScreen {
             );
 
             if (data.success) {
-                this.remainingVacationDays.textContent = `${data.remainingDays}日`;
+                const parsed = Number(data.remainingDays);
+                const remaining = Number.isFinite(parsed) ? parsed : 0;
+                this.remainingVacationDays.textContent = `${remaining}日`;
+                this.remainingVacationDays.dataset.remainingDays = String(remaining);
             } else {
-                // APIが失敗した場合はデフォルト値を表示
-                this.remainingVacationDays.textContent = '10日';
+                this.remainingVacationDays.textContent = '--日';
+                delete this.remainingVacationDays.dataset.remainingDays;
             }
         } catch (error) {
             console.error('残有給日数読み込みエラー:', error);
-            // エラーの場合はデフォルト値を表示
-            this.remainingVacationDays.textContent = '10日';
+            this.remainingVacationDays.textContent = '--日';
+            delete this.remainingVacationDays.dataset.remainingDays;
         }
     }
 
@@ -210,8 +217,8 @@ class VacationScreen {
             return true; // まだ入力中
         }
 
-        const start = new Date(startDate);
-        const end = new Date(endDate);
+        const start = this.parseLocalDate(startDate);
+        const end = this.parseLocalDate(endDate);
 
         if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
             this.showAlert('有効な日付を入力してください', 'warning');
@@ -225,16 +232,91 @@ class VacationScreen {
             return false;
         }
 
+        // 土日祝の申請禁止
+        const businessDayCount = this.countBusinessDaysInclusive(start, end);
+        if (businessDayCount === 0) {
+            this.showAlert('土日祝日は有給申請できません', 'warning');
+            return false;
+        }
+
+        const invalidDates = this.collectNonBusinessDays(start, end);
+        if (invalidDates.length > 0) {
+            this.showAlert(`土日祝日は申請できません（対象: ${invalidDates.join(', ')}）`, 'warning');
+            return false;
+        }
+
         // 申請日数が残有給日数を超えていないかチェック
-        const daysDiff = Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1;
-        const remainingDays = parseInt(this.remainingVacationDays.textContent) || 0;
-        
-        if (daysDiff > remainingDays) {
-            this.showAlert(`申請日数（${daysDiff}日）が残有給日数（${remainingDays}日）を超えています`, 'warning');
+        const remainingDays = this.getRemainingDays();
+        if (businessDayCount > remainingDays) {
+            this.showAlert(`申請日数（${businessDayCount}日）が残有給日数（${remainingDays}日）を超えています`, 'warning');
             return false;
         }
 
         return true;
+    }
+
+    parseLocalDate(value) {
+        if (!value) return new Date(NaN);
+        const [yearStr, monthStr, dayStr] = value.split('-');
+        const year = parseInt(yearStr, 10);
+        const month = parseInt(monthStr, 10);
+        const day = parseInt(dayStr, 10);
+        if (Number.isNaN(year) || Number.isNaN(month) || Number.isNaN(day)) {
+            return new Date(NaN);
+        }
+        return new Date(year, month - 1, day);
+    }
+
+    isBusinessDay(date) {
+        if (typeof BusinessDayUtils !== 'undefined' && BusinessDayUtils) {
+            return BusinessDayUtils.isBusinessDay(date);
+        }
+        const day = date.getDay();
+        return day !== 0 && day !== 6;
+    }
+
+    countBusinessDaysInclusive(start, end) {
+        let count = 0;
+        const cursor = new Date(start);
+        while (cursor <= end) {
+            if (this.isBusinessDay(cursor)) {
+                count++;
+            }
+            cursor.setDate(cursor.getDate() + 1);
+        }
+        return count;
+    }
+
+    collectNonBusinessDays(start, end) {
+        const invalid = [];
+        const cursor = new Date(start);
+        while (cursor <= end) {
+            if (!this.isBusinessDay(cursor)) {
+                invalid.push(`${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}-${String(cursor.getDate()).padStart(2, '0')}`);
+            }
+            cursor.setDate(cursor.getDate() + 1);
+        }
+        return invalid;
+    }
+
+    getRemainingDays() {
+        if (!this.remainingVacationDays) return 0;
+        const datasetValue = this.remainingVacationDays.dataset?.remainingDays;
+        if (datasetValue !== undefined) {
+            const parsed = parseInt(datasetValue, 10);
+            if (!Number.isNaN(parsed)) {
+                return parsed;
+            }
+        }
+        const rawText = this.remainingVacationDays.textContent || '';
+        const match = rawText.match(/-?\d+/);
+        if (match) {
+            const parsed = parseInt(match[0], 10);
+            if (!Number.isNaN(parsed)) {
+                return parsed;
+            }
+        }
+        return 0;
     }
 
 

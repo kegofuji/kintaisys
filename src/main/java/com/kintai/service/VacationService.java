@@ -7,6 +7,7 @@ import com.kintai.entity.VacationStatus;
 import com.kintai.exception.VacationException;
 import com.kintai.repository.EmployeeRepository;
 import com.kintai.repository.VacationRequestRepository;
+import com.kintai.util.BusinessDayCalculator;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -15,7 +16,6 @@ import org.springframework.security.core.Authentication;
 import com.kintai.entity.UserAccount;
 
 import java.time.LocalDate;
-import java.time.temporal.ChronoUnit;
 import java.util.List;
 
 /**
@@ -31,9 +31,10 @@ public class VacationService {
     @Autowired
     private EmployeeRepository employeeRepository;
     
+    private static final int FALLBACK_ANNUAL_PAID_LEAVE_DAYS = 10;
+
     @Autowired
-    // 年間付与日数（簡易実装。必要なら従業員ごとに管理に変更）
-    private static final int DEFAULT_ANNUAL_PAID_LEAVE_DAYS = 10;
+    private BusinessDayCalculator businessDayCalculator;
     
     /**
      * 有給休暇申請処理
@@ -61,6 +62,7 @@ public class VacationService {
             
             // 3. 日付範囲バリデーション
             validateDateRange(startDate, endDate);
+            enforceBusinessDaysOnly(startDate, endDate);
 
             // 4. 重複申請チェック
             if (vacationRequestRepository.existsOverlappingRequest(employeeId, startDate, endDate)) {
@@ -82,7 +84,8 @@ public class VacationService {
                     .sumApprovedDaysInPeriod(employeeId, grantDate, endOfYear);
             if (usedDays == null) usedDays = 0;
             int adjustment = employee.getPaidLeaveAdjustment();
-            int remaining = Math.max(0, DEFAULT_ANNUAL_PAID_LEAVE_DAYS + adjustment - usedDays);
+            int baseDays = resolveBaseDays(employee);
+            int remaining = Math.max(0, baseDays + adjustment - usedDays);
             if (days > remaining) {
                 throw new VacationException(
                         VacationException.INVALID_DATE_RANGE,
@@ -242,9 +245,10 @@ public class VacationService {
         Integer usedDays = vacationRequestRepository
                 .sumApprovedDaysInPeriod(employeeId, grantDate, endOfYear);
         if (usedDays == null) usedDays = 0;
-        int adjustment = employee.getPaidLeaveAdjustment();
-        int remaining = DEFAULT_ANNUAL_PAID_LEAVE_DAYS + adjustment - usedDays;
-        return Math.max(remaining, 0);
+            int adjustment = employee.getPaidLeaveAdjustment();
+            int baseDays = resolveBaseDays(employee);
+            int remaining = baseDays + adjustment - usedDays;
+            return Math.max(remaining, 0);
     }
 
     /**
@@ -274,12 +278,6 @@ public class VacationService {
                     "開始日は終了日より前である必要があります");
         }
         
-        // 期間の長さが1日以上か確認
-        if (calculateVacationDays(startDate, endDate) <= 0) {
-            throw new VacationException(
-                    VacationException.INVALID_DATE_RANGE,
-                    "申請期間が不正です");
-        }
     }
 
     /**
@@ -289,7 +287,27 @@ public class VacationService {
      * @return 日数
      */
     private int calculateVacationDays(LocalDate startDate, LocalDate endDate) {
-        return (int) ChronoUnit.DAYS.between(startDate, endDate) + 1;
+        return businessDayCalculator.countBusinessDaysInclusive(startDate, endDate);
+    }
+
+    private void enforceBusinessDaysOnly(LocalDate startDate, LocalDate endDate) {
+        LocalDate cursor = startDate;
+        while (!cursor.isAfter(endDate)) {
+            if (!businessDayCalculator.isBusinessDay(cursor)) {
+                throw new VacationException(
+                        VacationException.INVALID_DATE_RANGE,
+                        "土日祝日は有給申請できません: " + cursor);
+            }
+            cursor = cursor.plusDays(1);
+        }
+    }
+
+    private int resolveBaseDays(Employee employee) {
+        Integer base = employee.getPaidLeaveBaseDays();
+        if (base == null) {
+            return FALLBACK_ANNUAL_PAID_LEAVE_DAYS;
+        }
+        return base;
     }
     
     /**
