@@ -32,37 +32,8 @@ jobs:
     - name: Build Maven project
       run: mvn clean package -DskipTests
 
-  test-fastapi:
-    runs-on: ubuntu-latest
-    
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Set up Python 3.13
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.13'
-    
-    - name: Cache pip dependencies
-      uses: actions/cache@v3
-      with:
-        path: ~/.cache/pip
-        key: ${{ runner.os }}-pip-${{ hashFiles('**/fastapi_pdf_service/requirements.txt') }}
-        restore-keys: |
-          ${{ runner.os }}-pip-
-    
-    - name: Install FastAPI dependencies
-      run: |
-        cd fastapi_pdf_service
-        pip install -r requirements.txt
-    
-    - name: Run FastAPI tests
-      run: |
-        cd fastapi_pdf_service
-        pytest tests/ -v
-
   deploy:
-    needs: [test-spring-boot, test-fastapi]
+    needs: [test-spring-boot]
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
     

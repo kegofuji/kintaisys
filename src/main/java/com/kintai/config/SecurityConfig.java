@@ -1,6 +1,5 @@
 package com.kintai.config;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
@@ -12,16 +11,12 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.web.csrf.CsrfTokenRepository;
 import org.springframework.security.web.csrf.HttpSessionCsrfTokenRepository;
 
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
-    
-    @Autowired
-    private ApiKeyAuthenticationFilter apiKeyAuthenticationFilter;
     
     @Bean
     public PasswordEncoder passwordEncoder() {
@@ -97,7 +92,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/attendance/**", "/api/vacation/**").hasRole("EMPLOYEE")
                 // 管理者用エンドポイント
                 .requestMatchers("/api/admin/**").hasRole("ADMIN")
-                // PDF生成（FastAPI連携）
+                // PDF生成
                 .requestMatchers("/api/reports/**").authenticated()
                 // その他すべてのAPIエンドポイント
                 .requestMatchers("/api/**").authenticated()
@@ -123,7 +118,6 @@ public class SecurityConfig {
                 .maximumSessions(1)
                 .maxSessionsPreventsLogin(false)
             )
-            .addFilterBefore(apiKeyAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
             .build();
     }
     
