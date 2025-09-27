@@ -74,6 +74,7 @@
 
         add(1, 1);   // 元日
         add(2, 11);  // 建国記念の日
+        add(2, 23);  // 天皇誕生日
         add(4, 29);  // 昭和の日
         add(5, 3);   // 憲法記念日
         add(5, 4);   // みどりの日
@@ -81,7 +82,7 @@
         add(8, 11);  // 山の日
         add(11, 3);  // 文化の日
         add(11, 23); // 勤労感謝の日
-        add(12, 23); // 旧天皇誕生日（互換目的）
+        // 旧天皇誕生日（12/23）は現行の祝日制度では対象外
 
         addNthMonday(base, year, 1, 2);  // 成人の日
         addNthMonday(base, year, 7, 3);  // 海の日
@@ -120,6 +121,11 @@
         },
         isBusinessDay(date) {
             return !this.isWeekend(date) && !this.isHoliday(date);
+        },
+        getHolidayListForYear(year) {
+            const holidays = Array.from(getHolidaysForYear(year));
+            holidays.sort();
+            return holidays;
         }
     };
 

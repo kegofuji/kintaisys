@@ -1,6 +1,11 @@
 /**
  * カレンダー画面モジュール
  */
+const CALENDAR_RANGE = {
+    start: { year: 2025, month: 0 },
+    end: { year: 2027, month: 11 }
+};
+
 class CalendarScreen {
     constructor() {
         this.calendarGrid = null;
@@ -9,8 +14,9 @@ class CalendarScreen {
         this.nextMonthBtn = null;
         this.currentMonthDisplay = null;
         this.monthlySubmitBtn = null;
-        this.currentYear = new Date().getFullYear();
-        this.currentMonth = new Date().getMonth();
+        const initial = this.clampDateToRange(new Date());
+        this.currentYear = initial.year;
+        this.currentMonth = initial.month;
         this.attendanceData = [];
         this.vacationRequests = [];
         this.adjustmentRequests = [];
@@ -24,6 +30,7 @@ class CalendarScreen {
         this.setupEventListeners();
         this.loadCalendarData();
         this.generateCalendar();
+        this.updateNavigationState();
     }
 
     /**
@@ -230,9 +237,11 @@ class CalendarScreen {
         }
 
         this.calendarGrid.innerHTML = calendarHtml;
-        
+
         // 却下コメント表示のイベントリスナーを追加
         this.setupRejectionCommentListeners();
+
+        this.updateNavigationState();
     }
 
     /**
@@ -249,14 +258,17 @@ class CalendarScreen {
      * 祝日かどうか判定
      */
     isHoliday(date) {
+        if (window.BusinessDayUtils && typeof window.BusinessDayUtils.isHoliday === 'function') {
+            return window.BusinessDayUtils.isHoliday(date);
+        }
+
         const year = date.getFullYear();
         const month = date.getMonth() + 1;
         const day = date.getDate();
-        
-        // 日本の祝日判定（簡易版）
+
         const holidays = this.getHolidays(year);
         const dateString = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-        
+
         return holidays.includes(dateString);
     }
 
@@ -264,99 +276,15 @@ class CalendarScreen {
      * 指定年の祝日一覧を取得
      */
     getHolidays(year) {
-        const holidays = [];
-        
-        // 固定祝日
-        holidays.push(`${year}-01-01`); // 元日
-        holidays.push(`${year}-02-11`); // 建国記念の日
-        holidays.push(`${year}-04-29`); // 昭和の日
-        holidays.push(`${year}-05-03`); // 憲法記念日
-        holidays.push(`${year}-05-04`); // みどりの日
-        holidays.push(`${year}-05-05`); // こどもの日
-        holidays.push(`${year}-08-11`); // 山の日
-        holidays.push(`${year}-11-03`); // 文化の日
-        holidays.push(`${year}-11-23`); // 勤労感謝の日
-        holidays.push(`${year}-12-23`); // 天皇誕生日
-        
-        // 春分の日・秋分の日（簡易計算）
-        const springEquinox = this.calculateSpringEquinox(year);
-        const autumnEquinox = this.calculateAutumnEquinox(year);
-        holidays.push(springEquinox);
-        holidays.push(autumnEquinox);
-        
-        // 海の日（第3月曜日）
-        const marineDay = this.calculateMarineDay(year);
-        holidays.push(marineDay);
-        
-        // 敬老の日（第3月曜日）
-        const respectDay = this.calculateRespectDay(year);
-        holidays.push(respectDay);
-        
-        // 体育の日（第2月曜日）
-        const sportsDay = this.calculateSportsDay(year);
-        holidays.push(sportsDay);
-        
-        return holidays;
-    }
+        if (year < CALENDAR_RANGE.start.year || year > CALENDAR_RANGE.end.year) {
+            return [];
+        }
 
-    /**
-     * 春分の日を計算
-     */
-    calculateSpringEquinox(year) {
-        // 簡易計算（実際の計算はより複雑）
-        const day = Math.floor(20.8431 + 0.242194 * (year - 1980) - Math.floor((year - 1980) / 4));
-        return `${year}-03-${String(day).padStart(2, '0')}`;
-    }
+        if (window.BusinessDayUtils && typeof window.BusinessDayUtils.getHolidayListForYear === 'function') {
+            return window.BusinessDayUtils.getHolidayListForYear(year);
+        }
 
-    /**
-     * 秋分の日を計算
-     */
-    calculateAutumnEquinox(year) {
-        // 簡易計算（実際の計算はより複雑）
-        const day = Math.floor(23.2488 + 0.242194 * (year - 1980) - Math.floor((year - 1980) / 4));
-        return `${year}-09-${String(day).padStart(2, '0')}`;
-    }
-
-    /**
-     * 海の日を計算（第3月曜日）
-     */
-    calculateMarineDay(year) {
-        const firstMonday = this.getFirstMonday(year, 7);
-        const marineDay = new Date(firstMonday);
-        marineDay.setDate(marineDay.getDate() + 14); // 第3月曜日
-        return this.formatDateString(marineDay);
-    }
-
-    /**
-     * 敬老の日を計算（第3月曜日）
-     */
-    calculateRespectDay(year) {
-        const firstMonday = this.getFirstMonday(year, 9);
-        const respectDay = new Date(firstMonday);
-        respectDay.setDate(respectDay.getDate() + 14); // 第3月曜日
-        return this.formatDateString(respectDay);
-    }
-
-    /**
-     * 体育の日を計算（第2月曜日）
-     */
-    calculateSportsDay(year) {
-        const firstMonday = this.getFirstMonday(year, 10);
-        const sportsDay = new Date(firstMonday);
-        sportsDay.setDate(sportsDay.getDate() + 7); // 第2月曜日
-        return this.formatDateString(sportsDay);
-    }
-
-    /**
-     * 指定月の第1月曜日を取得
-     */
-    getFirstMonday(year, month) {
-        const firstDay = new Date(year, month - 1, 1);
-        const dayOfWeek = firstDay.getDay();
-        const mondayOffset = dayOfWeek === 0 ? 1 : 8 - dayOfWeek;
-        const firstMonday = new Date(firstDay);
-        firstMonday.setDate(firstMonday.getDate() + mondayOffset);
-        return firstMonday;
+        return [];
     }
 
     /**
@@ -414,15 +342,27 @@ class CalendarScreen {
      * 月変更
      */
     async changeMonth(direction) {
-        this.currentMonth += direction;
-        
-        if (this.currentMonth < 0) {
-            this.currentMonth = 11;
-            this.currentYear--;
-        } else if (this.currentMonth > 11) {
-            this.currentMonth = 0;
-            this.currentYear++;
+        const tentativeMonth = this.currentMonth + direction;
+        let year = this.currentYear;
+        let month = tentativeMonth;
+
+        if (tentativeMonth < 0) {
+            year -= Math.ceil(Math.abs(tentativeMonth) / 12);
+            month = ((tentativeMonth % 12) + 12) % 12;
+        } else if (tentativeMonth > 11) {
+            year += Math.floor(tentativeMonth / 12);
+            month = tentativeMonth % 12;
         }
+
+        const clamped = this.clampYearMonth(year, month);
+
+        if (clamped.year === this.currentYear && clamped.month === this.currentMonth) {
+            this.updateNavigationState();
+            return;
+        }
+
+        this.currentYear = clamped.year;
+        this.currentMonth = clamped.month;
 
         await this.loadCalendarData();
         this.generateCalendar();
@@ -432,9 +372,15 @@ class CalendarScreen {
      * 今月に移動
      */
     async goToCurrentMonth() {
-        const now = new Date();
-        this.currentYear = now.getFullYear();
-        this.currentMonth = now.getMonth();
+        const clamped = this.clampDateToRange(new Date());
+
+        if (clamped.year === this.currentYear && clamped.month === this.currentMonth) {
+            this.updateNavigationState();
+            return;
+        }
+
+        this.currentYear = clamped.year;
+        this.currentMonth = clamped.month;
 
         await this.loadCalendarData();
         this.generateCalendar();
@@ -475,6 +421,57 @@ class CalendarScreen {
         } catch (error) {
             console.error('月末申請エラー:', error);
             this.showAlert('月末申請中にエラーが発生しました', 'danger');
+        }
+    }
+
+    getMonthIndex(year, month) {
+        return year * 12 + month;
+    }
+
+    clampYearMonth(year, month) {
+        const startIndex = this.getMonthIndex(CALENDAR_RANGE.start.year, CALENDAR_RANGE.start.month);
+        const endIndex = this.getMonthIndex(CALENDAR_RANGE.end.year, CALENDAR_RANGE.end.month);
+        const targetIndex = this.getMonthIndex(year, month);
+
+        if (targetIndex < startIndex) {
+            return { ...CALENDAR_RANGE.start };
+        }
+
+        if (targetIndex > endIndex) {
+            return { ...CALENDAR_RANGE.end };
+        }
+
+        return { year, month };
+    }
+
+    clampDateToRange(date) {
+        return this.clampYearMonth(date.getFullYear(), date.getMonth());
+    }
+
+    isAtRangeStart() {
+        return this.currentYear === CALENDAR_RANGE.start.year && this.currentMonth === CALENDAR_RANGE.start.month;
+    }
+
+    isAtRangeEnd() {
+        return this.currentYear === CALENDAR_RANGE.end.year && this.currentMonth === CALENDAR_RANGE.end.month;
+    }
+
+    updateNavigationState() {
+        const atStart = this.isAtRangeStart();
+        const atEnd = this.isAtRangeEnd();
+
+        if (this.prevMonthBtn) {
+            this.prevMonthBtn.disabled = atStart;
+        }
+
+        if (this.nextMonthBtn) {
+            this.nextMonthBtn.disabled = atEnd;
+        }
+
+        if (this.currentMonthBtn) {
+            const today = this.clampDateToRange(new Date());
+            const isCurrentView = today.year === this.currentYear && today.month === this.currentMonth;
+            this.currentMonthBtn.disabled = isCurrentView;
         }
     }
 

@@ -1,14 +1,20 @@
 /**
  * 勤怠履歴画面モジュール
  */
+const HISTORY_CALENDAR_RANGE = {
+    start: { year: 2025, month: 0 },
+    end: { year: 2027, month: 11 }
+};
+
 class HistoryScreen {
     constructor() {
         this.historyMonthSelect = null;
         this.monthlySubmitHistoryBtn = null;
         this.historyTableBody = null;
         this.calendarGrid = null;
-        this.currentYear = new Date().getFullYear();
-        this.currentMonth = new Date().getMonth();
+        const initial = this.clampDateToRange(new Date());
+        this.currentYear = initial.year;
+        this.currentMonth = initial.month;
         this.attendanceData = [];
         this.vacationRequests = [];
         this.adjustmentRequests = [];
@@ -363,12 +369,18 @@ class HistoryScreen {
         if (!selectedMonth) return;
         
         const [year, month] = selectedMonth.split('-');
-        this.currentYear = parseInt(year);
-        this.currentMonth = parseInt(month) - 1; // JavaScriptの月は0ベース
-        
+        const clamped = this.clampYearMonth(parseInt(year, 10), parseInt(month, 10) - 1);
+        this.currentYear = clamped.year;
+        this.currentMonth = clamped.month; // JavaScriptの月は0ベース
+
+        const normalizedValue = this.formatYearMonth(this.currentYear, this.currentMonth);
+        if (this.historyMonthSelect.value !== normalizedValue) {
+            this.historyMonthSelect.value = normalizedValue;
+        }
+
         await this.loadCalendarData();
         this.generateCalendar();
-        
+
     }
 
 
@@ -385,29 +397,32 @@ class HistoryScreen {
             this.historyMonthSelect.removeChild(this.historyMonthSelect.lastChild);
         }
 
-        const currentDate = new Date();
-        const currentYear = currentDate.getFullYear();
-        const currentMonth = currentDate.getMonth() + 1;
+        const selected = this.clampYearMonth(this.currentYear, this.currentMonth);
+        const startIndex = this.getMonthIndex(HISTORY_CALENDAR_RANGE.start.year, HISTORY_CALENDAR_RANGE.start.month);
+        const endIndex = this.getMonthIndex(HISTORY_CALENDAR_RANGE.end.year, HISTORY_CALENDAR_RANGE.end.month);
 
-        // 過去12ヶ月 + 現在月 + 未来12ヶ月 = 合計25ヶ月分を生成
-        for (let i = -12; i <= 12; i++) {
-            const date = new Date(currentYear, currentMonth - 1 + i, 1);
-            const year = date.getFullYear();
-            const month = String(date.getMonth() + 1).padStart(2, '0');
-            const value = `${year}-${month}`;
-            const label = `${year}/${month}`;
-
+        for (let index = startIndex; index <= endIndex; index++) {
+            const year = Math.floor(index / 12);
+            const month = index % 12;
+            const value = this.formatYearMonth(year, month);
             const option = document.createElement('option');
             option.value = value;
-            option.textContent = label;
-            
-            // 現在月の場合は選択状態にする
-            if (i === 0) {
+            option.textContent = `${year}/${String(month + 1).padStart(2, '0')}`;
+
+            if (year === selected.year && month === selected.month) {
                 option.selected = true;
             }
-            
+
             this.historyMonthSelect.appendChild(option);
         }
+
+        const normalizedValue = this.formatYearMonth(selected.year, selected.month);
+        if (this.historyMonthSelect.value !== normalizedValue) {
+            this.historyMonthSelect.value = normalizedValue;
+        }
+
+        this.currentYear = selected.year;
+        this.currentMonth = selected.month;
     }
 
     /**
@@ -633,9 +648,13 @@ class HistoryScreen {
         const day = date.getDate();
         
         // 日本の祝日判定（簡易版）
+        if (window.BusinessDayUtils && typeof window.BusinessDayUtils.isHoliday === 'function') {
+            return window.BusinessDayUtils.isHoliday(date);
+        }
+
         const holidays = this.getHolidays(year);
         const dateString = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-        
+
         return holidays.includes(dateString);
     }
 
@@ -643,111 +662,45 @@ class HistoryScreen {
      * 指定年の祝日一覧を取得
      */
     getHolidays(year) {
-        // 基本祝日（日付文字列のSetで管理）
-        const base = new Set();
-        const add = (y, m, d) => base.add(`${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`);
-
-        // 固定祝日
-        add(year, 1, 1);   // 元日
-        add(year, 2, 11);  // 建国記念の日
-        add(year, 2, 23);  // 天皇誕生日（令和）
-        add(year, 4, 29);  // 昭和の日
-        add(year, 5, 3);   // 憲法記念日
-        add(year, 5, 4);   // みどりの日
-        add(year, 5, 5);   // こどもの日
-        add(year, 8, 11);  // 山の日
-        add(year, 11, 3);  // 文化の日
-        add(year, 11, 23); // 勤労感謝の日
-
-        // ハッピーマンデー（第n月曜）
-        this.addNthMonday(base, year, 1, 2);  // 1月第2月曜: 成人の日
-        this.addNthMonday(base, year, 7, 3);  // 7月第3月曜: 海の日
-        this.addNthMonday(base, year, 9, 3);  // 9月第3月曜: 敬老の日
-        this.addNthMonday(base, year, 10, 2); // 10月第2月曜: スポーツの日
-
-        // 春分・秋分（近似式 1980-2099）
-        const vernal = this.calcVernalEquinoxDay(year);
-        const autumnal = this.calcAutumnalEquinoxDay(year);
-        if (vernal) add(year, 3, vernal);
-        if (autumnal) add(year, 9, autumnal);
-
-        // 振替休日（Holiday on Sunday => next non-holiday weekday）
-        const withSubstitute = this.applySubstituteHolidays(base, year);
-
-        // 国民の休日（祝日に挟まれた平日）
-        const withCitizens = this.applyCitizensHoliday(withSubstitute, year);
-
-        return Array.from(withCitizens.values());
-    }
-
-    addNthMonday(set, year, month1Based, n) {
-        const first = new Date(year, month1Based - 1, 1);
-        const firstDay = first.getDay();
-        const firstMondayDate = 1 + ((8 - firstDay) % 7);
-        const date = firstMondayDate + 7 * (n - 1);
-        const daysInMonth = new Date(year, month1Based, 0).getDate();
-        if (date <= daysInMonth) {
-            set.add(`${year}-${String(month1Based).padStart(2, '0')}-${String(date).padStart(2, '0')}`);
+        if (year < HISTORY_CALENDAR_RANGE.start.year || year > HISTORY_CALENDAR_RANGE.end.year) {
+            return [];
         }
-    }
 
-    calcVernalEquinoxDay(year) {
-        // 1980-2099の近似: 20.8431 + 0.242194*(Y-1980) - floor((Y-1980)/4)
-        if (year < 1900 || year > 2099) return 20; // フォールバック
-        const d = Math.floor(20.8431 + 0.242194 * (year - 1980) - Math.floor((year - 1980) / 4));
-        return d;
-    }
-
-    calcAutumnalEquinoxDay(year) {
-        // 1980-2099の近似: 23.2488 + 0.242194*(Y-1980) - floor((Y-1980)/4)
-        if (year < 1900 || year > 2099) return 23; // フォールバック
-        const d = Math.floor(23.2488 + 0.242194 * (year - 1980) - Math.floor((year - 1980) / 4));
-        return d;
-    }
-
-    applySubstituteHolidays(baseSet, year) {
-        const result = new Map();
-        // まず既存祝日をすべて投入
-        for (const s of baseSet) result.set(s, s);
-        // 各祝日が日曜なら翌平日を振替
-        for (const s of baseSet) {
-            const d = new Date(s);
-            if (d.getFullYear() !== year) continue;
-            if (d.getDay() === 0) { // Sunday
-                let next = new Date(d);
-                do {
-                    next.setDate(next.getDate() + 1);
-                    const key = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}-${String(next.getDate()).padStart(2, '0')}`;
-                    // 平日で、まだ祝日でなければ振替
-                    if (!result.has(key) && next.getDay() >= 1 && next.getDay() <= 6) {
-                        result.set(key, key);
-                        break;
-                    }
-                } while (next.getFullYear() === year);
-            }
+        if (window.BusinessDayUtils && typeof window.BusinessDayUtils.getHolidayListForYear === 'function') {
+            return window.BusinessDayUtils.getHolidayListForYear(year);
         }
-        return result;
+
+        return [];
     }
 
-    applyCitizensHoliday(holidayMap, year) {
-        // 祝日に挟まれた平日を祝日に（国民の休日）
-        const result = new Map(holidayMap);
-        const isHoliday = (dt) => result.has(`${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`);
-        for (let m = 0; m < 12; m++) {
-            const days = new Date(year, m + 1, 0).getDate();
-            for (let d = 2; d <= days - 1; d++) {
-                const cur = new Date(year, m, d);
-                if (cur.getDay() === 0 || cur.getDay() === 6) continue; // 平日のみ
-                const prev = new Date(year, m, d - 1);
-                const next = new Date(year, m, d + 1);
-                if (isHoliday(prev) && isHoliday(next) && !isHoliday(cur)) {
-                    const key = `${year}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-                    result.set(key, key);
-                }
-            }
-        }
-        return result;
+    getMonthIndex(year, month) {
+        return year * 12 + month;
     }
+
+    clampYearMonth(year, month) {
+        const startIndex = this.getMonthIndex(HISTORY_CALENDAR_RANGE.start.year, HISTORY_CALENDAR_RANGE.start.month);
+        const endIndex = this.getMonthIndex(HISTORY_CALENDAR_RANGE.end.year, HISTORY_CALENDAR_RANGE.end.month);
+        const targetIndex = this.getMonthIndex(year, month);
+
+        if (targetIndex < startIndex) {
+            return { ...HISTORY_CALENDAR_RANGE.start };
+        }
+
+        if (targetIndex > endIndex) {
+            return { ...HISTORY_CALENDAR_RANGE.end };
+        }
+
+        return { year, month };
+    }
+
+    clampDateToRange(date) {
+        return this.clampYearMonth(date.getFullYear(), date.getMonth());
+    }
+
+    formatYearMonth(year, month) {
+        return `${year}-${String(month + 1).padStart(2, '0')}`;
+    }
+
 
     /**
      * 日付文字列フォーマット
