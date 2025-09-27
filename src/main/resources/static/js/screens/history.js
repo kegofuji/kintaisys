@@ -20,6 +20,11 @@ class HistoryScreen {
         this.currentAdjustmentDetail = null;
         this.currentVacationDetail = null;
         this.eventsBound = false;
+        this.realtimeTimer = null;
+        this.currentSnapshot = '';
+        this.pollIntervalMs = 10000;
+        this.visibilityChangeHandler = null;
+        this.pollingInProgress = false;
     }
 
     /**
@@ -32,6 +37,8 @@ class HistoryScreen {
         this.generateMonthOptions();
         await this.loadCalendarData();
         this.generateCalendar();
+        this.currentSnapshot = this.calculateSnapshot();
+        this.startRealtimePolling();
         // 初期の月末申請ボタン状態を反映（関数が存在する場合のみ）
         const selectedMonth = this.historyMonthSelect?.value;
         if (selectedMonth && typeof this.updateMonthlySubmitButton === 'function') {
@@ -516,29 +523,27 @@ class HistoryScreen {
             // 有給申請状況の表示（申請がある場合のみ）
             if (vacationRequest) {
                 const statusUpper = (vacationRequest.status || '').toUpperCase();
-                if (statusUpper !== 'CANCELLED') {
-                    let statusClass = 'bg-secondary';
-                    let label = '申請';
-                    switch (statusUpper) {
-                        case 'APPROVED':
-                            statusClass = 'bg-success';
-                            label = '承認済';
-                            break;
-                        case 'PENDING':
-                            statusClass = 'bg-warning';
-                            label = '申請中';
-                            break;
-                        case 'REJECTED':
-                            statusClass = 'bg-danger';
-                            label = '却下';
-                            break;
-                        default:
-                            statusClass = 'bg-secondary';
-                            label = statusUpper || '申請';
-                    }
-                    const dataAttrs = `data-vacation-id="${vacationRequest.vacationId || ''}" data-status="${vacationRequest.status}" data-date="${dateString}"`;
-                    badges += `<span class="badge ${statusClass} badge-sm vacation-badge clickable" ${dataAttrs} title="クリックして申請内容を確認">有給${label}</span>`;
+                let statusClass = 'bg-secondary';
+                let label = '申請';
+                switch (statusUpper) {
+                    case 'APPROVED':
+                        statusClass = 'bg-success';
+                        label = '承認済';
+                        break;
+                    case 'PENDING':
+                        statusClass = 'bg-warning';
+                        label = '申請中';
+                        break;
+                    case 'REJECTED':
+                        statusClass = 'bg-danger';
+                        label = '却下';
+                        break;
+                    default:
+                        statusClass = 'bg-secondary';
+                        label = statusUpper || '申請';
                 }
+                const dataAttrs = `data-vacation-id="${vacationRequest.vacationId || ''}" data-status="${vacationRequest.status}" data-date="${dateString}"`;
+                badges += `<span class="badge ${statusClass} badge-sm vacation-badge clickable" ${dataAttrs} title="クリックして申請内容を確認">有給${label}</span>`;
             }
 
             // 打刻修正申請状況の表示（申請がある場合のみ）
@@ -555,11 +560,6 @@ class HistoryScreen {
                         statusClass = 'bg-danger';
                         label = '却下';
                         title = 'クリックして却下理由を確認';
-                        break;
-                    case 'CANCELLED':
-                        statusClass = 'bg-secondary';
-                        label = '取消';
-                        title = 'クリックして申請内容を確認';
                         break;
                     default: // PENDING
                         statusClass = 'bg-warning';
@@ -609,6 +609,8 @@ class HistoryScreen {
         } catch (e) {
             console.warn('当日セル自動選択中にエラー:', e);
         }
+
+        this.currentSnapshot = this.calculateSnapshot();
     }
 
 
@@ -844,11 +846,6 @@ class HistoryScreen {
             requests.forEach(req => {
                 if (!req.startDate || !req.endDate) return;
 
-                const statusUpper = (req.status || 'PENDING').toUpperCase();
-                if (statusUpper === 'CANCELLED') {
-                    return;
-                }
-
                 const requestId = (req.vacationId ?? req.id);
                 const requestIdStr = requestId !== undefined && requestId !== null
                     ? String(requestId)
@@ -868,9 +865,13 @@ class HistoryScreen {
                         const m = d.getMonth(); // 0-based
                         // 表示中の年月のみ保持
                         if (y === this.currentYear && m === this.currentMonth) {
+                            const status = req.status || 'PENDING';
+                            if ((status || '').toUpperCase() === 'CANCELLED') {
+                                continue;
+                            }
                             expanded.push({
                                 date: this.formatDateString(d),
-                                status: statusUpper,
+                                status: status,
                                 vacationId: requestIdStr,
                                 request: req
                             });
@@ -952,6 +953,9 @@ class HistoryScreen {
                     const d = new Date(dateField);
                     if (d.getFullYear() === this.currentYear && d.getMonth() === this.currentMonth) {
                         const status = req.status || 'PENDING';
+                        if ((status || '').toUpperCase() === 'CANCELLED') {
+                            return;
+                        }
                         filtered.push({
                             date: this.formatDateString(d),
                             status: status,
@@ -1418,11 +1422,13 @@ class HistoryScreen {
             }
 
             if (this.adjustmentResubmitButton) {
-                if ((adjustmentRequest.status || '').toUpperCase() === 'REJECTED') {
+                const canResubmit = adjustmentRequest.status === 'REJECTED';
+                if (canResubmit) {
                     this.adjustmentResubmitButton.style.display = 'inline-block';
                     this.adjustmentResubmitButton.disabled = false;
                 } else {
                     this.adjustmentResubmitButton.style.display = 'none';
+                    this.adjustmentResubmitButton.disabled = false;
                 }
             }
 
@@ -1471,7 +1477,13 @@ class HistoryScreen {
             return;
         }
 
-        const confirmed = window.confirm('この打刻修正申請を取消しますか？');
+        const status = detail?.request?.status || '';
+        const isApproved = status === 'APPROVED';
+        const confirmMessage = isApproved
+            ? 'この打刻修正申請は既に承認済です。取消すると申請が無かったものとして扱われます。取消しますか？'
+            : 'この打刻修正申請を取消しますか？';
+
+        const confirmed = window.confirm(confirmMessage);
         if (!confirmed) {
             return;
         }
@@ -1481,12 +1493,12 @@ class HistoryScreen {
 
         try {
             this.adjustmentCancelButton.disabled = true;
-            const data = await fetchWithAuth.handleApiCall(
-                () => fetchWithAuth.post(`/api/attendance/adjustment/${normalizedId}/cancel`, {
-                    employeeId: window.currentEmployeeId
-                }),
-                '修正申請の取消に失敗しました'
-            );
+            const cancelPayload = {
+                adjustmentRequestId: Number(normalizedId),
+                employeeId: window.currentEmployeeId
+            };
+
+            const data = await this.invokeAdjustmentCancel(cancelPayload, normalizedId);
 
             this.showAlert(data.message || '修正申請を取消しました', 'success');
             refreshRequired = true;
@@ -1508,6 +1520,10 @@ class HistoryScreen {
             this.adjustmentCancelButton.disabled = false;
             this.adjustmentCancelButton.removeAttribute('data-request-id');
             this.currentAdjustmentDetail = null;
+            if (this.adjustmentResubmitButton) {
+                this.adjustmentResubmitButton.style.display = 'none';
+                this.adjustmentResubmitButton.disabled = false;
+            }
 
             if (closeModal) {
                 const modalElement = document.getElementById('adjustmentDetailModal');
@@ -1652,11 +1668,13 @@ class HistoryScreen {
         }
 
         if (this.vacationResubmitButton) {
-            if ((request.status || '').toUpperCase() === 'REJECTED') {
+            const canResubmit = request.status === 'REJECTED';
+            if (canResubmit) {
                 this.vacationResubmitButton.style.display = 'inline-block';
                 this.vacationResubmitButton.disabled = false;
             } else {
                 this.vacationResubmitButton.style.display = 'none';
+                this.vacationResubmitButton.disabled = false;
             }
         }
 
@@ -1698,7 +1716,13 @@ class HistoryScreen {
             return;
         }
 
-        const confirmed = window.confirm('この有給申請を取消しますか？');
+        const status = vacationDetail?.request?.status || '';
+        const isApproved = status === 'APPROVED';
+        const confirmMessage = isApproved
+            ? 'この有給申請は既に承認済です。取消すると申請が無かったものとして扱われます。取消しますか？'
+            : 'この有給申請を取消しますか？';
+
+        const confirmed = window.confirm(confirmMessage);
         if (!confirmed) {
             return;
         }
@@ -1708,12 +1732,12 @@ class HistoryScreen {
 
         try {
             this.vacationCancelButton.disabled = true;
-            const data = await fetchWithAuth.handleApiCall(
-                () => fetchWithAuth.post(`/api/vacation/${normalizedId}/cancel`, {
-                    employeeId: window.currentEmployeeId
-                }),
-                '有給申請の取消に失敗しました'
-            );
+            const cancelPayload = {
+                vacationId: Number(normalizedId),
+                employeeId: window.currentEmployeeId
+            };
+
+            const data = await this.invokeVacationCancel(cancelPayload, normalizedId);
 
             this.showAlert(data.message || '有給申請を取消しました', 'success');
             refreshRequired = true;
@@ -1734,10 +1758,11 @@ class HistoryScreen {
         } finally {
             this.vacationCancelButton.disabled = false;
             this.vacationCancelButton.removeAttribute('data-vacation-id');
-            this.currentVacationDetail = null;
-            if (this.vacationResubmitButton) {
-                this.vacationResubmitButton.style.display = 'none';
-            }
+        this.currentVacationDetail = null;
+        if (this.vacationResubmitButton) {
+            this.vacationResubmitButton.style.display = 'none';
+            this.vacationResubmitButton.disabled = false;
+        }
 
             if (closeModal) {
                 const modalElement = document.getElementById('vacationDetailModal');
@@ -1762,6 +1787,9 @@ class HistoryScreen {
      * 打刻修正申請の再申請
      */
     handleAdjustmentResubmit() {
+        if (this.adjustmentResubmitButton) {
+            this.adjustmentResubmitButton.disabled = true;
+        }
         const detail = this.currentAdjustmentDetail?.request;
         if (!detail) {
             this.showAlert('再申請するデータが見つかりません', 'warning');
@@ -1788,12 +1816,17 @@ class HistoryScreen {
                 });
             }
         }, 150);
+
+        this.currentAdjustmentDetail = null;
     }
 
     /**
      * 有給申請の再申請
      */
     handleVacationResubmit() {
+        if (this.vacationResubmitButton) {
+            this.vacationResubmitButton.disabled = true;
+        }
         const detail = this.currentVacationDetail?.request;
         if (!detail) {
             this.showAlert('再申請するデータが見つかりません', 'warning');
@@ -1819,6 +1852,142 @@ class HistoryScreen {
                 });
             }
         }, 150);
+
+        this.currentVacationDetail = null;
+    }
+
+    hasPendingRequests() {
+        return this.vacationRequests.some(item => (item.status || '').toUpperCase() === 'PENDING')
+            || this.adjustmentRequests.some(item => (item.status || '').toUpperCase() === 'PENDING');
+    }
+
+    calculateSnapshot() {
+        const serialize = (collection, idKey) => (collection || [])
+            .map(item => `${item.date}|${(item.status || '').toUpperCase()}|${item[idKey] || ''}`)
+            .sort()
+            .join(',');
+
+        return `${serialize(this.vacationRequests, 'vacationId')}::${serialize(this.adjustmentRequests, 'adjustmentRequestId')}`;
+    }
+
+    startRealtimePolling() {
+        if (this.realtimeTimer) {
+            clearInterval(this.realtimeTimer);
+        }
+
+        const poll = async () => {
+            if (this.pollingInProgress) return;
+            if (document.hidden) return;
+            if (!this.hasPendingRequests()) return;
+            const previousSnapshot = this.currentSnapshot;
+            this.pollingInProgress = true;
+            try {
+                await this.loadCalendarData();
+                const newSnapshot = this.calculateSnapshot();
+                if (newSnapshot !== previousSnapshot) {
+                    console.log('申請データの更新を検知したためカレンダーを再描画します');
+                    this.generateCalendar();
+                } else {
+                    this.currentSnapshot = newSnapshot;
+                }
+            } catch (error) {
+                console.warn('リアルタイム更新の取得に失敗しました:', error);
+            } finally {
+                this.pollingInProgress = false;
+            }
+        };
+
+        this.realtimeTimer = setInterval(poll, this.pollIntervalMs);
+
+        if (!this.visibilityChangeHandler) {
+            this.visibilityChangeHandler = () => {
+                if (!document.hidden && this.hasPendingRequests()) {
+                    poll();
+                }
+            };
+            document.addEventListener('visibilitychange', this.visibilityChangeHandler);
+        }
+    }
+
+    /**
+     * 打刻修正取消API呼び出し
+     */
+    async invokeAdjustmentCancel(payload, fallbackId) {
+        const primaryEndpoint = '/api/cancel/adjustment';
+        const fallbackEndpoint = `/api/attendance/adjustment/${fallbackId}/cancel`;
+
+        const tryRequest = async (url, body) => {
+            const response = await fetchWithAuth.post(url, body);
+            if (response.ok) {
+                const data = await fetchWithAuth.parseJson(response);
+                if (data && data.success === false) {
+                    throw new Error(data.message || '修正申請の取消に失敗しました');
+                }
+                return data;
+            }
+
+            const errorData = await fetchWithAuth.parseJson(response);
+            const message = errorData?.message || '';
+
+            // 404/405 または 「POST はサポートされない」メッセージは旧APIと判断してフォールバック
+            if (response.status === 404 || response.status === 405 || message.includes("Request method 'POST' is not supported")) {
+                return null;
+            }
+
+            throw new Error(message || `修正申請の取消に失敗しました (HTTP ${response.status})`);
+        };
+
+        const primaryResult = await tryRequest(primaryEndpoint, payload);
+        if (primaryResult) {
+            return primaryResult;
+        }
+
+        const fallbackResult = await tryRequest(fallbackEndpoint, { employeeId: payload.employeeId });
+        if (fallbackResult) {
+            return fallbackResult;
+        }
+
+        throw new Error('修正申請の取消に失敗しました');
+    }
+
+    /**
+     * 有給取消API呼び出し
+     */
+    async invokeVacationCancel(payload, fallbackId) {
+        const primaryEndpoint = '/api/cancel/vacation';
+        const fallbackEndpoint = `/api/vacation/${fallbackId}/cancel`;
+
+        const tryRequest = async (url, body) => {
+            const response = await fetchWithAuth.post(url, body);
+            if (response.ok) {
+                const data = await fetchWithAuth.parseJson(response);
+                if (data && data.success === false) {
+                    throw new Error(data.message || '有給申請の取消に失敗しました');
+                }
+                return data;
+            }
+
+            const errorData = await fetchWithAuth.parseJson(response);
+            const message = errorData?.message || '';
+
+            if (response.status === 404 || response.status === 405 || message.includes("Request method 'POST' is not supported")) {
+                return null;
+            }
+
+            throw new Error(message || `有給申請の取消に失敗しました (HTTP ${response.status})`);
+        };
+
+        const primaryResult = await tryRequest(primaryEndpoint, payload);
+        if (primaryResult) {
+            return primaryResult;
+        }
+
+        const fallbackResult = await tryRequest(fallbackEndpoint, { employeeId: payload.employeeId });
+        if (fallbackResult) {
+            return fallbackResult;
+        }
+
+        throw new Error('有給申請の取消に失敗しました');
     }
 
     /**

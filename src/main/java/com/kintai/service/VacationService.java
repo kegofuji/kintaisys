@@ -15,6 +15,7 @@ import org.springframework.security.core.Authentication;
 import com.kintai.entity.UserAccount;
 
 import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 
 /**
@@ -288,7 +289,7 @@ public class VacationService {
      * @return 日数
      */
     private int calculateVacationDays(LocalDate startDate, LocalDate endDate) {
-        return (int) java.time.temporal.ChronoUnit.DAYS.between(startDate, endDate) + 1;
+        return (int) ChronoUnit.DAYS.between(startDate, endDate) + 1;
     }
     
     /**

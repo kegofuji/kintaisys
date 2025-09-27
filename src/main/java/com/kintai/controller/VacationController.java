@@ -162,7 +162,7 @@ public class VacationController {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
         }
     }
-    
+
     /**
      * 残有給日数取得API（簡易実装）
      * @param employeeId 従業員ID

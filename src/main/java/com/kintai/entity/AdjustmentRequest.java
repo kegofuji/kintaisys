@@ -27,7 +27,13 @@ public class AdjustmentRequest {
     
     @Column(name = "new_clock_out")
     private LocalDateTime newClockOut;
-    
+
+    @Column(name = "original_clock_in")
+    private LocalDateTime originalClockIn;
+
+    @Column(name = "original_clock_out")
+    private LocalDateTime originalClockOut;
+
     @Column(name = "reason", nullable = false, length = 500)
     private String reason;
     
@@ -122,9 +128,25 @@ public class AdjustmentRequest {
     public LocalDateTime getNewClockOut() {
         return newClockOut;
     }
-    
+
     public void setNewClockOut(LocalDateTime newClockOut) {
         this.newClockOut = newClockOut;
+    }
+
+    public LocalDateTime getOriginalClockIn() {
+        return originalClockIn;
+    }
+
+    public void setOriginalClockIn(LocalDateTime originalClockIn) {
+        this.originalClockIn = originalClockIn;
+    }
+
+    public LocalDateTime getOriginalClockOut() {
+        return originalClockOut;
+    }
+
+    public void setOriginalClockOut(LocalDateTime originalClockOut) {
+        this.originalClockOut = originalClockOut;
     }
     
     public String getReason() {

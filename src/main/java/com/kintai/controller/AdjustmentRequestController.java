@@ -62,6 +62,37 @@ public class AdjustmentRequestController {
     }
 
     /**
+     * 修正申請取消API（従来エンドポイント）
+     */
+    @PostMapping("/adjustment/{adjustmentRequestId}/cancel")
+    public ResponseEntity<Map<String, Object>> cancelAdjustmentRequest(
+            @PathVariable Long adjustmentRequestId,
+            @Valid @RequestBody CancelRequest request) {
+        try {
+            AdjustmentRequest cancelled = adjustmentRequestService
+                    .cancelAdjustmentRequest(adjustmentRequestId, request.getEmployeeId());
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", "修正申請を取消しました");
+            response.put("data", cancelled);
+            return ResponseEntity.ok(response);
+        } catch (AttendanceException e) {
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("success", false);
+            errorResponse.put("errorCode", e.getErrorCode());
+            errorResponse.put("message", e.getMessage());
+            return ResponseEntity.badRequest().body(errorResponse);
+        } catch (Exception e) {
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("success", false);
+            errorResponse.put("errorCode", "INTERNAL_ERROR");
+            errorResponse.put("message", "修正申請の取消に失敗しました");
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+        }
+    }
+
+    /**
      * 修正申請作成API（フロント互換: /adjustment-request）
      * 日付と時刻文字列を受け取りDTOへ変換
      */
@@ -110,37 +141,6 @@ public class AdjustmentRequestController {
         }
     }
 
-    /**
-     * 修正申請取消API
-     */
-    @PostMapping("/adjustment/{adjustmentRequestId}/cancel")
-    public ResponseEntity<Map<String, Object>> cancelAdjustmentRequest(
-            @PathVariable Long adjustmentRequestId,
-            @Valid @RequestBody CancelRequest request) {
-        try {
-            AdjustmentRequest cancelled = adjustmentRequestService
-                    .cancelAdjustmentRequest(adjustmentRequestId, request.getEmployeeId());
-
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            response.put("message", "修正申請を取消しました");
-            response.put("data", cancelled);
-            return ResponseEntity.ok(response);
-        } catch (AttendanceException e) {
-            Map<String, Object> errorResponse = new HashMap<>();
-            errorResponse.put("success", false);
-            errorResponse.put("errorCode", e.getErrorCode());
-            errorResponse.put("message", e.getMessage());
-            return ResponseEntity.badRequest().body(errorResponse);
-        } catch (Exception e) {
-            Map<String, Object> errorResponse = new HashMap<>();
-            errorResponse.put("success", false);
-            errorResponse.put("errorCode", "INTERNAL_ERROR");
-            errorResponse.put("message", "修正申請の取消に失敗しました");
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
-        }
-    }
-    
     /**
      * 修正申請一覧取得API（社員用）
      * @param employeeId 従業員ID

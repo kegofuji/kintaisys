@@ -11,6 +11,64 @@ class AdjustmentScreen {
         this.listenersBound = false;
     }
 
+    prefillForm({ date, clockIn, clockOut, reason }) {
+        if (!this.adjustmentForm) {
+            this.init();
+        }
+
+        this.clearPrefillState();
+
+        if (date && this.adjustmentDate) {
+            const parsed = new Date(date);
+            if (!Number.isNaN(parsed.getTime())) {
+                const yyyy = parsed.getFullYear();
+                const mm = String(parsed.getMonth() + 1).padStart(2, '0');
+                const dd = String(parsed.getDate()).padStart(2, '0');
+                this.adjustmentDate.value = `${yyyy}-${mm}-${dd}`;
+            } else {
+                this.adjustmentDate.value = date;
+            }
+        }
+
+        if (clockIn && this.adjustmentClockIn) {
+            const time = new Date(clockIn);
+            if (!Number.isNaN(time.getTime())) {
+                const hh = String(time.getHours()).padStart(2, '0');
+                const mm = String(time.getMinutes()).padStart(2, '0');
+                this.adjustmentClockIn.value = `${hh}:${mm}`;
+            } else {
+                this.adjustmentClockIn.value = clockIn;
+            }
+        }
+
+        if (clockOut && this.adjustmentClockOut) {
+            const time = new Date(clockOut);
+            if (!Number.isNaN(time.getTime())) {
+                const hh = String(time.getHours()).padStart(2, '0');
+                const mm = String(time.getMinutes()).padStart(2, '0');
+                this.adjustmentClockOut.value = `${hh}:${mm}`;
+            } else {
+                this.adjustmentClockOut.value = clockOut;
+            }
+        }
+
+        if (this.adjustmentReason) {
+            this.adjustmentReason.value = reason || '';
+        }
+
+        if (this.formTitle) {
+            this.formTitle.textContent = '打刻修正の再申請';
+        }
+        if (this.cancelPrefillButton) {
+            this.cancelPrefillButton.style.display = 'inline-block';
+            this.cancelPrefillButton.onclick = () => {
+                this.adjustmentForm?.reset();
+                this.setDefaultDate();
+                this.clearPrefillState();
+            };
+        }
+    }
+
     /**
      * 初期化
      */
@@ -18,6 +76,7 @@ class AdjustmentScreen {
         this.initializeElements();
         this.setupEventListeners();
         this.setDefaultDate();
+        this.clearPrefillState();
     }
 
     /**
@@ -29,6 +88,8 @@ class AdjustmentScreen {
         this.adjustmentClockIn = document.getElementById('adjustmentClockIn');
         this.adjustmentClockOut = document.getElementById('adjustmentClockOut');
         this.adjustmentReason = document.getElementById('adjustmentReason');
+        this.formTitle = document.getElementById('adjustmentFormTitle');
+        this.cancelPrefillButton = document.getElementById('adjustmentFormCancel');
     }
 
     /**
@@ -66,6 +127,16 @@ class AdjustmentScreen {
             const month = String(today.getMonth() + 1).padStart(2, '0');
             const day = String(today.getDate()).padStart(2, '0');
             this.adjustmentDate.value = `${year}-${month}-${day}`;
+        }
+    }
+
+    clearPrefillState() {
+        if (this.formTitle) {
+            this.formTitle.textContent = '打刻修正申請';
+        }
+        if (this.cancelPrefillButton) {
+            this.cancelPrefillButton.style.display = 'none';
+            this.cancelPrefillButton.onclick = null;
         }
     }
 
@@ -129,6 +200,7 @@ class AdjustmentScreen {
             this.showAlert(data.message, 'success');
             this.adjustmentForm.reset();
             this.setDefaultDate();
+            this.clearPrefillState();
 
             // 履歴カレンダーを即時反映（存在する場合）
             await this.refreshAllScreens();

@@ -8,6 +8,8 @@ class VacationScreen {
         this.vacationEndDate = null;
         this.vacationReason = null;
         this.remainingVacationDays = null;
+        this.prefillCancelButton = null;
+        this.formTitle = null;
         this.listenersBound = false;
     }
 
@@ -18,6 +20,7 @@ class VacationScreen {
         this.initializeElements();
         this.setupEventListeners();
         this.loadRemainingVacationDays();
+        this.clearPrefillState();
     }
 
     /**
@@ -29,6 +32,8 @@ class VacationScreen {
         this.vacationEndDate = document.getElementById('vacationEndDate');
         this.vacationReason = document.getElementById('vacationReason');
         this.remainingVacationDays = document.getElementById('remainingVacationDays');
+        this.prefillCancelButton = document.getElementById('vacationFormCancel');
+        this.formTitle = document.getElementById('vacationFormTitle');
     }
 
     /**
@@ -49,6 +54,64 @@ class VacationScreen {
             this.vacationEndDate.addEventListener('change', () => this.validateDateRange());
         }
         this.listenersBound = true;
+    }
+
+    clearPrefillState() {
+        if (this.formTitle) {
+            this.formTitle.textContent = '有給申請';
+        }
+        if (this.prefillCancelButton) {
+            this.prefillCancelButton.style.display = 'none';
+            this.prefillCancelButton.onclick = null;
+        }
+    }
+
+    prefillForm({ startDate, endDate, reason }) {
+        if (!this.vacationForm) {
+            this.init();
+        }
+
+        this.clearPrefillState();
+
+        if (startDate && this.vacationStartDate) {
+            const parsed = new Date(startDate);
+            if (!Number.isNaN(parsed.getTime())) {
+                const yyyy = parsed.getFullYear();
+                const mm = String(parsed.getMonth() + 1).padStart(2, '0');
+                const dd = String(parsed.getDate()).padStart(2, '0');
+                this.vacationStartDate.value = `${yyyy}-${mm}-${dd}`;
+            } else {
+                this.vacationStartDate.value = startDate;
+            }
+        }
+
+        if (endDate && this.vacationEndDate) {
+            const parsed = new Date(endDate);
+            if (!Number.isNaN(parsed.getTime())) {
+                const yyyy = parsed.getFullYear();
+                const mm = String(parsed.getMonth() + 1).padStart(2, '0');
+                const dd = String(parsed.getDate()).padStart(2, '0');
+                this.vacationEndDate.value = `${yyyy}-${mm}-${dd}`;
+            } else {
+                this.vacationEndDate.value = endDate;
+            }
+        }
+
+        if (this.vacationReason) {
+            this.vacationReason.value = reason || '';
+        }
+
+        if (this.formTitle) {
+            this.formTitle.textContent = '有給申請の再申請';
+        }
+
+        if (this.prefillCancelButton) {
+            this.prefillCancelButton.style.display = 'inline-block';
+            this.prefillCancelButton.onclick = () => {
+                this.vacationForm?.reset();
+                this.clearPrefillState();
+            };
+        }
     }
 
     /**
@@ -123,6 +186,7 @@ class VacationScreen {
 
             this.showAlert(data.message, 'success');
             this.vacationForm.reset();
+            this.clearPrefillState();
             
             // 残有給日数を再読み込み
             await this.loadRemainingVacationDays();
@@ -148,13 +212,9 @@ class VacationScreen {
 
         const start = new Date(startDate);
         const end = new Date(endDate);
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
 
-        // 過去の日付は選択不可
-        if (start < today) {
-            this.showAlert('開始日は今日以降の日付を選択してください', 'warning');
-            this.vacationStartDate.focus();
+        if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+            this.showAlert('有効な日付を入力してください', 'warning');
             return false;
         }
 

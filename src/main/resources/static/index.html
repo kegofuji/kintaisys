@@ -556,8 +556,8 @@
                                 </div>
                             </div>
                         </div>
-                        <div class="modal-footer gap-2">
-                            <button type="button" class="btn btn-primary" id="adjustmentResubmitButton" style="display: none;">再申請する</button>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-outline-primary" id="adjustmentResubmitButton" style="display: none;">再申請する</button>
                             <button type="button" class="btn btn-danger" id="adjustmentCancelButton" style="display: none;">申請取消</button>
                             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">閉じる</button>
                         </div>
@@ -607,8 +607,8 @@
                                 </div>
                             </div>
                         </div>
-                        <div class="modal-footer gap-2">
-                            <button type="button" class="btn btn-primary" id="vacationResubmitButton" style="display: none;">再申請する</button>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-outline-primary" id="vacationResubmitButton" style="display: none;">再申請する</button>
                             <button type="button" class="btn btn-danger" id="vacationCancelButton" style="display: none;">申請取消</button>
                             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">閉じる</button>
                         </div>
@@ -621,7 +621,7 @@
             <div id="vacationScreen" class="screen-container">
                 <div class="card">
                     <div class="card-header">
-                        <h5 class="mb-0">有給申請</h5>
+                        <h5 class="mb-0" id="vacationFormTitle">有給申請</h5>
                     </div>
                     <div class="card-body">
                         <div class="mb-3">
@@ -641,7 +641,10 @@
                                 <label for="vacationReason" class="form-label">理由: <span class="text-danger">*</span></label>
                                 <textarea class="form-control" id="vacationReason" rows="3" placeholder="" required></textarea>
                             </div>
-                            <button type="submit" class="btn btn-primary">申請する</button>
+                            <div class="d-flex gap-2">
+                                <button type="submit" class="btn btn-primary">申請する</button>
+                                <button type="button" class="btn btn-outline-secondary" id="vacationFormCancel" style="display: none;">再申請をやめる</button>
+                            </div>
                         </form>
                         
                     </div>
@@ -652,7 +655,7 @@
             <div id="adjustmentScreen" class="screen-container">
                 <div class="card">
                     <div class="card-header">
-                        <h5 class="mb-0">打刻修正</h5>
+                        <h5 class="mb-0" id="adjustmentFormTitle">打刻修正申請</h5>
                     </div>
                     <div class="card-body">
                         <form id="adjustmentForm">
@@ -672,7 +675,10 @@
                                 <label for="adjustmentReason" class="form-label">理由: <span class="text-danger">*</span></label>
                                 <textarea class="form-control" id="adjustmentReason" rows="3" required></textarea>
                             </div>
-                            <button type="submit" class="btn btn-primary">申請する</button>
+                            <div class="d-flex gap-2">
+                                <button type="submit" class="btn btn-primary">申請する</button>
+                                <button type="button" class="btn btn-outline-secondary" id="adjustmentFormCancel" style="display: none;">再申請をやめる</button>
+                            </div>
                         </form>
                     </div>
                 </div>
