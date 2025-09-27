@@ -62,12 +62,19 @@ public class VacationService {
             
             // 3. 日付範囲バリデーション
             validateDateRange(startDate, endDate);
-            enforceBusinessDaysOnly(startDate, endDate);
 
-            // 4. 重複申請チェック
+            // 4. 申請期間に平日が含まれているか確認（カウントは土日祝を除外）
+            int days = calculateVacationDays(startDate, endDate);
+            if (days <= 0) {
+                throw new VacationException(
+                        VacationException.INVALID_DATE_RANGE,
+                        "申請期間に平日が含まれていません");
+            }
+
+            // 5. 重複申請チェック
             if (vacationRequestRepository.existsOverlappingRequest(employeeId, startDate, endDate)) {
                 throw new VacationException(
-                        VacationException.DUPLICATE_REQUEST, 
+                        VacationException.DUPLICATE_REQUEST,
                         "既に申請済みの日付を含んでいます");
             }
 
@@ -75,10 +82,7 @@ public class VacationService {
             LocalDate startOfYear = LocalDate.now().withMonth(1).withDayOfMonth(1);
             LocalDate grantDate = startOfYear;
 
-            // 7. 申請日数（営業日換算。土日除外、祝日未考慮）
-            int days = calculateVacationDays(startDate, endDate);
-
-            // 8. 残日数超過の禁止（当年内・付与後の承認済み消化分を控除）
+            // 7. 残日数超過の禁止（当年内・付与後の承認済み消化分を控除）
             LocalDate endOfYear = LocalDate.now().withMonth(12).withDayOfMonth(31);
             Integer usedDays = vacationRequestRepository
                     .sumApprovedDaysInPeriod(employeeId, grantDate, endOfYear);
@@ -91,15 +95,15 @@ public class VacationService {
                         VacationException.INVALID_DATE_RANGE,
                         "残有給日数を超える申請はできません");
             }
-            
-            // 9. 有給申請作成（理由必須はコントローラで検証済みだが保険でnull→空文字整備）
+
+            // 8. 有給申請作成（理由必須はコントローラで検証済みだが保険でnull→空文字整備）
             VacationRequest vacationRequest = new VacationRequest(employeeId, startDate, endDate, reason);
             vacationRequest.setDays(days);
-            
-            // 10. データベース保存
+
+            // 9. データベース保存
             VacationRequest savedRequest = vacationRequestRepository.save(vacationRequest);
-            
-            // 11. レスポンス作成
+
+            // 10. レスポンス作成
             VacationRequestDto.VacationData data = new VacationRequestDto.VacationData(
                     savedRequest.getVacationId(),
                     savedRequest.getEmployeeId(),
@@ -288,18 +292,6 @@ public class VacationService {
      */
     private int calculateVacationDays(LocalDate startDate, LocalDate endDate) {
         return businessDayCalculator.countBusinessDaysInclusive(startDate, endDate);
-    }
-
-    private void enforceBusinessDaysOnly(LocalDate startDate, LocalDate endDate) {
-        LocalDate cursor = startDate;
-        while (!cursor.isAfter(endDate)) {
-            if (!businessDayCalculator.isBusinessDay(cursor)) {
-                throw new VacationException(
-                        VacationException.INVALID_DATE_RANGE,
-                        "土日祝日は有給申請できません: " + cursor);
-            }
-            cursor = cursor.plusDays(1);
-        }
     }
 
     private int resolveBaseDays(Employee employee) {

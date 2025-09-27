@@ -232,16 +232,9 @@ class VacationScreen {
             return false;
         }
 
-        // 土日祝の申請禁止
         const businessDayCount = this.countBusinessDaysInclusive(start, end);
         if (businessDayCount === 0) {
-            this.showAlert('土日祝日は有給申請できません', 'warning');
-            return false;
-        }
-
-        const invalidDates = this.collectNonBusinessDays(start, end);
-        if (invalidDates.length > 0) {
-            this.showAlert(`土日祝日は申請できません（対象: ${invalidDates.join(', ')}）`, 'warning');
+            this.showAlert('申請期間に平日が含まれていません', 'warning');
             return false;
         }
 
@@ -285,18 +278,6 @@ class VacationScreen {
             cursor.setDate(cursor.getDate() + 1);
         }
         return count;
-    }
-
-    collectNonBusinessDays(start, end) {
-        const invalid = [];
-        const cursor = new Date(start);
-        while (cursor <= end) {
-            if (!this.isBusinessDay(cursor)) {
-                invalid.push(`${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}-${String(cursor.getDate()).padStart(2, '0')}`);
-            }
-            cursor.setDate(cursor.getDate() + 1);
-        }
-        return invalid;
     }
 
     getRemainingDays() {

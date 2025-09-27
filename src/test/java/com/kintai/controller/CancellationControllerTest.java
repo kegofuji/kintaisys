@@ -208,13 +208,27 @@ class CancellationControllerTest {
     }
 
     @Test
-    void cannotCreateVacationRequestOnHoliday() {
+    void cannotCreateVacationRequestWithoutBusinessDay() {
         LocalDate sunday = LocalDate.of(2025, 9, 7);
         assertThatThrownBy(() ->
                 vacationService.createVacationRequest(
                         employee.getEmployeeId(), sunday, sunday, "休日申請"))
                 .isInstanceOf(VacationException.class)
-                .hasMessageContaining("土日祝日は有給申請できません");
+                .hasMessageContaining("申請期間に平日が含まれていません");
+    }
+
+    @Test
+    void canCreateVacationRequestIncludingWeekendCountsWeekdaysOnly() {
+        LocalDate start = LocalDate.of(2025, 9, 1); // 月曜日
+        LocalDate end = LocalDate.of(2025, 9, 14);  // 日曜日を含む
+
+        VacationRequestDto response = vacationService.createVacationRequest(
+                employee.getEmployeeId(), start, end, "長期休暇");
+
+        VacationRequestDto.VacationData data = (VacationRequestDto.VacationData) response.getData();
+        assertThat(data.getDays()).isEqualTo(10);
+        assertThat(data.getStartDate()).isEqualTo(start);
+        assertThat(data.getEndDate()).isEqualTo(end);
     }
 
     @Test
