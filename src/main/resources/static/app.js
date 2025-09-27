@@ -1,3 +1,6 @@
+const NON_BUSINESS_DAY_MESSAGE = '本日は出勤日ではありません';
+window.NON_BUSINESS_DAY_MESSAGE = NON_BUSINESS_DAY_MESSAGE;
+
 // グローバル変数
 let currentUser = null;
 let csrfToken = null;
@@ -1362,14 +1365,19 @@ async function loadAttendanceHistoryForMonth(year, month) {
 // 今日の勤怠状況を更新
 async function updateTodayAttendance() {
     if (!currentEmployeeId) return;
-    
+
     const clockInTime = document.getElementById('clockInTime');
     const clockOutTime = document.getElementById('clockOutTime');
     const workingTime = document.getElementById('workingTime');
     const clockStatus = document.getElementById('clockStatus');
     const clockInBtn = document.getElementById('clockInBtn');
     const clockOutBtn = document.getElementById('clockOutBtn');
-    
+
+    if (!isBusinessDay(new Date())) {
+        applyNonBusinessDayState(clockInBtn, clockOutBtn, clockStatus, clockInTime, clockOutTime, workingTime);
+        return;
+    }
+
     try {
         // 今日の勤怠記録を取得
         const response = await fetch(`/api/attendance/today/${currentEmployeeId}`, {
@@ -1505,31 +1513,71 @@ async function checkAdminPermissions() {
     }
 }
 
+// 営業日判定
+function isBusinessDay(date) {
+    if (window.BusinessDayUtils && typeof window.BusinessDayUtils.isBusinessDay === 'function') {
+        return window.BusinessDayUtils.isBusinessDay(date);
+    }
+    const day = date.getDay();
+    return day !== 0 && day !== 6;
+}
+
+// 土日祝日の状態設定
+function applyNonBusinessDayState(clockInBtn, clockOutBtn, clockStatus, clockInTime, clockOutTime, workingTime) {
+    const statusElement = clockStatus || document.getElementById('clockStatus');
+    const clockInElement = clockInTime || document.getElementById('clockInTime');
+    const clockOutElement = clockOutTime || document.getElementById('clockOutTime');
+    const workingTimeElement = workingTime || document.getElementById('workingTime');
+
+    if (clockInBtn) {
+        clockInBtn.disabled = true;
+        clockInBtn.classList.remove('btn-success', 'btn-danger');
+        clockInBtn.classList.add('btn-secondary');
+        clockInBtn.textContent = '出勤打刻';
+    }
+
+    if (clockOutBtn) {
+        clockOutBtn.disabled = true;
+        clockOutBtn.classList.remove('btn-success', 'btn-danger');
+        clockOutBtn.classList.add('btn-secondary');
+        clockOutBtn.textContent = '退勤打刻';
+    }
+
+    if (statusElement) {
+        statusElement.innerHTML = `<span class="badge bg-secondary fs-6">${NON_BUSINESS_DAY_MESSAGE}</span>`;
+    }
+
+    if (clockInElement) clockInElement.textContent = '--:--';
+    if (clockOutElement) clockOutElement.textContent = '--:--';
+    if (workingTimeElement) workingTimeElement.textContent = '0:00';
+}
+
 // ボタンの状態を更新
 function updateButtonStates(record, clockInBtn, clockOutBtn) {
     if (!clockInBtn || !clockOutBtn) return;
-    
+
+    if (!isBusinessDay(new Date())) {
+        applyNonBusinessDayState(clockInBtn, clockOutBtn);
+        return;
+    }
+
     // 出勤打刻ボタン
     if (!record || !record.clockInTime) {
-        // 未出勤の場合
         clockInBtn.disabled = false;
         clockInBtn.classList.remove('btn-secondary');
         clockInBtn.classList.add('btn-success');
     } else {
-        // 既に出勤済みの場合
         clockInBtn.disabled = true;
         clockInBtn.classList.remove('btn-success');
         clockInBtn.classList.add('btn-secondary');
     }
-    
+
     // 退勤打刻ボタン
     if (!record || !record.clockInTime || record.clockOutTime) {
-        // 未出勤または既に退勤済みの場合
         clockOutBtn.disabled = true;
         clockOutBtn.classList.remove('btn-danger');
         clockOutBtn.classList.add('btn-secondary');
     } else {
-        // 出勤中の場合
         clockOutBtn.disabled = false;
         clockOutBtn.classList.remove('btn-secondary');
         clockOutBtn.classList.add('btn-danger');

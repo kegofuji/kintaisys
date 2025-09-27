@@ -1,3 +1,5 @@
+const NON_BUSINESS_DAY_MESSAGE = window.NON_BUSINESS_DAY_MESSAGE || '本日は出勤日ではありません';
+
 /**
  * ダッシュボード画面モジュール
  */
@@ -92,6 +94,47 @@ class DashboardScreen {
         this.monthlySubmitBtn = document.getElementById('monthlySubmitBtn');
         this.monthSelect = document.getElementById('historyMonthSelect');
         this.logoutBtn = document.getElementById('logoutBtn');
+    }
+
+    /**
+     * 営業日判定
+     */
+    isBusinessDay(date = new Date()) {
+        if (window.BusinessDayUtils && typeof window.BusinessDayUtils.isBusinessDay === 'function') {
+            return window.BusinessDayUtils.isBusinessDay(date);
+        }
+        const day = date.getDay();
+        return day !== 0 && day !== 6;
+    }
+
+    /**
+     * 土日祝日の状態を適用
+     */
+    applyNonBusinessDayState() {
+        if (this.clockInBtn) {
+            this.clockInBtn.disabled = true;
+            this.clockInBtn.innerHTML = '出勤打刻';
+            this.clockInBtn.className = 'btn btn-secondary btn-lg me-3 clock-btn';
+        }
+
+        if (this.clockOutBtn) {
+            this.clockOutBtn.disabled = true;
+            this.clockOutBtn.innerHTML = '退勤打刻';
+            this.clockOutBtn.className = 'btn btn-secondary btn-lg clock-btn';
+        }
+
+        if (this.clockStatus) {
+            this.clockStatus.innerHTML = `<span class="badge bg-secondary fs-6">${NON_BUSINESS_DAY_MESSAGE}</span>`;
+        }
+
+        const clockInTimeElement = document.getElementById('clockInTime');
+        if (clockInTimeElement) clockInTimeElement.textContent = '--:--';
+
+        const clockOutTimeElement = document.getElementById('clockOutTime');
+        if (clockOutTimeElement) clockOutTimeElement.textContent = '--:--';
+
+        const workingTimeElement = document.getElementById('workingTime');
+        if (workingTimeElement) workingTimeElement.textContent = '0:00';
     }
 
     /**
@@ -219,11 +262,17 @@ class DashboardScreen {
      */
     async loadTodayAttendance() {
         console.log('loadTodayAttendance called, employeeId:', window.currentEmployeeId, 'type:', typeof window.currentEmployeeId);
-        
+
         if (!window.currentEmployeeId) {
             console.log('No employee ID found, attempting to get from session');
             // セッションから従業員IDを再取得
             await this.checkSessionAndLoadData();
+            return;
+        }
+
+        if (!this.isBusinessDay(new Date())) {
+            console.log('Today is not a business day. Disabling clock buttons.');
+            this.applyNonBusinessDayState();
             return;
         }
 
@@ -280,6 +329,11 @@ class DashboardScreen {
         console.log('Data type:', typeof data);
         console.log('Data keys:', data ? Object.keys(data) : 'null');
         
+        if (!this.isBusinessDay(new Date())) {
+            this.applyNonBusinessDayState();
+            return;
+        }
+
         if (!this.clockStatus) {
             console.log('clockStatus element not found');
             return;
@@ -368,6 +422,11 @@ class DashboardScreen {
      */
     updateButtonStates(data) {
         if (!this.clockInBtn || !this.clockOutBtn) return;
+
+        if (!this.isBusinessDay(new Date())) {
+            this.applyNonBusinessDayState();
+            return;
+        }
 
         if (data && data.clockInTime && !data.clockOutTime) {
             // 出勤済み・退勤未済の場合
