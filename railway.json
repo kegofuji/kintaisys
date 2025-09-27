@@ -15,12 +15,8 @@
     "production": {
       "variables": {
         "PORT": "8080",
-        "PDF_PORT": "8081",
         "DATABASE_URL": "${{MySQL.DATABASE_URL}}",
-        "SPRING_PROFILES_ACTIVE": "production",
-        "PDF_SERVICE_URL": "http://localhost:8081",
-        "PDF_SERVICE_API_KEY": "railway-production-key",
-        "PDF_SERVICE_REQUIRE_AUTH": "true"
+        "SPRING_PROFILES_ACTIVE": "production"
       }
     }
   }

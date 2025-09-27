@@ -88,16 +88,3 @@ logging:
     com.kintai: DEBUG
     org.springframework.web: DEBUG
 
-# PDFサービス設定
-pdf:
-  service:
-    url: ${PDF_SERVICE_URL:http://localhost:8081}
-    api-key: ${PDF_SERVICE_API_KEY:test-key}
-    require-auth: ${PDF_SERVICE_REQUIRE_AUTH:false}
-
-# FastAPI PDFサービス設定
-fastapi:
-  pdf:
-    service:
-      url: ${FASTAPI_PDF_SERVICE_URL:http://localhost:8081}
-      api-key: ${FASTAPI_PDF_SERVICE_API_KEY:test-key}

@@ -48,7 +48,6 @@ Spring Securityの設定をプロファイル別に実装し、開発環境（de
 | `/api/attendance/health` | authenticated | ヘルスチェック |
 | `/api/attendance/**`, `/api/vacation/**` | ROLE_EMPLOYEE | 従業員用API |
 | `/api/admin/**` | ROLE_ADMIN | 管理者用API |
-| `/api/pdf/**` | authenticated | PDF生成（API Key認証） |
 | `/api/**` | authenticated | その他のAPI |
 | `/login`, `/logout` | permitAll | 認証ページ |
 | その他 | permitAll | フロントエンドページ |
@@ -81,8 +80,7 @@ curl -X POST http://localhost:8080/api/auth/login \
   -H 'Content-Type: application/json' \
   -d '{"username":"admin","password":"pass"}'
 
-# FastAPI連携テスト（API Key認証）
-curl -H 'X-API-Key: test-key' http://localhost:8080/api/pdf/generate
+# PDF出力機能は現在無効化されています
 ```
 
 ### テストスクリプト
@@ -101,15 +99,6 @@ curl -H 'X-API-Key: test-key' http://localhost:8080/api/pdf/generate
 DATABASE_URL=jdbc:mysql://localhost:3306/kintai
 DB_USERNAME=root
 DB_PASSWORD=password
-
-# PDFサービス設定
-PDF_SERVICE_URL=http://localhost:8081
-PDF_SERVICE_API_KEY=your-secret-api-key
-PDF_SERVICE_REQUIRE_AUTH=true
-
-# FastAPI PDFサービス設定
-FASTAPI_PDF_SERVICE_URL=http://localhost:8081
-FASTAPI_PDF_SERVICE_API_KEY=your-secret-api-key
 
 # セッション設定
 SERVER_PORT=8080
@@ -133,7 +122,6 @@ SERVER_PORT=8080
 ### 4. ロールベース認可
 - EMPLOYEE: 従業員用機能
 - ADMIN: 管理者用機能
-- SYSTEM: FastAPI連携用
 
 ## トラブルシューティング
 

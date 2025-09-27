@@ -2,87 +2,42 @@ package com.kintai.controller;
 
 import com.kintai.dto.ReportGenerateRequest;
 import com.kintai.dto.ReportGenerateResponse;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.*;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.client.RestTemplate;
 
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 
 /**
  * レポート生成コントローラー
- * FastAPIマイクロサービスとの連携
  */
 @RestController
 @RequestMapping("/api/reports")
 @CrossOrigin(origins = "*")
 public class ReportController {
-    
-    @Autowired
-    private RestTemplate restTemplate;
-    
-    @Value("${pdf.service.url:http://localhost:8081}")
-    private String pdfServiceUrl;
-    
-    @Value("${pdf.service.api-key:test-key}")
-    private String pdfServiceApiKey;
-    
-    @Value("${pdf.service.require-auth:false}")
-    private boolean requireAuth;
-    
+
     /**
      * 勤怠レポートPDFを生成
+     * 現在はFastAPI連携を廃止しているため、未実装として応答する。
+     *
      * @param request レポート生成リクエスト
-     * @return 生成されたPDFのURL
+     * @return 生成状況レスポンス
      */
     @PostMapping("/generate")
     public ResponseEntity<ReportGenerateResponse> generateReport(@RequestBody ReportGenerateRequest request) {
         try {
             // リクエストの検証
             validateRequest(request);
-            
-            // FastAPIサービスにリクエストを転送
-            String fastApiUrl = pdfServiceUrl + "/reports/pdf";
-            
-            // リクエストボディを作成
-            ReportGenerateRequest fastApiRequest = new ReportGenerateRequest();
-            fastApiRequest.setEmployeeId(request.getEmployeeId());
-            fastApiRequest.setYearMonth(request.getYearMonth());
-            
-            // HTTPヘッダーを設定
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            
-            // 認証が必要な場合はAuthorizationヘッダーを追加
-            if (requireAuth) {
-                headers.set("Authorization", "Bearer " + pdfServiceApiKey);
-            }
-            
-            HttpEntity<ReportGenerateRequest> entity = new HttpEntity<>(fastApiRequest, headers);
-            
-            // FastAPIサービスにリクエストを送信
-            ResponseEntity<ReportGenerateResponse> response = restTemplate.exchange(
-                fastApiUrl,
-                HttpMethod.POST,
-                entity,
-                ReportGenerateResponse.class
-            );
-            
-            if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
-                return ResponseEntity.ok(response.getBody());
-            } else {
-                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(new ReportGenerateResponse("PDF生成に失敗しました"));
-            }
-            
+            // FastAPI連携を廃止したため、現在はPDF生成を行わない
+            return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED)
+                .body(ReportGenerateResponse.failure("PDF生成機能は現在利用できません"));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest()
-                .body(new ReportGenerateResponse("リクエストが無効です: " + e.getMessage()));
+                .body(ReportGenerateResponse.failure("リクエストが無効です: " + e.getMessage()));
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(new ReportGenerateResponse("PDF生成サービスとの通信に失敗しました: " + e.getMessage()));
+                .body(ReportGenerateResponse.failure("PDF生成処理中にエラーが発生しました: " + e.getMessage()));
         }
     }
     

@@ -45,21 +45,13 @@ module.exports = defineConfig({
     },
   ],
 
-  webServer: [
-    {
-      command: 'mvn spring-boot:run -Dspring-boot.run.profiles=test',
-      port: 8080,
-      reuseExistingServer: !process.env.CI,
-      timeout: 180 * 1000, // 3分に延長
-      env: {
-        SPRING_PROFILES_ACTIVE: 'test'
-      }
-    },
-    {
-      command: 'cd fastapi_pdf_service && python -m uvicorn main:app --host 0.0.0.0 --port 8081',
-      port: 8081,
-      reuseExistingServer: !process.env.CI,
-      timeout: 60 * 1000,
-    },
-  ],
+  webServer: {
+    command: 'mvn spring-boot:run -Dspring-boot.run.profiles=test',
+    port: 8080,
+    reuseExistingServer: !process.env.CI,
+    timeout: 180 * 1000, // 3分に延長
+    env: {
+      SPRING_PROFILES_ACTIVE: 'test'
+    }
+  },
 });
