@@ -7,7 +7,7 @@ import com.kintai.entity.VacationStatus;
 import com.kintai.exception.VacationException;
 import com.kintai.repository.EmployeeRepository;
 import com.kintai.repository.VacationRequestRepository;
-import com.kintai.repository.AttendanceRecordRepository;
+import com.kintai.util.BusinessDayCalculator;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,7 +17,6 @@ import com.kintai.entity.UserAccount;
 
 import java.time.LocalDate;
 import java.util.List;
-import com.kintai.util.BusinessDayCalculator;
 
 /**
  * 有給休暇申請サービス
@@ -32,14 +31,10 @@ public class VacationService {
     @Autowired
     private EmployeeRepository employeeRepository;
     
+    private static final int FALLBACK_ANNUAL_PAID_LEAVE_DAYS = 10;
+
     @Autowired
     private BusinessDayCalculator businessDayCalculator;
-    
-    @Autowired
-    private AttendanceRecordRepository attendanceRecordRepository;
-    
-    // 年間付与日数（簡易実装。必要なら従業員ごとに管理に変更）
-    private static final int DEFAULT_ANNUAL_PAID_LEAVE_DAYS = 10;
     
     /**
      * 有給休暇申請処理
@@ -67,52 +62,48 @@ public class VacationService {
             
             // 3. 日付範囲バリデーション
             validateDateRange(startDate, endDate);
-            
-            // 4. 重複申請チェック
+
+            // 4. 申請期間に平日が含まれているか確認（カウントは土日祝を除外）
+            int days = calculateVacationDays(startDate, endDate);
+            if (days <= 0) {
+                throw new VacationException(
+                        VacationException.INVALID_DATE_RANGE,
+                        "申請期間に平日が含まれていません");
+            }
+
+            // 5. 重複申請チェック
             if (vacationRequestRepository.existsOverlappingRequest(employeeId, startDate, endDate)) {
                 throw new VacationException(
-                        VacationException.DUPLICATE_REQUEST, 
+                        VacationException.DUPLICATE_REQUEST,
                         "既に申請済みの日付を含んでいます");
             }
-            
-            // 5. 出勤後の有給申請禁止チェック
-            validateNoAttendanceAfterClockIn(employeeId, startDate, endDate);
-            
+
             // 6. 付与基準日の判定（当年1/1を使用）
             LocalDate startOfYear = LocalDate.now().withMonth(1).withDayOfMonth(1);
             LocalDate grantDate = startOfYear;
-            
-            // 当年1/1より前は取得不可
-            if (startDate.isBefore(grantDate)) {
-                throw new VacationException(
-                        VacationException.INVALID_DATE_RANGE,
-                        "当年1/1より前は有給を取得できません");
-            }
 
-            // 7. 申請日数（営業日換算。土日除外、祝日未考慮）
-            int days = calculateVacationDays(startDate, endDate);
-
-            // 8. 残日数超過の禁止（当年内・付与後の承認済み消化分を控除）
+            // 7. 残日数超過の禁止（当年内・付与後の承認済み消化分を控除）
             LocalDate endOfYear = LocalDate.now().withMonth(12).withDayOfMonth(31);
             Integer usedDays = vacationRequestRepository
                     .sumApprovedDaysInPeriod(employeeId, grantDate, endOfYear);
             if (usedDays == null) usedDays = 0;
             int adjustment = employee.getPaidLeaveAdjustment();
-            int remaining = Math.max(0, DEFAULT_ANNUAL_PAID_LEAVE_DAYS + adjustment - usedDays);
+            int baseDays = resolveBaseDays(employee);
+            int remaining = Math.max(0, baseDays + adjustment - usedDays);
             if (days > remaining) {
                 throw new VacationException(
                         VacationException.INVALID_DATE_RANGE,
                         "残有給日数を超える申請はできません");
             }
-            
-            // 9. 有給申請作成（理由必須はコントローラで検証済みだが保険でnull→空文字整備）
+
+            // 8. 有給申請作成（理由必須はコントローラで検証済みだが保険でnull→空文字整備）
             VacationRequest vacationRequest = new VacationRequest(employeeId, startDate, endDate, reason);
             vacationRequest.setDays(days);
-            
-            // 10. データベース保存
+
+            // 9. データベース保存
             VacationRequest savedRequest = vacationRequestRepository.save(vacationRequest);
-            
-            // 11. レスポンス作成
+
+            // 10. レスポンス作成
             VacationRequestDto.VacationData data = new VacationRequestDto.VacationData(
                     savedRequest.getVacationId(),
                     savedRequest.getEmployeeId(),
@@ -121,6 +112,7 @@ public class VacationService {
                     savedRequest.getDays(),
                     savedRequest.getStatus().name()
             );
+            data.setRejectionComment(savedRequest.getRejectionComment());
             
             String message = "有給申請を受け付けました";
             VacationRequestDto response = new VacationRequestDto(true, message, data);
@@ -134,7 +126,7 @@ public class VacationService {
             throw new VacationException("INTERNAL_ERROR", "内部エラーが発生しました: " + e.getMessage());
         }
     }
-    
+
     /**
      * 有給申請ステータス更新
      * @param vacationId 申請ID
@@ -154,6 +146,9 @@ public class VacationService {
             
             // 3. ステータス更新
             vacationRequest.setStatus(status);
+            if (status != VacationStatus.REJECTED) {
+                vacationRequest.setRejectionComment(null);
+            }
             VacationRequest savedRequest = vacationRequestRepository.save(vacationRequest);
             
             // 4. レスポンス作成
@@ -165,6 +160,7 @@ public class VacationService {
                     savedRequest.getDays(),
                     savedRequest.getStatus().name()
             );
+            data.setRejectionComment(savedRequest.getRejectionComment());
             
             String message = String.format("申請を%sしました", status.getDisplayName());
             VacationRequestDto response = new VacationRequestDto(true, message, data);
@@ -176,6 +172,53 @@ public class VacationService {
         } catch (Exception e) {
             e.printStackTrace();
             throw new VacationException("INTERNAL_ERROR", "内部エラーが発生しました: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 有給申請を取消
+     * @param vacationId 申請ID
+     * @param employeeId 従業員ID
+     * @return 取消レスポンス
+     */
+    public VacationRequestDto cancelVacationRequest(Long vacationId, Long employeeId) {
+        try {
+            VacationRequest vacationRequest = vacationRequestRepository.findById(vacationId)
+                    .orElseThrow(() -> new VacationException(
+                            VacationException.VACATION_NOT_FOUND,
+                            "申請が見つかりません"));
+
+            if (!vacationRequest.getEmployeeId().equals(employeeId)) {
+                throw new VacationException(VacationException.INVALID_REQUEST, "自身の申請のみ取消できます");
+            }
+
+            if (vacationRequest.getStatus() == VacationStatus.REJECTED
+                    || vacationRequest.getStatus() == VacationStatus.CANCELLED) {
+                throw new VacationException(VacationException.VACATION_NOT_CANCELLABLE, "取消できない状態です");
+            }
+
+            vacationRequest.setStatus(VacationStatus.CANCELLED);
+            vacationRequest.setRejectionComment(null);
+            VacationRequest savedRequest = vacationRequestRepository.save(vacationRequest);
+
+            VacationRequestDto.VacationData data = new VacationRequestDto.VacationData(
+                    savedRequest.getVacationId(),
+                    savedRequest.getEmployeeId(),
+                    savedRequest.getStartDate(),
+                    savedRequest.getEndDate(),
+                    savedRequest.getDays(),
+                    savedRequest.getStatus().name()
+            );
+            data.setRejectionComment(savedRequest.getRejectionComment());
+
+            VacationRequestDto response = new VacationRequestDto(true, "申請を取消しました", data);
+            setUserInfoToResponse(response);
+            return response;
+        } catch (VacationException e) {
+            throw e;
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new VacationException("INTERNAL_ERROR", "有給申請の取消に失敗しました: " + e.getMessage());
         }
     }
     
@@ -206,9 +249,10 @@ public class VacationService {
         Integer usedDays = vacationRequestRepository
                 .sumApprovedDaysInPeriod(employeeId, grantDate, endOfYear);
         if (usedDays == null) usedDays = 0;
-        int adjustment = employee.getPaidLeaveAdjustment();
-        int remaining = DEFAULT_ANNUAL_PAID_LEAVE_DAYS + adjustment - usedDays;
-        return Math.max(remaining, 0);
+            int adjustment = employee.getPaidLeaveAdjustment();
+            int baseDays = resolveBaseDays(employee);
+            int remaining = baseDays + adjustment - usedDays;
+            return Math.max(remaining, 0);
     }
 
     /**
@@ -238,24 +282,8 @@ public class VacationService {
                     "開始日は終了日より前である必要があります");
         }
         
-        if (startDate.isBefore(LocalDate.now())) {
-            throw new VacationException(
-                    VacationException.INVALID_DATE_RANGE, 
-                    "過去の日付は申請できません");
-        }
-
-        // 全休のみ: 営業日数が0の場合は不正
-        int bizDays = businessDayCalculator.countBusinessDaysInclusive(startDate, endDate);
-        if (bizDays <= 0) {
-            throw new VacationException(
-                    VacationException.INVALID_DATE_RANGE,
-                    "営業日が含まれない期間は申請できません");
-        }
-        
-        // 土日祝の有給申請禁止チェック
-        validateNoWeekendHolidayRequest(startDate, endDate);
     }
-    
+
     /**
      * 有給日数を計算
      * @param startDate 開始日
@@ -264,6 +292,14 @@ public class VacationService {
      */
     private int calculateVacationDays(LocalDate startDate, LocalDate endDate) {
         return businessDayCalculator.countBusinessDaysInclusive(startDate, endDate);
+    }
+
+    private int resolveBaseDays(Employee employee) {
+        Integer base = employee.getPaidLeaveBaseDays();
+        if (base == null) {
+            return FALLBACK_ANNUAL_PAID_LEAVE_DAYS;
+        }
+        return base;
     }
     
     /**
@@ -309,75 +345,6 @@ public class VacationService {
      * @param startDate 開始日
      * @param endDate 終了日
      */
-    private void validateNoWeekendHolidayRequest(LocalDate startDate, LocalDate endDate) {
-        for (LocalDate date = startDate; !date.isAfter(endDate); date = date.plusDays(1)) {
-            // 土日チェック
-            if (date.getDayOfWeek().getValue() == 6 || date.getDayOfWeek().getValue() == 7) {
-                throw new VacationException(
-                        VacationException.INVALID_DATE_RANGE,
-                        String.format("%sは土日祝のため、有給申請できません", date));
-            }
-            
-            // 祝日チェック（簡易版）
-            if (isHoliday(date)) {
-                throw new VacationException(
-                        VacationException.INVALID_DATE_RANGE,
-                        String.format("%sは祝日のため、有給申請できません", date));
-            }
-        }
-    }
-    
-    /**
-     * 祝日判定（簡易版）
-     * @param date 日付
-     * @return 祝日かどうか
-     */
-    private boolean isHoliday(LocalDate date) {
-        int year = date.getYear();
-        int month = date.getMonthValue();
-        int day = date.getDayOfMonth();
-        
-        // 日本の祝日判定（簡易版）
-        String[] holidays = {
-            String.format("%04d-01-01", year), // 元日
-            String.format("%04d-02-11", year), // 建国記念の日
-            String.format("%04d-02-23", year), // 天皇誕生日
-            String.format("%04d-04-29", year), // 昭和の日
-            String.format("%04d-05-03", year), // 憲法記念日
-            String.format("%04d-05-04", year), // みどりの日
-            String.format("%04d-05-05", year), // こどもの日
-            String.format("%04d-08-11", year), // 山の日
-            String.format("%04d-11-03", year), // 文化の日
-            String.format("%04d-11-23", year)  // 勤労感謝の日
-        };
-        
-        String dateString = String.format("%04d-%02d-%02d", year, month, day);
-        for (String holiday : holidays) {
-            if (dateString.equals(holiday)) {
-                return true;
-            }
-        }
-        
-        return false;
-    }
-    
-    /**
-     * 出勤後の有給申請禁止チェック
-     * @param employeeId 従業員ID
-     * @param startDate 開始日
-     * @param endDate 終了日
-     */
-    private void validateNoAttendanceAfterClockIn(Long employeeId, LocalDate startDate, LocalDate endDate) {
-        // 申請期間内で出勤打刻済みの日があるかチェック
-        for (LocalDate date = startDate; !date.isAfter(endDate); date = date.plusDays(1)) {
-            if (attendanceRecordRepository.existsByEmployeeIdAndAttendanceDateAndClockInTimeIsNotNull(employeeId, date)) {
-                throw new VacationException(
-                        VacationException.INVALID_DATE_RANGE,
-                        String.format("%sは既に出勤打刻済みのため、有給申請できません", date));
-            }
-        }
-    }
-    
     /**
      * レスポンスにユーザー情報を設定
      * @param response レスポンス

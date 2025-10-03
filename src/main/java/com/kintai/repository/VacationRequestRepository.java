@@ -96,4 +96,5 @@ public interface VacationRequestRepository extends JpaRepository<VacationRequest
     Integer sumApprovedDaysInPeriod(@Param("employeeId") Long employeeId,
                                    @Param("startDate") LocalDate startDate,
                                    @Param("endDate") LocalDate endDate);
+
 }

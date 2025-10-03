@@ -510,12 +510,20 @@
                                             <td id="adjustmentDetailDate">-</td>
                                         </tr>
                                         <tr>
+                                            <td><strong>修正後出勤日:</strong></td>
+                                            <td id="adjustmentDetailClockInDate">-</td>
+                                        </tr>
+                                        <tr>
                                             <td><strong>修正後出勤時刻:</strong></td>
-                                            <td id="adjustmentDetailClockIn">-</td>
+                                            <td id="adjustmentDetailClockInTime">-</td>
+                                        </tr>
+                                        <tr>
+                                            <td><strong>修正後退勤日:</strong></td>
+                                            <td id="adjustmentDetailClockOutDate">-</td>
                                         </tr>
                                         <tr>
                                             <td><strong>修正後退勤時刻:</strong></td>
-                                            <td id="adjustmentDetailClockOut">-</td>
+                                            <td id="adjustmentDetailClockOutTime">-</td>
                                         </tr>
                                         <tr>
                                             <td><strong>修正後勤務時間:</strong></td>
@@ -524,6 +532,10 @@
                                         <tr>
                                             <td><strong>申請状態:</strong></td>
                                             <td id="adjustmentDetailStatus">-</td>
+                                        </tr>
+                                        <tr id="adjustmentRejectionRow" style="display: none;">
+                                            <td><strong>却下理由:</strong></td>
+                                            <td id="adjustmentDetailRejection">-</td>
                                         </tr>
                                     </table>
                                 </div>
@@ -553,6 +565,59 @@
                             </div>
                         </div>
                         <div class="modal-footer">
+                            <button type="button" class="btn btn-outline-primary" id="adjustmentResubmitButton" style="display: none;">再申請する</button>
+                            <button type="button" class="btn btn-danger" id="adjustmentCancelButton" style="display: none;">申請取消</button>
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">閉じる</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal fade" id="vacationDetailModal" tabindex="-1" aria-labelledby="vacationDetailModalLabel" aria-hidden="true">
+                <div class="modal-dialog modal-lg">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title" id="vacationDetailModalLabel">有給申請詳細</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="row">
+                                <div class="col-12">
+                                    <h6>申請情報</h6>
+                                    <table class="table table-sm">
+                                        <tr>
+                                            <td><strong>開始日:</strong></td>
+                                            <td id="vacationDetailStartDate">-</td>
+                                        </tr>
+                                        <tr>
+                                            <td><strong>終了日:</strong></td>
+                                            <td id="vacationDetailEndDate">-</td>
+                                        </tr>
+                                        <tr>
+                                            <td><strong>申請日数:</strong></td>
+                                            <td id="vacationDetailDays">-</td>
+                                        </tr>
+                                        <tr>
+                                            <td><strong>申請状態:</strong></td>
+                                            <td id="vacationDetailStatus">-</td>
+                                        </tr>
+                                        <tr id="vacationRejectionRow" style="display: none;">
+                                            <td><strong>却下理由:</strong></td>
+                                            <td id="vacationDetailRejection">-</td>
+                                        </tr>
+                                    </table>
+                                </div>
+                            </div>
+                            <div class="row mt-3">
+                                <div class="col-12">
+                                    <h6>申請理由</h6>
+                                    <div id="vacationDetailReason" class="border p-2 rounded bg-light">-</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-outline-primary" id="vacationResubmitButton" style="display: none;">再申請する</button>
+                            <button type="button" class="btn btn-danger" id="vacationCancelButton" style="display: none;">申請取消</button>
                             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">閉じる</button>
                         </div>
                     </div>
@@ -564,11 +629,11 @@
             <div id="vacationScreen" class="screen-container">
                 <div class="card">
                     <div class="card-header">
-                        <h5 class="mb-0">有給申請</h5>
+                        <h5 class="mb-0" id="vacationFormTitle">有給申請</h5>
                     </div>
                     <div class="card-body">
                         <div class="mb-3">
-                            <strong>残有給日数: <span id="remainingVacationDays">10日</span></strong>
+                            <strong>残有給日数: <span id="remainingVacationDays">--日</span></strong>
                         </div>
                         <hr>
                         <form id="vacationForm">
@@ -584,7 +649,10 @@
                                 <label for="vacationReason" class="form-label">理由: <span class="text-danger">*</span></label>
                                 <textarea class="form-control" id="vacationReason" rows="3" placeholder="" required></textarea>
                             </div>
-                            <button type="submit" class="btn btn-primary">申請する</button>
+                            <div class="d-flex gap-2">
+                                <button type="submit" class="btn btn-primary">申請する</button>
+                                <button type="button" class="btn btn-outline-secondary" id="vacationFormCancel" style="display: none;">再申請をやめる</button>
+                            </div>
                         </form>
                         
                     </div>
@@ -595,27 +663,38 @@
             <div id="adjustmentScreen" class="screen-container">
                 <div class="card">
                     <div class="card-header">
-                        <h5 class="mb-0">打刻修正</h5>
+                        <h5 class="mb-0" id="adjustmentFormTitle">打刻修正申請</h5>
                     </div>
                     <div class="card-body">
                         <form id="adjustmentForm">
-                            <div class="mb-3">
-                                <label for="adjustmentDate" class="form-label">対象日: <span class="text-danger">*</span></label>
-                                <input type="date" class="form-control" id="adjustmentDate" required>
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <label for="adjustmentClockInDate" class="form-label">出勤日: <span class="text-danger">*</span></label>
+                                    <input type="date" class="form-control" id="adjustmentClockInDate" required>
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="adjustmentClockInTime" class="form-label">出勤時刻: <span class="text-danger">*</span></label>
+                                    <input type="time" class="form-control" id="adjustmentClockInTime" required>
+                                </div>
                             </div>
-                            <div class="mb-3">
-                                <label for="adjustmentClockIn" class="form-label">出勤時刻: <span class="text-muted">(どちらか一方必須)</span></label>
-                                <input type="time" class="form-control" id="adjustmentClockIn">
-                            </div>
-                            <div class="mb-3">
-                                <label for="adjustmentClockOut" class="form-label">退勤時刻: <span class="text-muted">(どちらか一方必須)</span></label>
-                                <input type="time" class="form-control" id="adjustmentClockOut">
+                            <div class="row g-3 mt-0 mt-md-1">
+                                <div class="col-md-6">
+                                    <label for="adjustmentClockOutDate" class="form-label">退勤日: <span class="text-danger">*</span></label>
+                                    <input type="date" class="form-control" id="adjustmentClockOutDate" required>
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="adjustmentClockOutTime" class="form-label">退勤時刻: <span class="text-danger">*</span></label>
+                                    <input type="time" class="form-control" id="adjustmentClockOutTime" required>
+                                </div>
                             </div>
                             <div class="mb-3">
                                 <label for="adjustmentReason" class="form-label">理由: <span class="text-danger">*</span></label>
                                 <textarea class="form-control" id="adjustmentReason" rows="3" required></textarea>
                             </div>
-                            <button type="submit" class="btn btn-primary">申請する</button>
+                            <div class="d-flex gap-2">
+                                <button type="submit" class="btn btn-primary">申請する</button>
+                                <button type="button" class="btn btn-outline-secondary" id="adjustmentFormCancel" style="display: none;">再申請をやめる</button>
+                            </div>
                         </form>
                     </div>
                 </div>
@@ -664,8 +743,11 @@
                             <form id="addEmployeeForm">
                                 <div class="mb-3">
                                     <label for="employeeUsername" class="form-label">ユーザー名 <span class="text-danger">*</span></label>
-                                    <input type="text" class="form-control" id="employeeUsername" name="username" required>
-                                    <div class="form-text">ログイン時に使用するユーザー名を入力してください</div>
+                                    <div class="input-group">
+                                        <span class="input-group-text">emp</span>
+                                        <input type="text" class="form-control" id="employeeUsername" name="username" placeholder="番号（自動採番）" readonly>
+                                    </div>
+                                    <div class="form-text">社員IDは自動で採番されます（emp1, emp2, emp3...）</div>
                                 </div>
                                 <div class="mb-3">
                                     <label for="employeePassword" class="form-label">パスワード <span class="text-danger">*</span></label>
@@ -744,6 +826,30 @@
         </div>
     </div>
 
+
+    <!-- 管理者 承認確認モーダル -->
+    <div class="modal fade" id="adminApprovalConfirmModal" tabindex="-1" aria-labelledby="adminApprovalConfirmTitle" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="adminApprovalConfirmTitle">確認</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p id="adminApprovalConfirmMessage" class="mb-3"></p>
+                    <div id="adminApprovalReasonGroup" class="mb-3" style="display: none;">
+                        <label for="adminApprovalReason" class="form-label">却下理由 <span class="text-danger">*</span></label>
+                        <textarea class="form-control" id="adminApprovalReason" rows="3" placeholder="理由を入力してください"></textarea>
+                        <div class="invalid-feedback">却下理由は必須です。</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" id="adminApprovalCancelButton">キャンセル</button>
+                    <button type="button" class="btn btn-primary" id="adminApprovalConfirmButton">実行する</button>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <!-- アラート表示エリア -->
     <div id="alertContainer" class="position-fixed top-0 end-0 p-3" style="z-index: 1050;"></div>
@@ -827,6 +933,7 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="js/utils/timeUtils.js"></script>
     <script src="js/utils/fetchWithAuth.js"></script>
+    <script src="js/utils/businessDay.js"></script>
     <script src="js/screens/dashboard.js"></script>
     <script src="js/screens/history.js"></script>
     <script src="js/screens/calendar.js"></script>

@@ -34,18 +34,21 @@ spring:
     activate:
       on-profile: dev
   datasource:
-    url: jdbc:mysql://127.0.0.1:3306/kintai?useSSL=false&serverTimezone=Asia/Tokyo&characterEncoding=utf8&allowPublicKeyRetrieval=true&useUnicode=true
-    username: kintai
-    password: kintai
-    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:h2:mem:testdb
+    username: sa
+    password: 
+    driver-class-name: org.h2.Driver
   jpa:
     hibernate:
       ddl-auto: create-drop
     show-sql: true
     properties:
       hibernate:
-        dialect: org.hibernate.dialect.MySQLDialect
+        dialect: org.hibernate.dialect.H2Dialect
         format_sql: true
+  h2:
+    console:
+      enabled: true
   flyway:
     enabled: false
 
@@ -85,16 +88,3 @@ logging:
     com.kintai: DEBUG
     org.springframework.web: DEBUG
 
-# PDFサービス設定
-pdf:
-  service:
-    url: ${PDF_SERVICE_URL:http://localhost:8081}
-    api-key: ${PDF_SERVICE_API_KEY:test-key}
-    require-auth: ${PDF_SERVICE_REQUIRE_AUTH:false}
-
-# FastAPI PDFサービス設定
-fastapi:
-  pdf:
-    service:
-      url: ${FASTAPI_PDF_SERVICE_URL:http://localhost:8081}
-      api-key: ${FASTAPI_PDF_SERVICE_API_KEY:test-key}

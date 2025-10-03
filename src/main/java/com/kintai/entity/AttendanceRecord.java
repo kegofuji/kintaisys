@@ -70,11 +70,13 @@ public class AttendanceRecord {
     protected void onCreate() {
         createdAt = LocalDateTime.now();
         updatedAt = LocalDateTime.now();
+        normalizeMetrics();
     }
     
     @PreUpdate
     protected void onUpdate() {
         updatedAt = LocalDateTime.now();
+        normalizeMetrics();
     }
     
     // ゲッター・セッター
@@ -123,7 +125,7 @@ public class AttendanceRecord {
     }
     
     public void setLateMinutes(Integer lateMinutes) {
-        this.lateMinutes = lateMinutes;
+        this.lateMinutes = lateMinutes == null ? 0 : lateMinutes;
     }
     
     public Integer getEarlyLeaveMinutes() {
@@ -131,7 +133,7 @@ public class AttendanceRecord {
     }
     
     public void setEarlyLeaveMinutes(Integer earlyLeaveMinutes) {
-        this.earlyLeaveMinutes = earlyLeaveMinutes;
+        this.earlyLeaveMinutes = earlyLeaveMinutes == null ? 0 : earlyLeaveMinutes;
     }
     
     public Integer getOvertimeMinutes() {
@@ -139,7 +141,7 @@ public class AttendanceRecord {
     }
     
     public void setOvertimeMinutes(Integer overtimeMinutes) {
-        this.overtimeMinutes = overtimeMinutes;
+        this.overtimeMinutes = overtimeMinutes == null ? 0 : overtimeMinutes;
     }
     
     public Integer getNightShiftMinutes() {
@@ -147,7 +149,22 @@ public class AttendanceRecord {
     }
     
     public void setNightShiftMinutes(Integer nightShiftMinutes) {
-        this.nightShiftMinutes = nightShiftMinutes;
+        this.nightShiftMinutes = nightShiftMinutes == null ? 0 : nightShiftMinutes;
+    }
+
+    private void normalizeMetrics() {
+        if (lateMinutes == null) {
+            lateMinutes = 0;
+        }
+        if (earlyLeaveMinutes == null) {
+            earlyLeaveMinutes = 0;
+        }
+        if (overtimeMinutes == null) {
+            overtimeMinutes = 0;
+        }
+        if (nightShiftMinutes == null) {
+            nightShiftMinutes = 0;
+        }
     }
     
     public AttendanceStatus getAttendanceStatus() {

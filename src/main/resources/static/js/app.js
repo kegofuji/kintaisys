@@ -46,6 +46,13 @@ class App {
      * セッション情報を確認してユーザー情報を更新
      */
     async checkAndUpdateUserInfo() {
+        // ログイン画面が表示されている場合はセッション確認をスキップ
+        const loginContainer = document.getElementById('loginContainer');
+        if (loginContainer && loginContainer.style.display !== 'none') {
+            console.log('ログイン画面表示中: セッション確認をスキップ');
+            return false;
+        }
+        
         try {
             console.log('セッション情報を確認中...');
             const response = await fetchWithAuth.get('/api/auth/session');

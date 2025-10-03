@@ -1,5 +1,6 @@
 package com.kintai.dto;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 /**
@@ -94,38 +95,53 @@ public class ClockResponse {
      */
     public static class ClockData {
         private Long attendanceId;
+        private LocalDate attendanceDate;
         private LocalDateTime clockInTime;
         private LocalDateTime clockOutTime;
         private Integer lateMinutes;
         private Integer earlyLeaveMinutes;
         private Integer overtimeMinutes;
         private Integer nightShiftMinutes;
-        
+        private String attendanceStatus;
+        private Boolean attendanceFixed;
+
         // デフォルトコンストラクタ
         public ClockData() {
         }
-        
+
         // コンストラクタ
-        public ClockData(Long attendanceId, LocalDateTime clockInTime, LocalDateTime clockOutTime,
-                        Integer lateMinutes, Integer earlyLeaveMinutes, Integer overtimeMinutes, Integer nightShiftMinutes) {
+        public ClockData(Long attendanceId, LocalDate attendanceDate, LocalDateTime clockInTime, LocalDateTime clockOutTime,
+                        Integer lateMinutes, Integer earlyLeaveMinutes, Integer overtimeMinutes, Integer nightShiftMinutes,
+                        String attendanceStatus, Boolean attendanceFixed) {
             this.attendanceId = attendanceId;
+            this.attendanceDate = attendanceDate;
             this.clockInTime = clockInTime;
             this.clockOutTime = clockOutTime;
             this.lateMinutes = lateMinutes;
             this.earlyLeaveMinutes = earlyLeaveMinutes;
             this.overtimeMinutes = overtimeMinutes;
             this.nightShiftMinutes = nightShiftMinutes;
+            this.attendanceStatus = attendanceStatus;
+            this.attendanceFixed = attendanceFixed;
         }
         
         // ゲッター・セッター
         public Long getAttendanceId() {
             return attendanceId;
         }
-        
+
         public void setAttendanceId(Long attendanceId) {
             this.attendanceId = attendanceId;
         }
-        
+
+        public LocalDate getAttendanceDate() {
+            return attendanceDate;
+        }
+
+        public void setAttendanceDate(LocalDate attendanceDate) {
+            this.attendanceDate = attendanceDate;
+        }
+
         public LocalDateTime getClockInTime() {
             return clockInTime;
         }
@@ -169,10 +185,26 @@ public class ClockResponse {
         public Integer getNightShiftMinutes() {
             return nightShiftMinutes;
         }
-        
+
         public void setNightShiftMinutes(Integer nightShiftMinutes) {
             this.nightShiftMinutes = nightShiftMinutes;
         }
+
+        public String getAttendanceStatus() {
+            return attendanceStatus;
+        }
+
+        public void setAttendanceStatus(String attendanceStatus) {
+            this.attendanceStatus = attendanceStatus;
+        }
+
+        public Boolean getAttendanceFixed() {
+            return attendanceFixed;
+        }
+
+        public void setAttendanceFixed(Boolean attendanceFixed) {
+            this.attendanceFixed = attendanceFixed;
+        }
     }
-    
+
 }

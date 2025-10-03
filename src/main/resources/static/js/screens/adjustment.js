@@ -4,11 +4,92 @@
 class AdjustmentScreen {
     constructor() {
         this.adjustmentForm = null;
-        this.adjustmentDate = null;
-        this.adjustmentClockIn = null;
-        this.adjustmentClockOut = null;
+        this.clockInDateInput = null;
+        this.clockInTimeInput = null;
+        this.clockOutDateInput = null;
+        this.clockOutTimeInput = null;
         this.adjustmentReason = null;
+        this.formTitle = null;
+        this.cancelPrefillButton = null;
         this.listenersBound = false;
+    }
+
+    prefillForm({ clockInDate, clockInTime, clockOutDate, clockOutTime, clockIn, clockOut, date, reason }) {
+        if (!this.adjustmentForm) {
+            this.init();
+        }
+
+        this.clearPrefillState();
+
+        const normalizeDate = (value) => {
+            if (!value) return '';
+            if (value instanceof Date) {
+                if (Number.isNaN(value.getTime())) return '';
+                const yyyy = value.getFullYear();
+                const mm = String(value.getMonth() + 1).padStart(2, '0');
+                const dd = String(value.getDate()).padStart(2, '0');
+                return `${yyyy}-${mm}-${dd}`;
+            }
+            if (typeof value === 'string') {
+                if (value.includes('T')) {
+                    return value.split('T')[0];
+                }
+                return value;
+            }
+            return '';
+        };
+
+        const normalizeTime = (value) => {
+            if (!value) return '';
+            if (value instanceof Date) {
+                if (Number.isNaN(value.getTime())) return '';
+                const hh = String(value.getHours()).padStart(2, '0');
+                const mm = String(value.getMinutes()).padStart(2, '0');
+                return `${hh}:${mm}`;
+            }
+            if (typeof value === 'string') {
+                if (value.includes('T')) {
+                    const timePart = value.split('T')[1] || '';
+                    return timePart.slice(0, 5);
+                }
+                return value.slice(0, 5);
+            }
+            return '';
+        };
+
+        const resolvedClockInDate = clockInDate || normalizeDate(clockIn) || normalizeDate(date);
+        const resolvedClockOutDate = clockOutDate || normalizeDate(clockOut) || normalizeDate(date);
+        const resolvedClockInTime = clockInTime || normalizeTime(clockIn);
+        const resolvedClockOutTime = clockOutTime || normalizeTime(clockOut);
+
+        if (this.clockInDateInput && resolvedClockInDate) {
+            this.clockInDateInput.value = resolvedClockInDate;
+        }
+        if (this.clockOutDateInput && resolvedClockOutDate) {
+            this.clockOutDateInput.value = resolvedClockOutDate;
+        }
+        if (this.clockInTimeInput && resolvedClockInTime) {
+            this.clockInTimeInput.value = resolvedClockInTime;
+        }
+        if (this.clockOutTimeInput && resolvedClockOutTime) {
+            this.clockOutTimeInput.value = resolvedClockOutTime;
+        }
+
+        if (this.adjustmentReason) {
+            this.adjustmentReason.value = reason || '';
+        }
+
+        if (this.formTitle) {
+            this.formTitle.textContent = '打刻修正の再申請';
+        }
+        if (this.cancelPrefillButton) {
+            this.cancelPrefillButton.style.display = 'inline-block';
+            this.cancelPrefillButton.onclick = () => {
+                this.adjustmentForm?.reset();
+                this.setDefaultDate();
+                this.clearPrefillState();
+            };
+        }
     }
 
     /**
@@ -18,6 +99,7 @@ class AdjustmentScreen {
         this.initializeElements();
         this.setupEventListeners();
         this.setDefaultDate();
+        this.clearPrefillState();
     }
 
     /**
@@ -25,10 +107,13 @@ class AdjustmentScreen {
      */
     initializeElements() {
         this.adjustmentForm = document.getElementById('adjustmentForm');
-        this.adjustmentDate = document.getElementById('adjustmentDate');
-        this.adjustmentClockIn = document.getElementById('adjustmentClockIn');
-        this.adjustmentClockOut = document.getElementById('adjustmentClockOut');
+        this.clockInDateInput = document.getElementById('adjustmentClockInDate');
+        this.clockInTimeInput = document.getElementById('adjustmentClockInTime');
+        this.clockOutDateInput = document.getElementById('adjustmentClockOutDate');
+        this.clockOutTimeInput = document.getElementById('adjustmentClockOutTime');
         this.adjustmentReason = document.getElementById('adjustmentReason');
+        this.formTitle = document.getElementById('adjustmentFormTitle');
+        this.cancelPrefillButton = document.getElementById('adjustmentFormCancel');
     }
 
     /**
@@ -40,19 +125,19 @@ class AdjustmentScreen {
             this.adjustmentForm.addEventListener('submit', (e) => this.handleAdjustmentSubmit(e));
         }
 
-        // 日付変更時のバリデーション
-        if (this.adjustmentDate) {
-            this.adjustmentDate.addEventListener('change', () => this.validateAdjustmentDate());
+        if (this.clockInDateInput) {
+            this.clockInDateInput.addEventListener('change', () => this.validateDateFields());
+        }
+        if (this.clockOutDateInput) {
+            this.clockOutDateInput.addEventListener('change', () => this.validateTimeRange());
+        }
+        if (this.clockInTimeInput) {
+            this.clockInTimeInput.addEventListener('change', () => this.validateTimeRange());
+        }
+        if (this.clockOutTimeInput) {
+            this.clockOutTimeInput.addEventListener('change', () => this.validateTimeRange());
         }
 
-        // 時刻変更時のバリデーション
-        if (this.adjustmentClockIn) {
-            this.adjustmentClockIn.addEventListener('change', () => this.validateTimeRange());
-        }
-
-        if (this.adjustmentClockOut) {
-            this.adjustmentClockOut.addEventListener('change', () => this.validateTimeRange());
-        }
         this.listenersBound = true;
     }
 
@@ -60,12 +145,33 @@ class AdjustmentScreen {
      * デフォルト日付設定（今日の日付）
      */
     setDefaultDate() {
-        if (this.adjustmentDate) {
-            const today = new Date();
-            const year = today.getFullYear();
-            const month = String(today.getMonth() + 1).padStart(2, '0');
-            const day = String(today.getDate()).padStart(2, '0');
-            this.adjustmentDate.value = `${year}-${month}-${day}`;
+        const today = new Date();
+        const year = today.getFullYear();
+        const month = String(today.getMonth() + 1).padStart(2, '0');
+        const day = String(today.getDate()).padStart(2, '0');
+        const todayStr = `${year}-${month}-${day}`;
+
+        if (this.clockInDateInput) {
+            this.clockInDateInput.value = todayStr;
+        }
+        if (this.clockOutDateInput) {
+            this.clockOutDateInput.value = todayStr;
+        }
+        if (this.clockInTimeInput) {
+            this.clockInTimeInput.value = '';
+        }
+        if (this.clockOutTimeInput) {
+            this.clockOutTimeInput.value = '';
+        }
+    }
+
+    clearPrefillState() {
+        if (this.formTitle) {
+            this.formTitle.textContent = '打刻修正申請';
+        }
+        if (this.cancelPrefillButton) {
+            this.cancelPrefillButton.style.display = 'none';
+            this.cancelPrefillButton.onclick = null;
         }
     }
 
@@ -76,29 +182,27 @@ class AdjustmentScreen {
     async handleAdjustmentSubmit(e) {
         e.preventDefault();
 
-        const date = this.adjustmentDate.value;
-        const clockIn = this.adjustmentClockIn.value;
-        const clockOut = this.adjustmentClockOut.value;
-        const reason = this.adjustmentReason.value;
+        const clockInDate = this.clockInDateInput?.value || '';
+        const clockInTime = this.clockInTimeInput?.value || '';
+        const clockOutDate = this.clockOutDateInput?.value || '';
+        const clockOutTime = this.clockOutTimeInput?.value || '';
+        const reason = this.adjustmentReason?.value || '';
 
-        if (!date || !reason) {
-            this.showAlert('対象日: *、理由: *は必須項目です', 'warning');
+        if (!clockInDate || !clockOutDate || !reason) {
+            this.showAlert('出勤日・退勤日・理由は必須です', 'warning');
             return;
         }
 
-        // 日付の妥当性チェック
-        if (!this.validateAdjustmentDate()) {
+        if (!this.validateDateFields()) {
             return;
         }
 
-        // 出勤・退勤のどちらか一方は必須
-        if (!clockIn && !clockOut) {
-            this.showAlert('出勤時刻または退勤時刻のどちらか一方は必須です', 'warning');
+        if (!clockInTime || !clockOutTime) {
+            this.showAlert('出勤時刻と退勤時刻は両方入力してください', 'warning');
             return;
         }
-        
-        // 両方入力されている場合のみ時間範囲チェック
-        if (clockIn && clockOut && !this.validateTimeRange()) {
+
+        if (!this.validateTimeRange()) {
             return;
         }
 
@@ -107,20 +211,18 @@ class AdjustmentScreen {
             return;
         }
 
-        // 事前確認
-        const confirmDate = date || '(未入力)';
-        const ci = clockIn || '-';
-        const co = clockOut || '-';
-        const confirmed = window.confirm(`打刻修正申請を送信します。\n対象日: ${confirmDate}\n出勤: ${ci}\n退勤: ${co}\nよろしいですか？`);
+        const confirmed = window.confirm(`打刻修正申請を送信します。\n出勤: ${clockInDate} ${clockInTime}\n退勤: ${clockOutDate} ${clockOutTime}\nよろしいですか？`);
         if (!confirmed) return;
 
         try {
             const data = await fetchWithAuth.handleApiCall(
                 () => fetchWithAuth.post('/api/attendance/adjustment-request', {
                     employeeId: window.currentEmployeeId,
-                    date: date,
-                    clockInTime: clockIn || '',
-                    clockOutTime: clockOut || '',
+                    date: clockInDate,
+                    clockInDate: clockInDate,
+                    clockInTime: clockInTime,
+                    clockOutDate: clockOutDate,
+                    clockOutTime: clockOutTime,
                     reason: reason
                 }),
                 '打刻修正申請に失敗しました'
@@ -129,59 +231,38 @@ class AdjustmentScreen {
             this.showAlert(data.message, 'success');
             this.adjustmentForm.reset();
             this.setDefaultDate();
+            this.clearPrefillState();
 
-            // 履歴カレンダーを即時反映（存在する場合）
-            try {
-                if (window.historyScreen && typeof window.historyScreen.loadCalendarData === 'function') {
-                    await window.historyScreen.loadCalendarData();
-                    if (typeof window.historyScreen.generateCalendar === 'function') {
-                        window.historyScreen.generateCalendar();
-                    }
-                }
-                // 旧カレンダー画面にも反映（存在する場合）
-                if (window.calendarScreen && typeof window.calendarScreen.loadCalendarData === 'function') {
-                    await window.calendarScreen.loadCalendarData();
-                    if (typeof window.calendarScreen.generateCalendar === 'function') {
-                        window.calendarScreen.generateCalendar();
-                    }
-                }
-            } catch (_) { /* no-op */ }
+            await this.refreshAllScreens();
         } catch (error) {
             this.showAlert(error.message, 'danger');
         }
     }
 
     /**
-     * 修正日付のバリデーション
-     * @returns {boolean} - バリデーション結果
+     * 出勤日のバリデーション
+     * @returns {boolean}
      */
-    validateAdjustmentDate() {
-        const date = this.adjustmentDate.value;
-        if (!date) return true;
+    validateDateFields() {
+        if (!this.clockInDateInput) {
+            return true;
+        }
 
-        // 入力は YYYY-MM-DD（ブラウザはUTCとして解釈しがち）。
-        // ローカル日付として比較できるように手動で生成する。
-        const [y, m, d] = date.split('-').map(v => parseInt(v, 10));
-        const selectedDate = new Date(y, (m || 1) - 1, d || 1);
-        selectedDate.setHours(0, 0, 0, 0);
+        const dateStr = this.clockInDateInput.value;
+        if (!dateStr) {
+            return true;
+        }
 
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-
-        // 未来の日付は選択不可
-        if (selectedDate > today) {
-            this.showAlert('修正対象日は今日以前の日付を選択してください', 'warning');
-            this.adjustmentDate.focus();
+        const selectedDate = new Date(`${dateStr}T00:00:00`);
+        if (Number.isNaN(selectedDate.getTime())) {
+            this.showAlert('有効な出勤日を入力してください', 'warning');
+            this.clockInDateInput.focus();
             return false;
         }
 
-        // 30日より前の日付は選択不可（業務ルール）
-        const thirtyDaysAgo = new Date(today);
-        thirtyDaysAgo.setDate(today.getDate() - 30);
-        
-        if (selectedDate < thirtyDaysAgo) {
-            this.showAlert('修正対象日は30日以内の日付を選択してください', 'warning');
-            this.adjustmentDate.focus();
+        if (!this.isBusinessDay(selectedDate)) {
+            this.showAlert('土日祝日は打刻修正を申請できません', 'warning');
+            this.clockInDateInput.focus();
             return false;
         }
 
@@ -190,34 +271,106 @@ class AdjustmentScreen {
 
     /**
      * 時刻範囲のバリデーション
-     * @returns {boolean} - バリデーション結果
+     * @returns {boolean}
      */
     validateTimeRange() {
-        const clockIn = this.adjustmentClockIn.value;
-        const clockOut = this.adjustmentClockOut.value;
-
-        if (!clockIn || !clockOut) {
-            return true; // まだ入力中
+        if (!this.clockInDateInput || !this.clockOutDateInput || !this.clockInTimeInput || !this.clockOutTimeInput) {
+            return true;
         }
 
-        // 時刻を比較
-        if (clockOut <= clockIn) {
-            this.showAlert('退勤時刻は出勤時刻より後の時刻を入力してください', 'warning');
-            this.adjustmentClockOut.focus();
+        const clockInDate = this.clockInDateInput.value;
+        const clockOutDate = this.clockOutDateInput.value;
+        const clockInTime = this.clockInTimeInput.value;
+        const clockOutTime = this.clockOutTimeInput.value;
+
+        if (!clockInDate || !clockOutDate || !clockInTime || !clockOutTime) {
+            return true;
+        }
+
+        const start = new Date(`${clockInDate}T${clockInTime}:00`);
+        const end = new Date(`${clockOutDate}T${clockOutTime}:00`);
+
+        if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+            this.showAlert('有効な出勤・退勤日時を入力してください', 'warning');
             return false;
         }
 
-        // 勤務時間が長すぎないかチェック（24時間以内）
-        const clockInTime = new Date(`2000-01-01T${clockIn}:00`);
-        const clockOutTime = new Date(`2000-01-01T${clockOut}:00`);
-        const workHours = (clockOutTime - clockInTime) / (1000 * 60 * 60);
+        if (end <= start) {
+            this.showAlert('退勤日時は出勤日時より後に設定してください', 'warning');
+            this.clockOutTimeInput.focus();
+            return false;
+        }
 
-        if (workHours > 24) {
-            this.showAlert('勤務時間が24時間を超えています。時刻を確認してください', 'warning');
+        const workHours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
+        if (workHours > 36) {
+            this.showAlert('勤務時間が長すぎます（36時間以内で入力してください）', 'warning');
             return false;
         }
 
         return true;
+    }
+
+    isBusinessDay(date) {
+        if (typeof BusinessDayUtils !== 'undefined' && BusinessDayUtils) {
+            return BusinessDayUtils.isBusinessDay(date);
+        }
+        const day = date.getDay();
+        return day !== 0 && day !== 6;
+    }
+
+    /**
+     * 全画面を更新（リアルタイム反映）
+     */
+    async refreshAllScreens() {
+        try {
+            console.log('打刻修正申請後の画面更新を開始します');
+            
+            if (window.historyScreen) {
+                console.log('勤怠履歴画面を更新中...');
+                try {
+                    if (typeof window.historyScreen.loadCalendarData === 'function') {
+                        await window.historyScreen.loadCalendarData();
+                    }
+                    if (typeof window.historyScreen.generateCalendar === 'function') {
+                        window.historyScreen.generateCalendar();
+                    }
+                    console.log('勤怠履歴画面の更新完了');
+                } catch (error) {
+                    console.warn('勤怠履歴画面の更新に失敗:', error);
+                }
+            }
+            
+            if (window.calendarScreen) {
+                console.log('カレンダー画面を更新中...');
+                try {
+                    if (typeof window.calendarScreen.loadCalendarData === 'function') {
+                        await window.calendarScreen.loadCalendarData();
+                    }
+                    if (typeof window.calendarScreen.generateCalendar === 'function') {
+                        window.calendarScreen.generateCalendar();
+                    }
+                    console.log('カレンダー画面の更新完了');
+                } catch (error) {
+                    console.warn('カレンダー画面の更新に失敗:', error);
+                }
+            }
+            
+            if (window.dashboardScreen) {
+                console.log('ダッシュボード画面を更新中...');
+                try {
+                    if (typeof window.dashboardScreen.loadTodayAttendance === 'function') {
+                        await window.dashboardScreen.loadTodayAttendance();
+                    }
+                    console.log('ダッシュボード画面の更新完了');
+                } catch (error) {
+                    console.warn('ダッシュボード画面の更新に失敗:', error);
+                }
+            }
+            
+            console.log('打刻修正申請後の画面更新が完了しました');
+        } catch (error) {
+            console.warn('打刻修正申請後の画面更新に失敗しました:', error);
+        }
     }
 
     /**
@@ -238,7 +391,6 @@ class AdjustmentScreen {
 
         alertContainer.appendChild(alertDiv);
 
-        // 5秒後に自動削除
         setTimeout(() => {
             if (alertDiv.parentNode) {
                 alertDiv.parentNode.removeChild(alertDiv);

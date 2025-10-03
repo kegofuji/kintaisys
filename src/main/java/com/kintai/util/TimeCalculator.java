@@ -2,6 +2,7 @@ package com.kintai.util;
 
 import com.kintai.entity.AttendanceRecord;
 import org.springframework.stereotype.Component;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
@@ -32,7 +33,7 @@ public class TimeCalculator {
      * @return 遅刻分数（遅刻していない場合は0）
      */
     public int calculateLateMinutes(LocalDateTime clockInTime) {
-        LocalTime clockInTimeOnly = clockInTime.toLocalTime();
+        LocalTime clockInTimeOnly = truncateToMinutes(clockInTime).toLocalTime();
         
         if (clockInTimeOnly.isAfter(STANDARD_START_TIME)) {
             return (int) ChronoUnit.MINUTES.between(STANDARD_START_TIME, clockInTimeOnly);
@@ -46,7 +47,7 @@ public class TimeCalculator {
      * @return 早退分数（早退していない場合は0）
      */
     public int calculateEarlyLeaveMinutes(LocalDateTime clockOutTime) {
-        LocalTime clockOutTimeOnly = clockOutTime.toLocalTime();
+        LocalTime clockOutTimeOnly = truncateToMinutes(clockOutTime).toLocalTime();
         
         if (clockOutTimeOnly.isBefore(STANDARD_END_TIME)) {
             return (int) ChronoUnit.MINUTES.between(clockOutTimeOnly, STANDARD_END_TIME);
@@ -62,6 +63,8 @@ public class TimeCalculator {
      * @return 実働分数（昼休憩控除後）
      */
     public int calculateWorkingMinutes(LocalDateTime clockInTime, LocalDateTime clockOutTime) {
+        clockInTime = truncateToMinutes(clockInTime);
+        clockOutTime = truncateToMinutes(clockOutTime);
         // 総勤務時間を計算
         long totalMinutes = ChronoUnit.MINUTES.between(clockInTime, clockOutTime);
         
@@ -95,60 +98,35 @@ public class TimeCalculator {
      * @return 深夜勤務分数
      */
     public int calculateNightShiftMinutes(LocalDateTime clockInTime, LocalDateTime clockOutTime) {
-        LocalTime clockInTimeOnly = clockInTime.toLocalTime();
-        LocalTime clockOutTimeOnly = clockOutTime.toLocalTime();
-        
+        if (clockInTime == null || clockOutTime == null || !clockOutTime.isAfter(clockInTime)) {
+            return 0;
+        }
+
+        clockInTime = truncateToMinutes(clockInTime);
+        clockOutTime = truncateToMinutes(clockOutTime);
+
         int nightShiftMinutes = 0;
-        
-        // 21:00-02:00の特別ケース（21:00出勤、翌02:00退勤）
-        if (clockInTimeOnly.equals(LocalTime.of(21, 0)) && clockOutTimeOnly.equals(LocalTime.of(2, 0))) {
-            // 22:00-02:00 = 4時間 = 240分
-            return 240;
-        }
-        
-        // 23:00-06:00の特別ケース（23:00出勤、翌06:00退勤）
-        if (clockInTimeOnly.equals(LocalTime.of(23, 0)) && clockOutTimeOnly.equals(LocalTime.of(6, 0))) {
-            // 23:00-06:00 = 7時間 = 420分（深夜勤務時間）
-            return 420;
-        }
-        
-        // 当日の深夜時間（22:00-24:00）
-        if (clockInTimeOnly.isBefore(NIGHT_START_TIME) && clockOutTimeOnly.isAfter(NIGHT_START_TIME)) {
-            // 出勤が22:00前で退勤が22:00後の場合
-            LocalTime nightStart = NIGHT_START_TIME;
-            LocalTime nightEnd = LocalTime.of(23, 59, 59);
-            if (clockOutTimeOnly.isBefore(nightEnd)) {
-                nightEnd = clockOutTimeOnly;
+
+        // 深夜時間帯は当日22:00〜翌日05:00なので、出勤日の前日分まで遡って重なりを評価する
+        LocalDate currentDate = clockInTime.toLocalDate().minusDays(1);
+        LocalDate lastDate = clockOutTime.toLocalDate();
+
+        while (!currentDate.isAfter(lastDate)) {
+            LocalDateTime nightStart = currentDate.atTime(NIGHT_START_TIME);
+            LocalDateTime nightEnd = nightStart.plusHours(7);
+
+            LocalDateTime overlapStart = clockInTime.isAfter(nightStart) ? clockInTime : nightStart;
+            LocalDateTime overlapEnd = clockOutTime.isBefore(nightEnd) ? clockOutTime : nightEnd;
+
+            if (overlapEnd.isAfter(overlapStart)) {
+                long segmentMinutes = ChronoUnit.MINUTES.between(overlapStart, overlapEnd);
+                nightShiftMinutes += (int) segmentMinutes;
             }
-            nightShiftMinutes += (int) ChronoUnit.MINUTES.between(nightStart, nightEnd) + 1; // 23:59:59を含めるため+1
-        } else if (clockInTimeOnly.isAfter(NIGHT_START_TIME) && clockInTimeOnly.isBefore(LocalTime.of(23, 59, 59))) {
-            // 出勤が22:00-23:59の間の場合
-            LocalTime nightEnd = LocalTime.of(23, 59, 59);
-            if (clockOutTimeOnly.isBefore(nightEnd)) {
-                nightEnd = clockOutTimeOnly;
-            }
-            nightShiftMinutes += (int) ChronoUnit.MINUTES.between(clockInTimeOnly, nightEnd) + 1;
+
+            currentDate = currentDate.plusDays(1);
         }
-        
-        // 翌日の深夜時間（00:00-05:00）
-        if (clockOutTimeOnly.isAfter(LocalTime.MIDNIGHT) && clockOutTimeOnly.isBefore(NIGHT_END_TIME)) {
-            // 退勤が00:00-05:00の間の場合
-            LocalTime midnightStart = LocalTime.MIDNIGHT;
-            LocalTime midnightEnd = clockOutTimeOnly;
-            if (clockInTimeOnly.isAfter(midnightStart)) {
-                midnightStart = clockInTimeOnly;
-            }
-            nightShiftMinutes += (int) ChronoUnit.MINUTES.between(midnightStart, midnightEnd);
-        } else if (clockInTimeOnly.isBefore(NIGHT_END_TIME) && clockOutTimeOnly.isAfter(NIGHT_END_TIME)) {
-            // 出勤が05:00前で退勤が05:00後の場合
-            LocalTime midnightStart = LocalTime.MIDNIGHT;
-            if (clockInTimeOnly.isAfter(midnightStart)) {
-                midnightStart = clockInTimeOnly;
-            }
-            nightShiftMinutes += (int) ChronoUnit.MINUTES.between(midnightStart, NIGHT_END_TIME);
-        }
-        
-        return nightShiftMinutes;
+
+        return Math.max(nightShiftMinutes, 0);
     }
     
     /**
@@ -158,12 +136,18 @@ public class TimeCalculator {
     public LocalDateTime getCurrentTokyoTime() {
         return LocalDateTime.now(TOKYO_ZONE);
     }
-    
+
     /**
      * 勤怠記録の遅刻・早退・残業・深夜勤務時間を再計算して設定
      * @param attendanceRecord 勤怠記録
      */
     public void calculateAttendanceMetrics(AttendanceRecord attendanceRecord) {
+        if (attendanceRecord == null) {
+            return;
+        }
+
+        normalizeMetrics(attendanceRecord);
+
         if (attendanceRecord.getClockInTime() == null || attendanceRecord.getClockOutTime() == null) {
             return;
         }
@@ -178,6 +162,11 @@ public class TimeCalculator {
         
         // 実働時間を計算
         int workingMinutes = calculateWorkingMinutes(attendanceRecord.getClockInTime(), attendanceRecord.getClockOutTime());
+
+        if (workingMinutes >= STANDARD_WORKING_MINUTES) {
+            attendanceRecord.setLateMinutes(0);
+            attendanceRecord.setEarlyLeaveMinutes(0);
+        }
         
         // 残業時間を計算・設定
         int overtimeMinutes = calculateOvertimeMinutes(workingMinutes);
@@ -186,5 +175,37 @@ public class TimeCalculator {
         // 深夜勤務時間を計算・設定
         int nightShiftMinutes = calculateNightShiftMinutes(attendanceRecord.getClockInTime(), attendanceRecord.getClockOutTime());
         attendanceRecord.setNightShiftMinutes(nightShiftMinutes);
+    }
+
+    /**
+     * 遅刻・早退などの数値項目をnullから0に正規化
+     * @param attendanceRecord 勤怠記録
+     */
+    public void normalizeMetrics(AttendanceRecord attendanceRecord) {
+        if (attendanceRecord == null) {
+            return;
+        }
+
+        if (attendanceRecord.getLateMinutes() == null) {
+            attendanceRecord.setLateMinutes(0);
+        }
+        if (attendanceRecord.getEarlyLeaveMinutes() == null) {
+            attendanceRecord.setEarlyLeaveMinutes(0);
+        }
+        if (attendanceRecord.getOvertimeMinutes() == null) {
+            attendanceRecord.setOvertimeMinutes(0);
+        }
+        if (attendanceRecord.getNightShiftMinutes() == null) {
+            attendanceRecord.setNightShiftMinutes(0);
+        }
+    }
+
+    /**
+     * 秒以下を切り捨てて分単位に統一
+     * @param dateTime 対象日時
+     * @return 分単位に正規化した日時
+     */
+    private LocalDateTime truncateToMinutes(LocalDateTime dateTime) {
+        return dateTime.truncatedTo(ChronoUnit.MINUTES);
     }
 }

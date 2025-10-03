@@ -7,7 +7,7 @@ import org.springframework.web.bind.annotation.GetMapping;
  * SPA向けフォールバックコントローラ。
  * APIや静的アセット以外のパスはすべて index.html を返す。
  */
-// @Controller
+@Controller
 public class SpaController {
 
     /**
@@ -28,5 +28,4 @@ public class SpaController {
         return "forward:/index.html";
     }
 }
-
 

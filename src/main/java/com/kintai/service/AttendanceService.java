@@ -25,6 +25,8 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -101,17 +103,18 @@ public class AttendanceService {
         // 8. レスポンス作成
         ClockResponse.ClockData data = new ClockResponse.ClockData(
                 savedRecord.getAttendanceId(),
+                savedRecord.getAttendanceDate(),
                 savedRecord.getClockInTime(),
                 null,
                 savedRecord.getLateMinutes(),
                 null,
                 null,
-                null
+                null,
+                savedRecord.getAttendanceStatus() != null ? savedRecord.getAttendanceStatus().name() : null,
+                savedRecord.getAttendanceFixedFlag()
         );
         
-        String message = lateMinutes > 0 ? 
-                String.format("出勤打刻完了（%d分遅刻）", lateMinutes) : 
-                "出勤打刻完了";
+        String message = "出勤打刻完了";
         
         ClockResponse response = new ClockResponse(true, message, data);
         setUserInfoToResponse(response);
@@ -168,6 +171,12 @@ public class AttendanceService {
             
             // 実働時間計算
             int workingMinutes = timeCalculator.calculateWorkingMinutes(clockInTime, now);
+
+            if (workingMinutes >= TimeCalculator.STANDARD_WORKING_MINUTES) {
+                attendanceRecord.setLateMinutes(0);
+                attendanceRecord.setEarlyLeaveMinutes(0);
+                earlyLeaveMinutes = 0;
+            }
             
             // 残業時間計算
             int overtimeMinutes = timeCalculator.calculateOvertimeMinutes(workingMinutes);
@@ -181,22 +190,24 @@ public class AttendanceService {
             updateAttendanceStatus(attendanceRecord, earlyLeaveMinutes, overtimeMinutes, nightShiftMinutes);
             
             // 8. データベース保存
+            timeCalculator.normalizeMetrics(attendanceRecord);
             AttendanceRecord savedRecord = attendanceRecordRepository.save(attendanceRecord);
             
             // 9. レスポンス作成
             ClockResponse.ClockData data = new ClockResponse.ClockData(
                     savedRecord.getAttendanceId(),
+                    savedRecord.getAttendanceDate(),
                     savedRecord.getClockInTime(),
                     savedRecord.getClockOutTime(),
                     savedRecord.getLateMinutes(),
                     savedRecord.getEarlyLeaveMinutes(),
                     savedRecord.getOvertimeMinutes(),
-                    savedRecord.getNightShiftMinutes()
+                    savedRecord.getNightShiftMinutes(),
+                    savedRecord.getAttendanceStatus() != null ? savedRecord.getAttendanceStatus().name() : null,
+                    savedRecord.getAttendanceFixedFlag()
             );
             
-            String message = buildClockOutMessage(overtimeMinutes, earlyLeaveMinutes, nightShiftMinutes);
-            
-            ClockResponse response = new ClockResponse(true, message, data);
+            ClockResponse response = new ClockResponse(true, "退勤打刻完了", toClockData(savedRecord));
             setUserInfoToResponse(response);
             return response;
         } catch (AttendanceException e) {
@@ -237,35 +248,11 @@ public class AttendanceService {
     }
     
     /**
-     * 退勤メッセージを構築
-     * @param overtimeMinutes 残業分数
-     * @param earlyLeaveMinutes 早退分数
-     * @param nightShiftMinutes 深夜勤務分数
-     * @return メッセージ
-     */
-    private String buildClockOutMessage(int overtimeMinutes, int earlyLeaveMinutes, int nightShiftMinutes) {
-        StringBuilder message = new StringBuilder("退勤打刻完了");
-        
-        if (overtimeMinutes > 0) {
-            message.append(String.format("（%d分残業）", overtimeMinutes));
-        }
-        
-        if (earlyLeaveMinutes > 0) {
-            message.append(String.format("（%d分早退）", earlyLeaveMinutes));
-        }
-        
-        if (nightShiftMinutes > 0) {
-            message.append(String.format("（%d分深夜勤務）", nightShiftMinutes));
-        }
-        
-        return message.toString();
-    }
-    
-    /**
      * 勤怠履歴取得
      * @param employeeId 従業員ID
      * @return 勤怠履歴レスポンス
      */
+    @Transactional(readOnly = true)
     public ClockResponse getAttendanceHistory(Long employeeId) {
         try {
             // 1. 従業員存在チェック
@@ -287,17 +274,8 @@ public class AttendanceService {
             
             List<AttendanceRecord> records = attendanceRecordRepository
                     .findByEmployeeIdAndAttendanceDateBetweenOrderByAttendanceDateDesc(employeeId, startDate, endDate);
-            
-            // 4. 出勤打刻のみの場合は退勤関連情報をnullにする
-            for (AttendanceRecord record : records) {
-                if (record.getClockInTime() != null && record.getClockOutTime() == null) {
-                    record.setEarlyLeaveMinutes(null);
-                    record.setOvertimeMinutes(null);
-                    record.setNightShiftMinutes(null);
-                }
-            }
-            
-            ClockResponse response = new ClockResponse(true, "勤怠履歴を取得しました", records);
+
+            ClockResponse response = new ClockResponse(true, "勤怠履歴を取得しました", toClockDataList(records));
             setUserInfoToResponse(response);
             return response;
             
@@ -316,6 +294,7 @@ public class AttendanceService {
      * @param month 月
      * @return 勤怠履歴レスポンス
      */
+    @Transactional(readOnly = true)
     public ClockResponse getAttendanceHistoryForMonth(Long employeeId, int year, int month) {
         try {
             // 1. 従業員存在チェック
@@ -334,18 +313,9 @@ public class AttendanceService {
             // 3. 指定月の勤怠履歴を取得
             List<AttendanceRecord> records = attendanceRecordRepository
                     .findByEmployeeAndMonth(employeeId, year, month);
-            
-            // 4. 出勤打刻のみの場合は退勤関連情報をnullにする
-            for (AttendanceRecord record : records) {
-                if (record.getClockInTime() != null && record.getClockOutTime() == null) {
-                    record.setEarlyLeaveMinutes(null);
-                    record.setOvertimeMinutes(null);
-                    record.setNightShiftMinutes(null);
-                }
-            }
-            
-            // 5. データが空でも正常にレスポンスを返す
-            ClockResponse response = new ClockResponse(true, "指定月の勤怠履歴を取得しました", records);
+
+            // 4. データが空でも正常にレスポンスを返す
+            ClockResponse response = new ClockResponse(true, "指定月の勤怠履歴を取得しました", toClockDataList(records));
             setUserInfoToResponse(response);
             return response;
             
@@ -367,6 +337,7 @@ public class AttendanceService {
      * @param employeeId 従業員ID
      * @return 勤怠レスポンス
      */
+    @Transactional(readOnly = true)
     public ClockResponse getTodayAttendance(Long employeeId) {
         LocalDate today = LocalDate.now();
         
@@ -390,29 +361,13 @@ public class AttendanceService {
         if (attendanceRecord.isPresent()) {
             AttendanceRecord record = attendanceRecord.get();
             
-            // 出勤打刻のみの場合は退勤時刻と勤務時間関連をnullにする
-            LocalDateTime clockOutTime = record.getClockOutTime();
-            Integer earlyLeaveMinutes = record.getEarlyLeaveMinutes();
-            Integer overtimeMinutes = record.getOvertimeMinutes();
-            Integer nightShiftMinutes = record.getNightShiftMinutes();
-            
-            // 出勤打刻のみの場合は退勤関連情報をnullにする
+            ClockResponse.ClockData clockData = toClockData(record);
             if (record.getClockInTime() != null && record.getClockOutTime() == null) {
-                clockOutTime = null;
-                earlyLeaveMinutes = null;
-                overtimeMinutes = null;
-                nightShiftMinutes = null;
+                clockData.setClockOutTime(null);
+                clockData.setEarlyLeaveMinutes(null);
+                clockData.setOvertimeMinutes(null);
+                clockData.setNightShiftMinutes(null);
             }
-            
-            ClockResponse.ClockData clockData = new ClockResponse.ClockData(
-                    record.getAttendanceId(),
-                    record.getClockInTime(),
-                    clockOutTime,
-                    record.getLateMinutes(),
-                    earlyLeaveMinutes,
-                    overtimeMinutes,
-                    nightShiftMinutes
-            );
             ClockResponse response = new ClockResponse();
             response.setSuccess(true);
             response.setMessage("今日の勤怠状況を取得しました");
@@ -434,6 +389,36 @@ public class AttendanceService {
      * レスポンスにユーザー情報を設定
      * @param response レスポンス
      */
+    private ClockResponse.ClockData toClockData(AttendanceRecord record) {
+        if (record == null) {
+            return null;
+        }
+        int nightShiftMinutes = resolveNightShiftMinutes(record);
+        return new ClockResponse.ClockData(
+                record.getAttendanceId(),
+                record.getAttendanceDate(),
+                record.getClockInTime(),
+                record.getClockOutTime(),
+                safeInt(record.getLateMinutes()),
+                safeInt(record.getEarlyLeaveMinutes()),
+                safeInt(record.getOvertimeMinutes()),
+                nightShiftMinutes,
+                record.getAttendanceStatus() != null ? record.getAttendanceStatus().name() : null,
+                record.getAttendanceFixedFlag()
+        );
+    }
+
+    private List<ClockResponse.ClockData> toClockDataList(List<AttendanceRecord> records) {
+        if (records == null || records.isEmpty()) {
+            return Collections.emptyList();
+        }
+        List<ClockResponse.ClockData> dataList = new ArrayList<>();
+        for (AttendanceRecord record : records) {
+            dataList.add(toClockData(record));
+        }
+        return dataList;
+    }
+
     private void setUserInfoToResponse(ClockResponse response) {
         try {
             Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
@@ -446,5 +431,33 @@ public class AttendanceService {
             // セッション情報の取得に失敗した場合は無視
             // ログ出力は行わない（認証エラーではないため）
         }
+    }
+
+    /**
+     * 深夜勤務時間を再計算してレコードに反映
+     * @param record 勤怠記録
+     * @return 再計算後の深夜勤務分数（計算不可の場合はnull）
+     */
+    private int resolveNightShiftMinutes(AttendanceRecord record) {
+        if (record == null) {
+            return 0;
+        }
+        if (record.getClockInTime() == null || record.getClockOutTime() == null) {
+            return safeInt(record.getNightShiftMinutes());
+        }
+        int recalculated = timeCalculator.calculateNightShiftMinutes(
+                record.getClockInTime(),
+                record.getClockOutTime()
+        );
+
+        int current = safeInt(record.getNightShiftMinutes());
+        if (current > 0 && recalculated == 0) {
+            return current;
+        }
+        return recalculated;
+    }
+
+    private int safeInt(Integer value) {
+        return value == null ? 0 : value;
     }
 }

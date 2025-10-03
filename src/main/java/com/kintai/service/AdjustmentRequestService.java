@@ -8,6 +8,7 @@ import com.kintai.repository.AdjustmentRequestRepository;
 import com.kintai.repository.AttendanceRecordRepository;
 import com.kintai.repository.EmployeeRepository;
 import com.kintai.util.TimeCalculator;
+import com.kintai.util.BusinessDayCalculator;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -15,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * 勤怠修正申請サービス
@@ -34,6 +36,9 @@ public class AdjustmentRequestService {
     
     @Autowired
     private TimeCalculator timeCalculator;
+
+    @Autowired
+    private BusinessDayCalculator businessDayCalculator;
     
     /**
      * 修正申請を作成
@@ -48,32 +53,49 @@ public class AdjustmentRequestService {
         employeeRepository.findById(employeeId)
                 .orElseThrow(() -> new AttendanceException("EMPLOYEE_NOT_FOUND", "従業員が見つかりません: " + employeeId));
         
-        // 2. 対象日のバリデーション（過去日または当日のみ）
-        LocalDate today = LocalDate.now();
-        if (targetDate.isAfter(today)) {
-            throw new AttendanceException("INVALID_DATE", "対象日は過去日または当日のみ指定可能です");
-        }
-        
-        // 3. 出勤時間と退勤時間のバリデーション（片側のみ許容、両方nullは不可）
+        // 2. 出勤時間と退勤時間のバリデーション（双方必須）
         LocalDateTime newClockIn = requestDto.getNewClockIn();
         LocalDateTime newClockOut = requestDto.getNewClockOut();
-        if (newClockIn == null && newClockOut == null) {
-            throw new AttendanceException("INVALID_TIME", "出勤または退勤のいずれかは必須です");
+        if (newClockIn == null || newClockOut == null) {
+            throw new AttendanceException(AttendanceException.INVALID_TIME_PAIR, "出勤と退勤の時刻はセットで入力してください");
         }
         
-        if (newClockIn != null && newClockOut != null && newClockIn.isAfter(newClockOut)) {
+        if (newClockIn.isAfter(newClockOut)) {
             throw new AttendanceException("INVALID_TIME_ORDER", "出勤時間は退勤時間より前である必要があります");
         }
-        
-        // 4. 同日同社員のアクティブ申請（PENDING/APPROVED）がないか
+
+        if (targetDate == null && newClockIn != null) {
+            targetDate = newClockIn.toLocalDate();
+            requestDto.setTargetDate(targetDate);
+        }
+
+        if (targetDate == null) {
+            throw new AttendanceException(AttendanceException.INVALID_REQUEST, "対象日が指定されていません");
+        }
+
+        // 4. 土日祝は申請不可
+        if (!businessDayCalculator.isBusinessDay(targetDate)) {
+            throw new AttendanceException("NON_BUSINESS_DAY", "土日祝は打刻修正を申請できません");
+        }
+
+        // 5. 同日同社員のアクティブ申請（PENDING/APPROVED）がないか
         if (adjustmentRequestRepository.existsActiveRequestForDate(employeeId, targetDate)) {
             throw new AttendanceException("DUPLICATE_REQUEST", "該当日の修正申請は既に存在します");
         }
-        
-        // 5. 修正申請を作成
+
+        // 6. 元の勤怠を記録（取消時に戻せるようにする）
+        AttendanceRecord currentRecord = attendanceRecordRepository
+                .findByEmployeeIdAndAttendanceDate(employeeId, targetDate)
+                .orElse(null);
+
+        // 7. 修正申請を作成
         AdjustmentRequest adjustmentRequest = new AdjustmentRequest(
                 employeeId, targetDate, newClockIn, newClockOut, requestDto.getReason());
-        
+        if (currentRecord != null) {
+            adjustmentRequest.setOriginalClockIn(currentRecord.getClockInTime());
+            adjustmentRequest.setOriginalClockOut(currentRecord.getClockOutTime());
+        }
+
         return adjustmentRequestRepository.save(adjustmentRequest);
     }
     
@@ -96,6 +118,12 @@ public class AdjustmentRequestService {
         AttendanceRecord attendanceRecord = attendanceRecordRepository
                 .findByEmployeeIdAndAttendanceDate(adjustmentRequest.getEmployeeId(), adjustmentRequest.getTargetDate())
                 .orElse(new AttendanceRecord(adjustmentRequest.getEmployeeId(), adjustmentRequest.getTargetDate()));
+
+        // 3-1. 承認時点の勤怠を原本として保持（既存データがない場合はnullのまま）
+        if (adjustmentRequest.getOriginalClockIn() == null && adjustmentRequest.getOriginalClockOut() == null) {
+            adjustmentRequest.setOriginalClockIn(attendanceRecord.getClockInTime());
+            adjustmentRequest.setOriginalClockOut(attendanceRecord.getClockOutTime());
+        }
         
         // 4. 勤怠記録を更新
         attendanceRecord.setClockInTime(adjustmentRequest.getNewClockIn());
@@ -103,7 +131,8 @@ public class AdjustmentRequestService {
         
         // 5. 遅刻・早退・残業・深夜を再計算
         timeCalculator.calculateAttendanceMetrics(attendanceRecord);
-        
+        timeCalculator.normalizeMetrics(attendanceRecord);
+
         // 6. 勤怠記録を保存
         attendanceRecordRepository.save(attendanceRecord);
         
@@ -139,7 +168,59 @@ public class AdjustmentRequestService {
         adjustmentRequest.setRejectionComment(comment.trim());
         adjustmentRequest.setRejectedByEmployeeId(approverEmployeeId);
         adjustmentRequest.setRejectedAt(LocalDateTime.now());
-        
+       
+        return adjustmentRequestRepository.save(adjustmentRequest);
+    }
+
+    /**
+     * 修正申請を取消
+     * @param adjustmentRequestId 修正申請ID
+     * @param employeeId 申請者従業員ID
+     * @return 取消後の修正申請
+     */
+    public AdjustmentRequest cancelAdjustmentRequest(Long adjustmentRequestId, Long employeeId) {
+        AdjustmentRequest adjustmentRequest = adjustmentRequestRepository.findById(adjustmentRequestId)
+                .orElseThrow(() -> new AttendanceException(AttendanceException.REQUEST_NOT_FOUND,
+                        "修正申請が見つかりません: " + adjustmentRequestId));
+
+        if (!Objects.equals(adjustmentRequest.getEmployeeId(), employeeId)) {
+            throw new AttendanceException(AttendanceException.INVALID_REQUEST, "自身の申請のみ取消できます");
+        }
+
+        if (adjustmentRequest.getStatus() == AdjustmentRequest.AdjustmentStatus.REJECTED
+                || adjustmentRequest.getStatus() == AdjustmentRequest.AdjustmentStatus.CANCELLED) {
+            throw new AttendanceException(AttendanceException.REQUEST_NOT_CANCELLABLE, "取消できない状態です");
+        }
+
+        // 承認済みを取消する場合は勤怠を元に戻す
+        if (adjustmentRequest.getStatus() == AdjustmentRequest.AdjustmentStatus.APPROVED) {
+            attendanceRecordRepository.findByEmployeeIdAndAttendanceDate(adjustmentRequest.getEmployeeId(), adjustmentRequest.getTargetDate())
+                    .ifPresent(record -> {
+                        LocalDateTime revertClockIn = adjustmentRequest.getOriginalClockIn();
+                        LocalDateTime revertClockOut = adjustmentRequest.getOriginalClockOut();
+
+                        if (revertClockIn != null || revertClockOut != null) {
+                            record.setClockInTime(revertClockIn);
+                            record.setClockOutTime(revertClockOut);
+                        } else {
+                            // 旧データがない場合は申請前の状態に戻せないため、勤務時刻を初期化する
+                            record.setClockInTime(null);
+                            record.setClockOutTime(null);
+                        }
+
+                        timeCalculator.calculateAttendanceMetrics(record);
+                        timeCalculator.normalizeMetrics(record);
+                        attendanceRecordRepository.save(record);
+                    });
+        }
+
+        adjustmentRequest.setStatus(AdjustmentRequest.AdjustmentStatus.CANCELLED);
+        adjustmentRequest.setApprovedByEmployeeId(null);
+        adjustmentRequest.setApprovedAt(null);
+        adjustmentRequest.setRejectedByEmployeeId(null);
+        adjustmentRequest.setRejectedAt(null);
+        adjustmentRequest.setRejectionComment(null);
+
         return adjustmentRequestRepository.save(adjustmentRequest);
     }
     

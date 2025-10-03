@@ -14,15 +14,16 @@
 server.log
 app.log
 
+# Node
+/node_modules/
+
 # Python
 __pycache__/
 *.pyc
 .venv/
 venv/
 
-# FastAPI tmp/PDF
-fastapi_pdf_service/tmp/
-fastapi_pdf_service/*.pdf
+# PDF生成物
 /reports/
 *.pdf
 
