@@ -211,8 +211,32 @@ class AdjustmentScreen {
             return;
         }
 
-        const confirmed = window.confirm(`打刻修正申請を送信します。\n出勤: ${clockInDate} ${clockInTime}\n退勤: ${clockOutDate} ${clockOutTime}\nよろしいですか？`);
-        if (!confirmed) return;
+        const confirmHandler = window.employeeDialog?.confirm;
+        const formatDateForDialog = (value) => {
+            if (!value) {
+                return '';
+            }
+            return value.replace(/-/g, '/');
+        };
+
+        const modalMessage = `打刻修正申請を送信します。\n出勤: ${formatDateForDialog(clockInDate)} ${clockInTime}\n退勤: ${formatDateForDialog(clockOutDate)} ${clockOutTime}`;
+        const confirmMessage = `${modalMessage}\nよろしいですか？`;
+        if (confirmHandler) {
+            const { confirmed } = await confirmHandler({
+                title: '打刻修正申請の送信',
+                message: confirmMessage,
+                confirmLabel: '申請する',
+                cancelLabel: 'キャンセル'
+            });
+            if (!confirmed) {
+                return;
+            }
+        } else {
+            const confirmed = window.confirm(confirmMessage);
+            if (!confirmed) {
+                return;
+            }
+        }
 
         try {
             const data = await fetchWithAuth.handleApiCall(

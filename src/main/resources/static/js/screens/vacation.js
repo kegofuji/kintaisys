@@ -177,8 +177,23 @@ class VacationScreen {
 
         // 事前確認
         const rangeText = startDate === endDate ? startDate : `${startDate} 〜 ${endDate}`;
-        const confirmed = window.confirm(`有給申請（${rangeText}）を送信します。よろしいですか？`);
-        if (!confirmed) return;
+        const confirmHandler = window.employeeDialog?.confirm;
+        if (confirmHandler) {
+            const { confirmed } = await confirmHandler({
+                title: '有給申請の送信',
+                message: `有給申請（${rangeText}）を送信します。よろしいですか？`,
+                confirmLabel: '申請する',
+                cancelLabel: 'キャンセル'
+            });
+            if (!confirmed) {
+                return;
+            }
+        } else {
+            const confirmed = window.confirm(`有給申請（${rangeText}）を送信します。よろしいですか？`);
+            if (!confirmed) {
+                return;
+            }
+        }
 
         try {
             const data = await fetchWithAuth.handleApiCall(

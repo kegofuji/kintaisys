@@ -1391,14 +1391,15 @@ class HistoryScreen {
             statusElement.className = ''; // 色クラスを削除して黒文字にする
 
             // 修正内容を設定
-            document.getElementById('adjustmentDetailClockInDate').textContent =
-                formatDate(adjustmentRequest.newClockIn) || '-';
-            document.getElementById('adjustmentDetailClockInTime').textContent =
-                formatTime(adjustmentRequest.newClockIn) || '-';
-            document.getElementById('adjustmentDetailClockOutDate').textContent =
-                formatDate(adjustmentRequest.newClockOut) || '-';
-            document.getElementById('adjustmentDetailClockOutTime').textContent =
-                formatTime(adjustmentRequest.newClockOut) || '-';
+            const clockInDate = formatDate(adjustmentRequest.newClockIn) || '';
+            const clockInTime = formatTime(adjustmentRequest.newClockIn) || '';
+            const clockOutDate = formatDate(adjustmentRequest.newClockOut) || '';
+            const clockOutTime = formatTime(adjustmentRequest.newClockOut) || '';
+
+            document.getElementById('adjustmentDetailClockIn').textContent =
+                this.combineDateTime(clockInDate, clockInTime);
+            document.getElementById('adjustmentDetailClockOut').textContent =
+                this.combineDateTime(clockOutDate, clockOutTime);
 
             // 勤務時間を計算
             const workingTime = (adjustmentRequest.newClockIn && adjustmentRequest.newClockOut) ?
@@ -1517,7 +1518,20 @@ class HistoryScreen {
             ? 'この打刻修正申請は既に承認済です。取消すると申請が無かったものとして扱われます。取消しますか？'
             : 'この打刻修正申請を取消しますか？';
 
-        const confirmed = window.confirm(confirmMessage);
+        const confirmHandler = window.employeeDialog?.confirm;
+        let confirmed = false;
+        if (confirmHandler) {
+            const result = await confirmHandler({
+                title: '打刻修正申請の取消',
+                message: confirmMessage,
+                confirmLabel: '取消する',
+                cancelLabel: 'キャンセル'
+            });
+            confirmed = !!result?.confirmed;
+        } else {
+            confirmed = window.confirm(confirmMessage);
+        }
+
         if (!confirmed) {
             return;
         }
@@ -1756,7 +1770,20 @@ class HistoryScreen {
             ? 'この有給申請は既に承認済です。取消すると申請が無かったものとして扱われます。取消しますか？'
             : 'この有給申請を取消しますか？';
 
-        const confirmed = window.confirm(confirmMessage);
+        const confirmHandler = window.employeeDialog?.confirm;
+        let confirmed = false;
+        if (confirmHandler) {
+            const result = await confirmHandler({
+                title: '有給申請の取消',
+                message: confirmMessage,
+                confirmLabel: '取消する',
+                cancelLabel: 'キャンセル'
+            });
+            confirmed = !!result?.confirmed;
+        } else {
+            confirmed = window.confirm(confirmMessage);
+        }
+
         if (!confirmed) {
             return;
         }
@@ -2068,6 +2095,25 @@ class HistoryScreen {
         }
 
         throw new Error('有給申請の取消に失敗しました');
+    }
+
+    combineDateTime(dateText, timeText) {
+        const datePart = (dateText || '').trim();
+        const timePart = (timeText || '').trim();
+
+        if (datePart && timePart) {
+            return `${datePart} ${timePart}`;
+        }
+
+        if (datePart) {
+            return datePart;
+        }
+
+        if (timePart) {
+            return timePart;
+        }
+
+        return '-';
     }
 
     /**
