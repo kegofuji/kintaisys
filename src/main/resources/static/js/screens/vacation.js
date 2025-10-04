@@ -175,8 +175,53 @@ class VacationScreen {
             return;
         }
 
+        const requestDates = this.expandDateRange(startDate, endDate);
+        try {
+            const conflicts = await this.getActiveAdjustmentConflicts(requestDates);
+            if (conflicts.length > 0) {
+                const displayDates = conflicts.map((date) => this.formatDateForDisplay(date)).filter(Boolean);
+                const dateLabel = displayDates.length > 0 ? `対象日（${displayDates.join(', ')}）` : '対象日';
+                this.showAlert(`${dateLabel}には打刻修正申請が存在します。有給申請するには、打刻修正申請を取消してください。`, 'warning');
+                return;
+            }
+        } catch (error) {
+            console.error('打刻修正申請状況の確認に失敗しました:', error);
+            this.showAlert('打刻修正申請状況の確認に失敗しました。時間をおいて再度お試しください。', 'danger');
+            return;
+        }
+
         // 事前確認
-        const rangeText = startDate === endDate ? startDate : `${startDate} 〜 ${endDate}`;
+        const formatConfirmDate = (value) => {
+            if (!value) {
+                return '';
+            }
+            if (typeof value === 'string') {
+                const trimmed = value.length >= 10 ? value.slice(0, 10) : value;
+                if (trimmed.includes('-')) {
+                    return trimmed.replace(/-/g, '/');
+                }
+                return trimmed;
+            }
+            try {
+                const date = new Date(value);
+                if (Number.isNaN(date.getTime())) {
+                    return '';
+                }
+                const yyyy = date.getFullYear();
+                const mm = String(date.getMonth() + 1).padStart(2, '0');
+                const dd = String(date.getDate()).padStart(2, '0');
+                return `${yyyy}/${mm}/${dd}`;
+            } catch (error) {
+                console.warn('日付のフォーマットに失敗しました:', error, value);
+                return '';
+            }
+        };
+
+        const displayStart = formatConfirmDate(startDate);
+        const displayEnd = formatConfirmDate(endDate);
+        const rangeText = startDate === endDate || displayStart === displayEnd
+            ? displayStart
+            : `${displayStart} 〜 ${displayEnd}`;
         const confirmHandler = window.employeeDialog?.confirm;
         if (confirmHandler) {
             const { confirmed } = await confirmHandler({
@@ -398,6 +443,144 @@ class VacationScreen {
                 alertDiv.parentNode.removeChild(alertDiv);
             }
         }, 5000);
+    }
+
+    expandDateRange(startStr, endStr) {
+        const start = this.parseDate(startStr);
+        const end = this.parseDate(endStr || startStr);
+        if (!start || !end) {
+            return [];
+        }
+        const dates = [];
+        const cursor = new Date(start.getTime());
+        while (cursor.getTime() <= end.getTime()) {
+            dates.push(this.formatDateString(cursor));
+            cursor.setDate(cursor.getDate() + 1);
+        }
+        return dates;
+    }
+
+    async getActiveAdjustmentConflicts(dateStrings) {
+        if (!Array.isArray(dateStrings) || dateStrings.length === 0) {
+            return [];
+        }
+        if (!window.currentEmployeeId) {
+            return [];
+        }
+
+        const response = await fetchWithAuth.handleApiCall(
+            () => fetchWithAuth.get(`/api/attendance/adjustment/${window.currentEmployeeId}`),
+            '打刻修正申請の取得に失敗しました'
+        );
+
+        let list = [];
+        if (response && response.success && Array.isArray(response.data)) {
+            list = response.data;
+        } else if (Array.isArray(response)) {
+            list = response;
+        } else if (response && Array.isArray(response.adjustmentRequests)) {
+            list = response.adjustmentRequests;
+        }
+
+        const dateSet = new Set(dateStrings);
+        const conflicts = new Set();
+        list.forEach((req) => {
+            const status = (req?.status || '').toString().toUpperCase();
+            if (!['PENDING', 'APPROVED'].includes(status)) {
+                return;
+            }
+
+            this.collectAdjustmentDates(req).forEach((date) => {
+                if (dateSet.has(date)) {
+                    conflicts.add(date);
+                }
+            });
+        });
+
+        return Array.from(conflicts).sort();
+    }
+
+    collectAdjustmentDates(request) {
+        const dates = new Set();
+        const add = (value) => {
+            const normalized = this.normalizeDateString(value);
+            if (normalized) {
+                dates.add(normalized);
+            }
+        };
+
+        add(request?.targetDate);
+        add(request?.date);
+        add(request?.attendanceDate);
+        add(request?.clockInDate);
+        add(request?.clockOutDate);
+        add(request?.startDate);
+        add(request?.endDate);
+        add(request?.originalClockIn);
+        add(request?.originalClockOut);
+        add(request?.newClockIn);
+        add(request?.newClockOut);
+
+        if (request?.targetDateStart && request?.targetDateEnd) {
+            this.expandDateRange(request.targetDateStart, request.targetDateEnd)
+                .forEach((date) => dates.add(date));
+        }
+
+        return Array.from(dates);
+    }
+
+    parseDate(value) {
+        const normalized = this.normalizeDateString(value);
+        if (!normalized) {
+            return null;
+        }
+        const [yearStr, monthStr, dayStr] = normalized.split('-');
+        const year = parseInt(yearStr, 10);
+        const month = parseInt(monthStr, 10);
+        const day = parseInt(dayStr, 10);
+        if (Number.isNaN(year) || Number.isNaN(month) || Number.isNaN(day)) {
+            return null;
+        }
+        const date = new Date(year, month - 1, day);
+        return Number.isNaN(date.getTime()) ? null : date;
+    }
+
+    normalizeDateString(value) {
+        if (!value) {
+            return '';
+        }
+        if (value instanceof Date) {
+            return this.formatDateString(value);
+        }
+        if (typeof value === 'string') {
+            const trimmed = value.trim();
+            if (!trimmed) {
+                return '';
+            }
+            if (trimmed.includes('T')) {
+                return trimmed.split('T')[0];
+            }
+            return trimmed;
+        }
+        return '';
+    }
+
+    formatDateString(date) {
+        if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+            return '';
+        }
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    }
+
+    formatDateForDisplay(dateStr) {
+        const normalized = this.normalizeDateString(dateStr);
+        if (!normalized) {
+            return '';
+        }
+        return normalized.replace(/-/g, '/');
     }
 }
 

@@ -19,6 +19,7 @@ class HistoryScreen {
         this.vacationRequests = [];
         this.adjustmentRequests = [];
         this.vacationRequestRawMap = new Map();
+        this.activeVacationDates = new Set();
         this.adjustmentCancelButton = null;
         this.vacationCancelButton = null;
         this.adjustmentResubmitButton = null;
@@ -857,6 +858,7 @@ class HistoryScreen {
 
             // 申請を日付ごとに展開
             this.vacationRequestRawMap = new Map();
+            this.activeVacationDates = new Set();
             const expanded = [];
             requests.forEach(req => {
                 if (!req.startDate || !req.endDate) return;
@@ -898,6 +900,7 @@ class HistoryScreen {
                                 vacationId: requestIdStr,
                                 request: req
                             });
+                            this.activeVacationDates.add(this.formatDateString(current));
                         }
                     }
                 } catch (dateError) {
@@ -979,8 +982,13 @@ class HistoryScreen {
                         if ((status || '').toUpperCase() === 'CANCELLED') {
                             return;
                         }
+                        const dateKey = this.formatDateString(d);
+                        if (this.activeVacationDates.has(dateKey)) {
+                            console.log('有給申請と重複するため打刻修正申請を非表示:', req);
+                            return;
+                        }
                         filtered.push({
-                            date: this.formatDateString(d),
+                            date: dateKey,
                             status: status,
                             adjustmentRequestId: req.adjustmentRequestId || req.id,
                             rejectionComment: req.rejectionComment || '',

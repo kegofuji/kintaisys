@@ -66,4 +66,16 @@ public interface AdjustmentRequestRepository extends JpaRepository<AdjustmentReq
      */
     @Query("SELECT ar FROM AdjustmentRequest ar WHERE ar.employeeId = :employeeId AND ar.targetDate >= :startDate AND ar.targetDate <= :endDate AND ar.status = 'PENDING' ORDER BY ar.targetDate")
     List<AdjustmentRequest> findPendingAdjustmentRequestsInPeriod(@Param("employeeId") Long employeeId, @Param("startDate") LocalDate startDate, @Param("endDate") LocalDate endDate);
+
+    /**
+     * 指定期間内のアクティブ（申請中・承認済み）打刻修正申請を取得
+     * @param employeeId 従業員ID
+     * @param startDate 期間開始日
+     * @param endDate 期間終了日
+     * @return アクティブな打刻修正申請リスト
+     */
+    @Query("SELECT ar FROM AdjustmentRequest ar WHERE ar.employeeId = :employeeId AND ar.targetDate BETWEEN :startDate AND :endDate AND ar.status IN ('PENDING','APPROVED') ORDER BY ar.targetDate")
+    List<AdjustmentRequest> findActiveAdjustmentRequestsInPeriod(@Param("employeeId") Long employeeId,
+                                                                @Param("startDate") LocalDate startDate,
+                                                                @Param("endDate") LocalDate endDate);
 }

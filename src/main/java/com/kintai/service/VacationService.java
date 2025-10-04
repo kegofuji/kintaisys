@@ -1,10 +1,13 @@
 package com.kintai.service;
 
 import com.kintai.dto.VacationRequestDto;
+import com.kintai.entity.AdjustmentRequest;
 import com.kintai.entity.Employee;
 import com.kintai.entity.VacationRequest;
 import com.kintai.entity.VacationStatus;
+import com.kintai.exception.AttendanceException;
 import com.kintai.exception.VacationException;
+import com.kintai.repository.AdjustmentRequestRepository;
 import com.kintai.repository.EmployeeRepository;
 import com.kintai.repository.VacationRequestRepository;
 import com.kintai.util.BusinessDayCalculator;
@@ -16,6 +19,7 @@ import org.springframework.security.core.Authentication;
 import com.kintai.entity.UserAccount;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -30,6 +34,12 @@ public class VacationService {
     
     @Autowired
     private EmployeeRepository employeeRepository;
+
+    @Autowired
+    private AdjustmentRequestRepository adjustmentRequestRepository;
+
+    @Autowired
+    private AdjustmentRequestService adjustmentRequestService;
     
     private static final int FALLBACK_ANNUAL_PAID_LEAVE_DAYS = 10;
 
@@ -96,14 +106,17 @@ public class VacationService {
                         "残有給日数を超える申請はできません");
             }
 
-            // 8. 有給申請作成（理由必須はコントローラで検証済みだが保険でnull→空文字整備）
+            // 8. 対象期間の打刻修正申請を自動取消（有給を優先）
+            List<AdjustmentRequest> cancelledAdjustments = cancelActiveAdjustments(employeeId, startDate, endDate);
+
+            // 9. 有給申請作成（理由必須はコントローラで検証済みだが保険でnull→空文字整備）
             VacationRequest vacationRequest = new VacationRequest(employeeId, startDate, endDate, reason);
             vacationRequest.setDays(days);
 
-            // 9. データベース保存
+            // 10. データベース保存
             VacationRequest savedRequest = vacationRequestRepository.save(vacationRequest);
 
-            // 10. レスポンス作成
+            // 11. レスポンス作成
             VacationRequestDto.VacationData data = new VacationRequestDto.VacationData(
                     savedRequest.getVacationId(),
                     savedRequest.getEmployeeId(),
@@ -114,13 +127,15 @@ public class VacationService {
             );
             data.setRejectionComment(savedRequest.getRejectionComment());
             
-            String message = "有給申請を受け付けました";
+            String message = buildSuccessMessage(cancelledAdjustments.size());
             VacationRequestDto response = new VacationRequestDto(true, message, data);
             setUserInfoToResponse(response);
             return response;
             
         } catch (VacationException e) {
             throw e;
+        } catch (AttendanceException e) {
+            throw new VacationException(VacationException.ADJUSTMENT_CANCEL_FAILED, "打刻修正申請の取消に失敗しました: " + e.getMessage(), e);
         } catch (Exception e) {
             e.printStackTrace();
             throw new VacationException("INTERNAL_ERROR", "内部エラーが発生しました: " + e.getMessage());
@@ -173,6 +188,30 @@ public class VacationService {
             e.printStackTrace();
             throw new VacationException("INTERNAL_ERROR", "内部エラーが発生しました: " + e.getMessage());
         }
+    }
+
+    private List<AdjustmentRequest> cancelActiveAdjustments(Long employeeId, LocalDate startDate, LocalDate endDate) {
+        List<AdjustmentRequest> activeAdjustments = adjustmentRequestRepository
+                .findActiveAdjustmentRequestsInPeriod(employeeId, startDate, endDate);
+
+        if (activeAdjustments == null || activeAdjustments.isEmpty()) {
+            return java.util.Collections.emptyList();
+        }
+
+        List<AdjustmentRequest> cancelled = new ArrayList<>();
+        for (AdjustmentRequest adjustment : activeAdjustments) {
+            AdjustmentRequest cancelledRequest = adjustmentRequestService
+                    .cancelAdjustmentRequest(adjustment.getAdjustmentRequestId(), employeeId);
+            cancelled.add(cancelledRequest);
+        }
+        return cancelled;
+    }
+
+    private String buildSuccessMessage(int cancelledCount) {
+        if (cancelledCount <= 0) {
+            return "有給申請を受け付けました";
+        }
+        return String.format("有給申請を受け付けました（該当する打刻修正申請を%d件取り消しました）", cancelledCount);
     }
 
     /**
