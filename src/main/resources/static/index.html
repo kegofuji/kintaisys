@@ -237,33 +237,33 @@
         <!-- ナビゲーションバー -->
         <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
             <div class="container-fluid">
-                <a class="navbar-brand" href="#" id="brandNavLink">勤怠管理システム</a>
+                <a class="navbar-brand" href="/dashboard" id="brandNavLink">勤怠管理システム</a>
                 <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                     <span class="navbar-toggler-icon"></span>
                 </button>
                 <div class="collapse navbar-collapse" id="navbarNav">
                     <ul class="navbar-nav me-auto">
                         <li class="nav-item">
-                            <a class="nav-link" href="#" id="dashboardNavLink">TOP</a>
+                            <a class="nav-link" href="/dashboard" id="dashboardNavLink">TOP</a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" href="#" id="historyNavLink">勤怠履歴</a>
+                            <a class="nav-link" href="/history" id="historyNavLink">勤怠履歴</a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" href="#" id="vacationNavLink">有給申請</a>
+                            <a class="nav-link" href="/vacation" id="vacationNavLink">有給申請</a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" href="#" id="adjustmentNavLink">打刻修正</a>
+                            <a class="nav-link" href="/adjustment" id="adjustmentNavLink">打刻修正</a>
                         </li>
                         <!-- 管理者メニュー -->
                         <li class="nav-item" id="adminApprovalsNavItem" style="display: none;">
-                            <a class="nav-link" href="#" id="adminApprovalsNavLink">打刻修正</a>
+                            <a class="nav-link" href="/admin/approvals" id="adminApprovalsNavLink">打刻修正</a>
                         </li>
                         <li class="nav-item" id="adminVacationManagementNavItem" style="display: none;">
-                            <a class="nav-link" href="#" id="adminVacationManagementNavLink">有給承認</a>
+                            <a class="nav-link" href="/admin/vacation-management" id="adminVacationManagementNavLink">有給承認</a>
                         </li>
                         <li class="nav-item" id="adminEmployeesNavItem" style="display: none;">
-                            <a class="nav-link" href="#" id="adminEmployeesNavLink">社員管理</a>
+                            <a class="nav-link" href="/admin/employees" id="adminEmployeesNavLink">社員管理</a>
                         </li>
                         
                     </ul>
@@ -964,6 +964,7 @@
     <script src="js/screens/vacation.js"></script>
     <script src="js/screens/adjustment.js"></script>
     <script src="js/screens/admin.js?v=202509241820"></script>
+    <script src="js/utils/router.js"></script>
     <script src="app.js"></script>
 </body>
 </html>

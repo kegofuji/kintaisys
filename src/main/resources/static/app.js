@@ -32,6 +32,10 @@ const alertContainer = document.getElementById('alertContainer');
 
 // 初期化
 document.addEventListener('DOMContentLoaded', function() {
+    if (!window.router && typeof Router === 'function') {
+        window.router = new Router();
+    }
+
     initializeApp();
     setupEventListeners();
 });
@@ -87,6 +91,7 @@ async function checkSession() {
             const data = await response.json();
             if (data.authenticated) {
                 currentUser = data.username;
+                window.currentUser = data.username;
                 currentEmployeeId = data.employeeId;
                 window.currentEmployeeId = data.employeeId; // HistoryScreenクラス用
                 await showMainInterface();
@@ -126,9 +131,10 @@ async function handleLogin(e) {
         
         if (data.success) {
             currentUser = data.username;
+            window.currentUser = data.username;
             currentEmployeeId = data.employeeId;
             window.currentEmployeeId = data.employeeId; // HistoryScreenクラス用
-            showAlert('ログインに成功しました', 'success');
+            showAlert('ログインしました', 'success');
             await showMainInterface();
             await loadCSRFToken();
             await loadAttendanceHistory();
@@ -154,7 +160,9 @@ async function handleLogout() {
         });
         
         currentUser = null;
+        window.currentUser = null;
         currentEmployeeId = null;
+        window.currentEmployeeId = null;
         csrfToken = null;
         showLoginInterface();
         showAlert('ログアウトしました', 'info');
@@ -615,9 +623,9 @@ async function showMainInterface() {
     
     // 役割に応じて初期表示画面を切り替え
     if (isAdmin) {
-        showScreen('adminDashboardScreen');
+        navigateWithRouter('/admin', { updateHistory: true, replace: true, fallbackScreenId: 'adminDashboardScreen' });
     } else {
-        showScreen('dashboardScreen');
+        navigateWithRouter('/dashboard', { updateHistory: true, replace: true, fallbackScreenId: 'dashboardScreen' });
     }
     
     console.log('メイン画面表示完了');
@@ -654,6 +662,44 @@ function clearAllAlerts() {
     }
 }
 
+function shouldSkipNavigation(event) {
+    return event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey;
+}
+
+function navigateWithRouter(path, {
+    updateHistory = true,
+    replace = false,
+    fallbackScreenId = null,
+    fallbackActiveLink = null,
+    fallbackInit = null
+} = {}) {
+    if (window.router && typeof window.router.navigate === 'function') {
+        window.router.navigate(path, { updateHistory, replace });
+        return;
+    }
+
+    if (fallbackScreenId) {
+        showScreen(fallbackScreenId);
+    }
+
+    if (typeof fallbackInit === 'function') {
+        fallbackInit();
+    }
+
+    if (fallbackActiveLink) {
+        updateActiveNavLink(fallbackActiveLink);
+    }
+}
+
+function handleNavigationClick(event, options) {
+    if (shouldSkipNavigation(event)) {
+        return;
+    }
+
+    event.preventDefault();
+    navigateWithRouter(options.path, options);
+}
+
 // ナビゲーションリスナー設定
 function setupNavigationListeners() {
     console.log('ナビゲーションリスナーを設定中...');
@@ -686,56 +732,72 @@ function setupNavigationListeners() {
     // イベントリスナー追加
     if (brandNavLink) {
         brandNavLink.addEventListener('click', (e) => {
-            e.preventDefault();
             console.log('ブランドリンクがクリックされました');
             if (isAdmin) {
-                showScreen('adminDashboardScreen');
-                updateActiveNavLink(null);
+                handleNavigationClick(e, {
+                    path: '/admin',
+                    updateHistory: true,
+                    fallbackScreenId: 'adminDashboardScreen'
+                });
             } else {
-                showScreen('dashboardScreen');
-                updateActiveNavLink(dashboardNavLink);
+                handleNavigationClick(e, {
+                    path: '/dashboard',
+                    updateHistory: true,
+                    fallbackScreenId: 'dashboardScreen',
+                    fallbackActiveLink: dashboardNavLink
+                });
             }
         });
     }
     
     if (dashboardNavLink) {
         dashboardNavLink.addEventListener('click', (e) => {
-            e.preventDefault();
             console.log('ダッシュボードリンクがクリックされました');
-            showScreen('dashboardScreen');
-            updateActiveNavLink(dashboardNavLink);
+            handleNavigationClick(e, {
+                path: '/dashboard',
+                fallbackScreenId: 'dashboardScreen',
+                fallbackActiveLink: dashboardNavLink
+            });
         });
     }
     
     if (historyNavLink) {
         historyNavLink.addEventListener('click', (e) => {
-            e.preventDefault();
             console.log('勤怠履歴リンクがクリックされました');
-            showScreen('historyScreen');
-            updateActiveNavLink(historyNavLink);
-            
-            // HistoryScreenを初期化（既に初期化済みの場合はスキップ）
-            if (window.historyScreen && !window.historyScreen.initialized) {
-                window.historyScreen.init();
-            }
+            handleNavigationClick(e, {
+                path: '/history',
+                fallbackScreenId: 'historyScreen',
+                fallbackActiveLink: historyNavLink,
+                fallbackInit: () => {
+                    if (window.historyScreen && !window.historyScreen.initialized) {
+                        window.historyScreen.init();
+                    } else if (!window.historyScreen) {
+                        setupHistoryMonthSelect();
+                    }
+                }
+            });
         });
     }
     
     if (vacationNavLink) {
         vacationNavLink.addEventListener('click', (e) => {
-            e.preventDefault();
             console.log('有給申請リンクがクリックされました');
-            showScreen('vacationScreen');
-            updateActiveNavLink(vacationNavLink);
+            handleNavigationClick(e, {
+                path: '/vacation',
+                fallbackScreenId: 'vacationScreen',
+                fallbackActiveLink: vacationNavLink
+            });
         });
     }
     
     if (adjustmentNavLink) {
         adjustmentNavLink.addEventListener('click', (e) => {
-            e.preventDefault();
             console.log('打刻修正リンクがクリックされました');
-            showScreen('adjustmentScreen');
-            updateActiveNavLink(adjustmentNavLink);
+            handleNavigationClick(e, {
+                path: '/adjustment',
+                fallbackScreenId: 'adjustmentScreen',
+                fallbackActiveLink: adjustmentNavLink
+            });
         });
     }
     
@@ -756,27 +818,33 @@ function setupNavigationListeners() {
 
     if (adminVacationManagementNavLink) {
         adminVacationManagementNavLink.addEventListener('click', (e) => {
-            e.preventDefault();
             console.log('有給承認リンクがクリックされました');
-            showScreen('adminVacationManagementScreen');
-            updateActiveNavLink(adminVacationManagementNavLink);
-            // 管理者: 有給承認・付与調整 画面の初期化
-            if (window.adminScreen) {
-                window.adminScreen.initVacationManagement();
-            }
+            handleNavigationClick(e, {
+                path: '/admin/vacation-management',
+                fallbackScreenId: 'adminVacationManagementScreen',
+                fallbackActiveLink: adminVacationManagementNavLink,
+                fallbackInit: () => {
+                    if (window.adminScreen) {
+                        window.adminScreen.initVacationManagement();
+                    }
+                }
+            });
         });
     }
     
     if (adminEmployeesNavLink) {
         adminEmployeesNavLink.addEventListener('click', (e) => {
-            e.preventDefault();
             console.log('社員管理リンクがクリックされました');
-            showScreen('adminEmployeesScreen');
-            updateActiveNavLink(adminEmployeesNavLink);
-            // 管理者: 社員管理 画面の初期化
-            if (window.adminScreen) {
-                window.adminScreen.initEmployees();
-            }
+            handleNavigationClick(e, {
+                path: '/admin/employees',
+                fallbackScreenId: 'adminEmployeesScreen',
+                fallbackActiveLink: adminEmployeesNavLink,
+                fallbackInit: () => {
+                    if (window.adminScreen) {
+                        window.adminScreen.initEmployees();
+                    }
+                }
+            });
         });
     }
     
@@ -791,14 +859,17 @@ function setupNavigationListeners() {
     
     if (adminApprovalsNavLink) {
         adminApprovalsNavLink.addEventListener('click', (e) => {
-            e.preventDefault();
             console.log('申請承認リンクがクリックされました');
-            showScreen('adminApprovalsScreen');
-            updateActiveNavLink(adminApprovalsNavLink);
-            // 管理者: 申請承認 画面の初期化
-            if (window.adminScreen) {
-                window.adminScreen.initApprovals();
-            }
+            handleNavigationClick(e, {
+                path: '/admin/approvals',
+                fallbackScreenId: 'adminApprovalsScreen',
+                fallbackActiveLink: adminApprovalsNavLink,
+                fallbackInit: () => {
+                    if (window.adminScreen) {
+                        window.adminScreen.initApprovals();
+                    }
+                }
+            });
         });
     }
     

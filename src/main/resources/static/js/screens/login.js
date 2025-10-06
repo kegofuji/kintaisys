@@ -120,7 +120,7 @@ class LoginScreen {
                     window.app.updateUserInfo(data.username, data.employeeId);
                 }
                 
-                this.showAlert('ログインに成功しました', 'success');
+                this.showAlert('ログインしました', 'success');
                 this.showMainInterface();
                 
                 // ダッシュボードを再初期化

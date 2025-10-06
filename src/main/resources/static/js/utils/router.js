@@ -1,18 +1,40 @@
 /**
  * SPAルーティング機能
- * ハッシュベースのルーティングを実装
+ * History API を利用したルーティングを実装
  */
 class Router {
     constructor() {
         this.routes = new Map();
         this.currentRoute = null;
-        this.isInitialized = false;
-        
+
+        // thisにバインドしたルート変更ハンドラを保持
+        this.handleRouteChange = this.handleRouteChange.bind(this);
+
         // ルート定義
         this.defineRoutes();
-        
-        // イベントリスナーを設定
-        this.setupEventListeners();
+
+        // ルート変更イベントの監視を開始
+        window.addEventListener('popstate', this.handleRouteChange);
+
+        if (document.readyState !== 'loading') {
+            this.initializeCurrentRoute();
+        } else {
+            document.addEventListener('DOMContentLoaded', () => this.initializeCurrentRoute());
+        }
+    }
+
+    /**
+     * 初期表示時のルート処理
+     */
+    initializeCurrentRoute() {
+        const initialPath = this.normalizePath(window.location.pathname);
+
+        if (initialPath === '/' || !this.routes.has(initialPath)) {
+            this.navigate('/dashboard', { updateHistory: true, replace: true });
+            return;
+        }
+
+        this.navigate(initialPath, { updateHistory: false });
     }
 
     /**
@@ -36,67 +58,70 @@ class Router {
     }
 
     /**
-     * イベントリスナー設定
-     */
-    setupEventListeners() {
-        // ハッシュ変更イベント
-        window.addEventListener('hashchange', () => {
-            this.handleRouteChange();
-        });
-
-        // ページ読み込み時のルート処理
-        window.addEventListener('DOMContentLoaded', () => {
-            this.handleRouteChange();
-        });
-    }
-
-    /**
      * ルート変更処理
      */
     handleRouteChange() {
-        const hash = window.location.hash.substring(1) || '/';
-        this.navigate(hash, false);
+        const path = this.normalizePath(window.location.pathname);
+        this.navigate(path, { updateHistory: false });
     }
 
     /**
      * ルート遷移
      * @param {string} path - 遷移先パス
-     * @param {boolean} updateHash - ハッシュを更新するかどうか
+     * @param {Object|boolean} options - 履歴更新オプション
      */
-    navigate(path, updateHash = true) {
-        // パスを正規化
-        const normalizedPath = this.normalizePath(path);
-        
-        // ルートが存在するかチェック
+    navigate(path, options = {}) {
+        const normalizedOptions = typeof options === 'boolean'
+            ? { updateHistory: options }
+            : options;
+
+        const {
+            updateHistory = true,
+            replace = false
+        } = normalizedOptions;
+
+        let normalizedPath = this.normalizePath(path);
+
+        if (normalizedPath === '/') {
+            normalizedPath = '/dashboard';
+        }
+
         const route = this.routes.get(normalizedPath);
         if (!route) {
             console.warn(`ルートが見つかりません: ${normalizedPath}`);
-            this.navigate('/dashboard');
+            if (normalizedPath !== '/dashboard') {
+                this.navigate('/dashboard', { updateHistory: true, replace: true });
+            }
             return;
         }
 
-        // 管理者権限チェック
         if (route.admin && !this.isAdmin()) {
             console.warn('管理者権限が必要です');
-            this.navigate('/dashboard');
+            this.navigate('/dashboard', { updateHistory: true, replace: true });
             return;
         }
 
-        // 画面を切り替え
-        this.showScreen(route.screen);
-        
-        // タイトルを更新
-        this.updateTitle(route.title);
-        
-        // ハッシュを更新
-        if (updateHash) {
-            window.location.hash = normalizedPath;
+        const currentPath = window.location.pathname;
+        if (updateHistory) {
+            const state = { path: normalizedPath };
+            if (replace) {
+                window.history.replaceState(state, '', normalizedPath);
+            } else if (currentPath !== normalizedPath) {
+                window.history.pushState(state, '', normalizedPath);
+            }
+        } else if (replace && currentPath !== normalizedPath) {
+            window.history.replaceState({ path: normalizedPath }, '', normalizedPath);
         }
-        
-        // 現在のルートを保存
+
+        if (this.currentRoute === normalizedPath) {
+            this.updateNavigation(normalizedPath);
+            return;
+        }
+
+        this.showScreen(route.screen);
+        this.updateTitle(route.title);
         this.currentRoute = normalizedPath;
-        
-        // ルート固有の初期化処理を実行
+        this.updateNavigation(normalizedPath);
         this.initializeScreen(route.screen);
     }
 
@@ -106,18 +131,19 @@ class Router {
      * @returns {string} - 正規化されたパス
      */
     normalizePath(path) {
-        // 先頭のスラッシュを削除
-        if (path.startsWith('/')) {
-            path = path.substring(1);
-        }
-        
-        // 空の場合はルートに
         if (!path) {
-            path = '/';
+            return '/';
         }
-        
-        // 先頭にスラッシュを追加
-        return '/' + path;
+
+        if (!path.startsWith('/')) {
+            path = '/' + path;
+        }
+
+        if (path.length > 1 && path.endsWith('/')) {
+            path = path.slice(0, -1);
+        }
+
+        return path;
     }
 
     /**
@@ -255,21 +281,23 @@ class Router {
         const navLinks = document.querySelectorAll('.navbar-nav .nav-link');
         navLinks.forEach(link => {
             link.classList.remove('active');
-            
-            // クリックイベントからパスを取得
-            const onclick = link.getAttribute('onclick');
-            if (onclick && onclick.includes('router.navigate(')) {
-                const match = onclick.match(/router\.navigate\('([^']+)'\)/);
-                if (match) {
-                    const linkPath = match[1];
-                    if (linkPath === currentPath || (linkPath === '/' && currentPath === '/dashboard')) {
-                        link.classList.add('active');
-                    }
-                }
+
+            const href = link.getAttribute('href');
+            if (!href || href === '#') {
+                return;
+            }
+
+            const hashPath = href.startsWith('#') ? href.substring(1) : href;
+            if (!hashPath) {
+                return;
+            }
+            const linkPath = this.normalizePath(hashPath);
+            if (linkPath === currentPath || (linkPath === '/' && currentPath === '/dashboard')) {
+                link.classList.add('active');
             }
         });
     }
 }
 
-// グローバルルーターインスタンスを作成
-window.router = new Router();
+// Router クラスをグローバルに公開
+window.Router = Router;

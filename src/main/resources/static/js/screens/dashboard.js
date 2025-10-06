@@ -624,8 +624,17 @@ class DashboardScreen {
      * @param {string} type - アラートタイプ
      */
     showAlert(message, type = 'info') {
+        // グローバルな showAlert 関数が存在する場合はそちらを使用
+        if (typeof window.showAlert === 'function') {
+            window.showAlert(message, type);
+            return;
+        }
+
         const alertContainer = document.getElementById('alertContainer');
         if (!alertContainer) return;
+
+        // 既存のアラートをクリア
+        alertContainer.innerHTML = '';
 
         const alertDiv = document.createElement('div');
         alertDiv.className = `alert alert-${type} alert-dismissible fade show`;

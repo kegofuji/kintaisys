@@ -6,6 +6,7 @@ class App {
     constructor() {
         this.isInitialized = false;
         this.midnightTimerId = null;
+        this.navigationListenersInitialized = false;
     }
 
     /**
@@ -36,6 +37,9 @@ class App {
 
             // 日付変更監視を開始
             this.scheduleMidnightRefresh();
+
+            // ナビゲーションリンクのイベント登録
+            this.setupNavigationListeners();
         } catch (error) {
             console.error('アプリケーション初期化エラー:', error);
             this.showError('アプリケーションの初期化に失敗しました');
@@ -166,6 +170,51 @@ class App {
     }
 
     /**
+     * ナビゲーションリンクのイベントリスナーを設定
+     */
+    setupNavigationListeners() {
+        if (this.navigationListenersInitialized) {
+            return;
+        }
+
+        if (!window.router) {
+            console.warn('Routerが初期化される前にナビゲーション設定が呼び出されました');
+            return;
+        }
+
+        const links = [
+            { selector: '#brandNavLink', path: '/dashboard' },
+            { selector: '#dashboardNavLink', path: '/dashboard' },
+            { selector: '#historyNavLink', path: '/history' },
+            { selector: '#vacationNavLink', path: '/vacation' },
+            { selector: '#adjustmentNavLink', path: '/adjustment' },
+            { selector: '#adminApprovalsNavLink', path: '/admin/approvals' },
+            { selector: '#adminVacationManagementNavLink', path: '/admin/vacation-management' },
+            { selector: '#adminEmployeesNavLink', path: '/admin/employees' }
+        ];
+
+        links.forEach(({ selector, path }) => {
+            const link = document.querySelector(selector);
+            if (!link) {
+                return;
+            }
+
+            link.addEventListener('click', (event) => {
+                if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+                    return;
+                }
+
+                event.preventDefault();
+                console.log(`Navigation clicked: ${path}`);
+                window.router.navigate(path);
+            });
+        });
+
+        this.navigationListenersInitialized = true;
+        console.log('Navigation listeners setup completed');
+    }
+
+    /**
      * 管理者メニューの表示制御
      */
     updateAdminMenu() {
@@ -244,11 +293,12 @@ class App {
     }
 }
 
-// グローバルアプリケーションインスタンスを作成
-window.app = new App();
-
-// DOM読み込み完了時にアプリケーションを初期化
+// DOM読み込み完了時にアプリケーションとルーターを初期化
 document.addEventListener('DOMContentLoaded', async () => {
+    window.app = new App();
+    window.router = new Router();
+
+    window.app.setupNavigationListeners();
     await window.app.init();
 });
 
