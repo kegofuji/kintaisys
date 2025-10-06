@@ -292,16 +292,16 @@ class VacationScreen {
             return false;
         }
 
-        const businessDayCount = this.countBusinessDaysInclusive(start, end);
-        if (businessDayCount === 0) {
-            this.showAlert('申請期間に平日が含まれていません', 'warning');
+        const requestedDays = this.countRequestedDaysInclusive(start, end);
+        if (requestedDays === 0) {
+            this.showAlert('申請期間の日付が不正です', 'warning');
             return false;
         }
 
         // 申請日数が残有給日数を超えていないかチェック
         const remainingDays = this.getRemainingDays();
-        if (businessDayCount > remainingDays) {
-            this.showAlert(`申請日数（${businessDayCount}日）が残有給日数（${remainingDays}日）を超えています`, 'warning');
+        if (requestedDays > remainingDays) {
+            this.showAlert(`申請日数（${requestedDays}日）が残有給日数（${remainingDays}日）を超えています`, 'warning');
             return false;
         }
 
@@ -320,21 +320,19 @@ class VacationScreen {
         return new Date(year, month - 1, day);
     }
 
-    isBusinessDay(date) {
-        if (typeof BusinessDayUtils !== 'undefined' && BusinessDayUtils) {
-            return BusinessDayUtils.isBusinessDay(date);
+    countRequestedDaysInclusive(start, end) {
+        if (!(start instanceof Date) || Number.isNaN(start.getTime()) ||
+            !(end instanceof Date) || Number.isNaN(end.getTime())) {
+            return 0;
         }
-        const day = date.getDay();
-        return day !== 0 && day !== 6;
-    }
+        if (end < start) {
+            return 0;
+        }
 
-    countBusinessDaysInclusive(start, end) {
         let count = 0;
-        const cursor = new Date(start);
+        const cursor = new Date(start.getTime());
         while (cursor <= end) {
-            if (this.isBusinessDay(cursor)) {
-                count++;
-            }
+            count++;
             cursor.setDate(cursor.getDate() + 1);
         }
         return count;

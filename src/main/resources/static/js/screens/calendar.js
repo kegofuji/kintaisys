@@ -149,7 +149,7 @@ class CalendarScreen {
 
             if (item.date) {
                 const parsed = this.parseDateString(item.date);
-                if (parsed && this.isBusinessDay(parsed)) {
+                if (parsed) {
                     normalized.push({ ...item, date: this.formatDateString(parsed) });
                 }
                 return;
@@ -164,9 +164,6 @@ class CalendarScreen {
 
                 for (let d = new Date(start); d.getTime() <= end.getTime(); d.setDate(d.getDate() + 1)) {
                     const current = new Date(d);
-                    if (!this.isBusinessDay(current)) {
-                        continue;
-                    }
                     normalized.push({ ...item, date: this.formatDateString(current) });
                 }
             }
@@ -354,23 +351,6 @@ class CalendarScreen {
             return null;
         }
         return new Date(year, month - 1, day);
-    }
-
-    /**
-     * 営業日かどうか（休日・祝日を除外）
-     */
-    isBusinessDay(date) {
-        if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
-            return false;
-        }
-        if (window.BusinessDayUtils && typeof window.BusinessDayUtils.isBusinessDay === 'function') {
-            return window.BusinessDayUtils.isBusinessDay(date);
-        }
-        const day = date.getDay();
-        if (day === 0 || day === 6) {
-            return false;
-        }
-        return !this.isHoliday(date);
     }
 
     /**

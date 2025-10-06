@@ -29,7 +29,12 @@ class Router {
     initializeCurrentRoute() {
         const initialPath = this.normalizePath(window.location.pathname);
 
-        if (initialPath === '/' || !this.routes.has(initialPath)) {
+        if (initialPath === '/') {
+            this.navigate('/login', { updateHistory: true, replace: true });
+            return;
+        }
+
+        if (!this.routes.has(initialPath)) {
             this.navigate('/dashboard', { updateHistory: true, replace: true });
             return;
         }
@@ -43,6 +48,7 @@ class Router {
     defineRoutes() {
         // 一般ユーザー向けルート
         this.routes.set('/', { screen: 'dashboardScreen', title: 'TOP' });
+        this.routes.set('/login', { title: 'ログイン', login: true });
         this.routes.set('/dashboard', { screen: 'dashboardScreen', title: 'TOP' });
         this.routes.set('/history', { screen: 'historyScreen', title: '勤怠履歴' });
         this.routes.set('/vacation', { screen: 'vacationScreen', title: '有給申請' });
@@ -118,11 +124,19 @@ class Router {
             return;
         }
 
-        this.showScreen(route.screen);
-        this.updateTitle(route.title);
+        if (route.login) {
+            this.showScreen(null);
+        } else if (route.screen) {
+            this.showScreen(route.screen);
+            this.initializeScreen(route.screen);
+        }
+
+        if (route.title) {
+            this.updateTitle(route.title);
+        }
+
         this.currentRoute = normalizedPath;
         this.updateNavigation(normalizedPath);
-        this.initializeScreen(route.screen);
     }
 
     /**
@@ -156,6 +170,10 @@ class Router {
         screens.forEach(screen => {
             screen.classList.remove('active');
         });
+
+        if (!screenId) {
+            return;
+        }
 
         // 指定された画面を表示
         const targetScreen = document.getElementById(screenId);

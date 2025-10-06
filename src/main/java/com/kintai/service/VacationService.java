@@ -10,7 +10,6 @@ import com.kintai.exception.VacationException;
 import com.kintai.repository.AdjustmentRequestRepository;
 import com.kintai.repository.EmployeeRepository;
 import com.kintai.repository.VacationRequestRepository;
-import com.kintai.util.BusinessDayCalculator;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -43,9 +42,6 @@ public class VacationService {
     
     private static final int FALLBACK_ANNUAL_PAID_LEAVE_DAYS = 10;
 
-    @Autowired
-    private BusinessDayCalculator businessDayCalculator;
-    
     /**
      * 有給休暇申請処理
      * @param employeeId 従業員ID
@@ -73,12 +69,12 @@ public class VacationService {
             // 3. 日付範囲バリデーション
             validateDateRange(startDate, endDate);
 
-            // 4. 申請期間に平日が含まれているか確認（カウントは土日祝を除外）
+            // 4. 申請期間の日数を算出
             int days = calculateVacationDays(startDate, endDate);
             if (days <= 0) {
                 throw new VacationException(
                         VacationException.INVALID_DATE_RANGE,
-                        "申請期間に平日が含まれていません");
+                        "申請期間の日付が不正です");
             }
 
             // 5. 重複申請チェック
@@ -330,7 +326,10 @@ public class VacationService {
      * @return 日数
      */
     private int calculateVacationDays(LocalDate startDate, LocalDate endDate) {
-        return businessDayCalculator.countBusinessDaysInclusive(startDate, endDate);
+        if (startDate == null || endDate == null || endDate.isBefore(startDate)) {
+            return 0;
+        }
+        return (int) (java.time.temporal.ChronoUnit.DAYS.between(startDate, endDate) + 1);
     }
 
     private int resolveBaseDays(Employee employee) {

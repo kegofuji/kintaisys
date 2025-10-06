@@ -156,6 +156,10 @@ class LoginScreen {
             loginContainer.style.display = 'block';
             mainContainer.style.display = 'none';
         }
+
+        if (window.router && typeof window.router.navigate === 'function') {
+            window.router.navigate('/login', { updateHistory: true, replace: true });
+        }
     }
 
     /**

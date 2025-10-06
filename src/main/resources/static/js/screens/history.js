@@ -887,9 +887,6 @@ class HistoryScreen {
                         const m = current.getMonth(); // 0-based
                         // 表示中の年月のみ保持
                         if (y === this.currentYear && m === this.currentMonth) {
-                            if (!this.isBusinessDay(current)) {
-                                continue;
-                            }
                             const status = req.status || 'PENDING';
                             if ((status || '').toUpperCase() === 'CANCELLED') {
                                 continue;

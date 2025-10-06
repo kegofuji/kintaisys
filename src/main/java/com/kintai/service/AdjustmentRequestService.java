@@ -8,7 +8,6 @@ import com.kintai.repository.AdjustmentRequestRepository;
 import com.kintai.repository.AttendanceRecordRepository;
 import com.kintai.repository.EmployeeRepository;
 import com.kintai.util.TimeCalculator;
-import com.kintai.util.BusinessDayCalculator;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -37,9 +36,6 @@ public class AdjustmentRequestService {
     @Autowired
     private TimeCalculator timeCalculator;
 
-    @Autowired
-    private BusinessDayCalculator businessDayCalculator;
-    
     /**
      * 修正申請を作成
      * @param requestDto 修正申請DTO
@@ -73,17 +69,12 @@ public class AdjustmentRequestService {
             throw new AttendanceException(AttendanceException.INVALID_REQUEST, "対象日が指定されていません");
         }
 
-        // 4. 土日祝は申請不可
-        if (!businessDayCalculator.isBusinessDay(targetDate)) {
-            throw new AttendanceException("NON_BUSINESS_DAY", "土日祝は打刻修正を申請できません");
-        }
-
-        // 5. 同日同社員のアクティブ申請（PENDING/APPROVED）がないか
+        // 4. 同日同社員のアクティブ申請（PENDING/APPROVED）がないか
         if (adjustmentRequestRepository.existsActiveRequestForDate(employeeId, targetDate)) {
             throw new AttendanceException("DUPLICATE_REQUEST", "該当日の修正申請は既に存在します");
         }
 
-        // 6. 元の勤怠を記録（取消時に戻せるようにする）
+        // 5. 元の勤怠を記録（取消時に戻せるようにする）
         AttendanceRecord currentRecord = attendanceRecordRepository
                 .findByEmployeeIdAndAttendanceDate(employeeId, targetDate)
                 .orElse(null);

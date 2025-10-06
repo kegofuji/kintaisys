@@ -1,6 +1,3 @@
-const NON_BUSINESS_DAY_MESSAGE = '本日は出勤日ではありません';
-window.NON_BUSINESS_DAY_MESSAGE = NON_BUSINESS_DAY_MESSAGE;
-
 // グローバル変数
 let currentUser = null;
 let csrfToken = null;
@@ -29,6 +26,33 @@ const logoutBtn = document.getElementById('logoutBtn');
 const vacationForm = document.getElementById('vacationForm');
 const submitVacationBtn = document.getElementById('submitVacationBtn');
 const alertContainer = document.getElementById('alertContainer');
+
+/**
+ * ISO形式の文字列からHH:mmを抽出（Safari互換）
+ * @param {string|null|undefined} isoString
+ * @returns {string}
+ */
+function formatTimeDisplay(isoString) {
+    if (!isoString) {
+        return '--:--';
+    }
+
+    const match = /T(\d{2}):(\d{2})/.exec(isoString);
+    if (match) {
+        return `${match[1]}:${match[2]}`;
+    }
+
+    try {
+        const parsed = new Date(isoString);
+        if (!Number.isNaN(parsed.getTime())) {
+            return parsed.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
+        }
+    } catch (error) {
+        console.error('時刻フォーマットエラー:', isoString, error);
+    }
+
+    return '--:--';
+}
 
 // 初期化
 document.addEventListener('DOMContentLoaded', function() {
@@ -65,11 +89,15 @@ function initializeApp() {
 
 // イベントリスナー設定
 function setupEventListeners() {
+    const usingDashboardModule = !!window.dashboardScreen;
+
     // 基本イベントリスナー（要素が存在する場合のみ）
     if (loginForm) loginForm.addEventListener('submit', handleLogin);
-    if (clockInBtn) clockInBtn.addEventListener('click', handleClockIn);
-    if (clockOutBtn) clockOutBtn.addEventListener('click', handleClockOut);
-    if (refreshHistoryBtn) refreshHistoryBtn.addEventListener('click', loadAttendanceHistory);
+    if (!usingDashboardModule) {
+        if (clockInBtn) clockInBtn.addEventListener('click', handleClockIn);
+        if (clockOutBtn) clockOutBtn.addEventListener('click', handleClockOut);
+        if (refreshHistoryBtn) refreshHistoryBtn.addEventListener('click', loadAttendanceHistory);
+    }
     if (monthlySubmitBtn) monthlySubmitBtn.addEventListener('click', handleMonthlySubmit);
     if (logoutBtn) logoutBtn.addEventListener('click', handleLogout);
     if (submitVacationBtn) submitVacationBtn.addEventListener('click', handleVacationSubmit);
@@ -427,10 +455,8 @@ function displayAttendanceHistory(data) {
         const row = document.createElement('tr');
         
         // 実際のデータ構造に合わせて表示
-        const clockInTime = record.clockInTime ? 
-            new Date(record.clockInTime).toLocaleTimeString('ja-JP', {hour: '2-digit', minute: '2-digit'}) : '-';
-        const clockOutTime = record.clockOutTime ? 
-            new Date(record.clockOutTime).toLocaleTimeString('ja-JP', {hour: '2-digit', minute: '2-digit'}) : '-';
+        const clockInTime = record.clockInTime ? formatTimeDisplay(record.clockInTime) : '-';
+        const clockOutTime = record.clockOutTime ? formatTimeDisplay(record.clockOutTime) : '-';
         
         // 勤務時間計算（未確定は空白）
         let workingHours = '';
@@ -603,6 +629,8 @@ async function downloadReport() {
 function showLoginInterface() {
     loginContainer.style.display = 'block';
     mainContainer.style.display = 'none';
+
+    navigateWithRouter('/login', { updateHistory: true, replace: true });
 }
 
 // メイン画面表示
@@ -1444,11 +1472,6 @@ async function updateTodayAttendance() {
     const clockInBtn = document.getElementById('clockInBtn');
     const clockOutBtn = document.getElementById('clockOutBtn');
 
-    if (!isBusinessDay(new Date())) {
-        applyNonBusinessDayState(clockInBtn, clockOutBtn, clockStatus, clockInTime, clockOutTime, workingTime);
-        return;
-    }
-
     try {
         // 今日の勤怠記録を取得
         const response = await fetch(`/api/attendance/today/${currentEmployeeId}`, {
@@ -1469,9 +1492,9 @@ async function updateTodayAttendance() {
     }
     
     // APIが失敗した場合は未確定＝空白表示、ステータスは出勤前
-    if (clockInTime) clockInTime.textContent = '';
-    if (clockOutTime) clockOutTime.textContent = '';
-    if (workingTime) workingTime.textContent = '';
+    if (clockInTime) clockInTime.textContent = '--:--';
+    if (clockOutTime) clockOutTime.textContent = '--:--';
+    if (workingTime) workingTime.textContent = '--:--';
     if (clockStatus) {
         clockStatus.innerHTML = '出勤前';
     }
@@ -1484,25 +1507,19 @@ function updateAttendanceDisplay(record, clockInTime, clockOutTime, workingTime,
     
     // 出勤時刻表示
     if (clockInTime) {
-        clockInTime.textContent = record.clockInTime ? 
-            new Date(record.clockInTime).toLocaleTimeString('ja-JP', {hour: '2-digit', minute: '2-digit'}) : 
-            '--:--';
+        clockInTime.textContent = formatTimeDisplay(record.clockInTime);
     }
     
     // 退勤時刻表示 - 確定まで空白
     if (clockOutTime) {
-        clockOutTime.textContent = record.clockOutTime ? 
-            new Date(record.clockOutTime).toLocaleTimeString('ja-JP', {hour: '2-digit', minute: '2-digit'}) : 
-            '';
+        clockOutTime.textContent = record.clockOutTime ? formatTimeDisplay(record.clockOutTime) : '--:--';
     }
     
     // 勤務時間計算 - 確定まで空白
     if (workingTime) {
-        if (record.clockInTime && record.clockOutTime) {
-            workingTime.textContent = TimeUtils.calculateWorkingTime(record.clockInTime, record.clockOutTime);
-        } else {
-            workingTime.textContent = '';
-        }
+        workingTime.textContent = (record.clockInTime && record.clockOutTime)
+            ? TimeUtils.calculateWorkingTime(record.clockInTime, record.clockOutTime)
+            : '--:--';
     }
     
     // ステータス表示
@@ -1593,54 +1610,21 @@ function isBusinessDay(date) {
     return day !== 0 && day !== 6;
 }
 
-// 土日祝日の状態設定
-function applyNonBusinessDayState(clockInBtn, clockOutBtn, clockStatus, clockInTime, clockOutTime, workingTime) {
-    const statusElement = clockStatus || document.getElementById('clockStatus');
-    const clockInElement = clockInTime || document.getElementById('clockInTime');
-    const clockOutElement = clockOutTime || document.getElementById('clockOutTime');
-    const workingTimeElement = workingTime || document.getElementById('workingTime');
-
-    if (clockInBtn) {
-        clockInBtn.disabled = true;
-        clockInBtn.classList.remove('btn-success', 'btn-danger');
-        clockInBtn.classList.add('btn-secondary');
-        clockInBtn.textContent = '出勤打刻';
-    }
-
-    if (clockOutBtn) {
-        clockOutBtn.disabled = true;
-        clockOutBtn.classList.remove('btn-success', 'btn-danger');
-        clockOutBtn.classList.add('btn-secondary');
-        clockOutBtn.textContent = '退勤打刻';
-    }
-
-    if (statusElement) {
-        statusElement.innerHTML = `<span class="badge bg-secondary fs-6">${NON_BUSINESS_DAY_MESSAGE}</span>`;
-    }
-
-    if (clockInElement) clockInElement.textContent = '--:--';
-    if (clockOutElement) clockOutElement.textContent = '--:--';
-    if (workingTimeElement) workingTimeElement.textContent = '0:00';
-}
-
 // ボタンの状態を更新
 function updateButtonStates(record, clockInBtn, clockOutBtn) {
     if (!clockInBtn || !clockOutBtn) return;
-
-    if (!isBusinessDay(new Date())) {
-        applyNonBusinessDayState(clockInBtn, clockOutBtn);
-        return;
-    }
 
     // 出勤打刻ボタン
     if (!record || !record.clockInTime) {
         clockInBtn.disabled = false;
         clockInBtn.classList.remove('btn-secondary');
         clockInBtn.classList.add('btn-success');
+        clockInBtn.textContent = '出勤打刻';
     } else {
         clockInBtn.disabled = true;
         clockInBtn.classList.remove('btn-success');
         clockInBtn.classList.add('btn-secondary');
+        clockInBtn.textContent = '出勤済み';
     }
 
     // 退勤打刻ボタン
@@ -1648,10 +1632,12 @@ function updateButtonStates(record, clockInBtn, clockOutBtn) {
         clockOutBtn.disabled = true;
         clockOutBtn.classList.remove('btn-danger');
         clockOutBtn.classList.add('btn-secondary');
+        clockOutBtn.textContent = record && record.clockOutTime ? '退勤済み' : '退勤打刻';
     } else {
         clockOutBtn.disabled = false;
         clockOutBtn.classList.remove('btn-secondary');
         clockOutBtn.classList.add('btn-danger');
+        clockOutBtn.textContent = '退勤打刻';
     }
 }
 

@@ -1,9 +1,4 @@
 (function (global) {
-const NON_BUSINESS_DAY_MESSAGE = global.NON_BUSINESS_DAY_MESSAGE || '本日は出勤日ではありません';
-if (!global.NON_BUSINESS_DAY_MESSAGE) {
-    global.NON_BUSINESS_DAY_MESSAGE = NON_BUSINESS_DAY_MESSAGE;
-}
-
 /**
  * ダッシュボード画面モジュール
  */
@@ -98,47 +93,6 @@ class DashboardScreen {
         this.monthlySubmitBtn = document.getElementById('monthlySubmitBtn');
         this.monthSelect = document.getElementById('historyMonthSelect');
         this.logoutBtn = document.getElementById('logoutBtn');
-    }
-
-    /**
-     * 営業日判定
-     */
-    isBusinessDay(date = new Date()) {
-        if (window.BusinessDayUtils && typeof window.BusinessDayUtils.isBusinessDay === 'function') {
-            return window.BusinessDayUtils.isBusinessDay(date);
-        }
-        const day = date.getDay();
-        return day !== 0 && day !== 6;
-    }
-
-    /**
-     * 土日祝日の状態を適用
-     */
-    applyNonBusinessDayState() {
-        if (this.clockInBtn) {
-            this.clockInBtn.disabled = true;
-            this.clockInBtn.innerHTML = '出勤打刻';
-            this.clockInBtn.className = 'btn btn-secondary btn-lg me-3 clock-btn';
-        }
-
-        if (this.clockOutBtn) {
-            this.clockOutBtn.disabled = true;
-            this.clockOutBtn.innerHTML = '退勤打刻';
-            this.clockOutBtn.className = 'btn btn-secondary btn-lg clock-btn';
-        }
-
-        if (this.clockStatus) {
-            this.clockStatus.innerHTML = `<span class="badge bg-secondary fs-6">${NON_BUSINESS_DAY_MESSAGE}</span>`;
-        }
-
-        const clockInTimeElement = document.getElementById('clockInTime');
-        if (clockInTimeElement) clockInTimeElement.textContent = '--:--';
-
-        const clockOutTimeElement = document.getElementById('clockOutTime');
-        if (clockOutTimeElement) clockOutTimeElement.textContent = '--:--';
-
-        const workingTimeElement = document.getElementById('workingTime');
-        if (workingTimeElement) workingTimeElement.textContent = '0:00';
     }
 
     /**
@@ -274,12 +228,6 @@ class DashboardScreen {
             return;
         }
 
-        if (!this.isBusinessDay(new Date())) {
-            console.log('Today is not a business day. Disabling clock buttons.');
-            this.applyNonBusinessDayState();
-            return;
-        }
-
         try {
             console.log('Fetching today attendance for employee:', window.currentEmployeeId);
             const apiUrl = `/api/attendance/today/${window.currentEmployeeId}`;
@@ -333,11 +281,6 @@ class DashboardScreen {
         console.log('Data type:', typeof data);
         console.log('Data keys:', data ? Object.keys(data) : 'null');
         
-        if (!this.isBusinessDay(new Date())) {
-            this.applyNonBusinessDayState();
-            return;
-        }
-
         if (!this.clockStatus) {
             console.log('clockStatus element not found');
             return;
@@ -356,24 +299,35 @@ class DashboardScreen {
         console.log('Setting status:', statusText);
         this.clockStatus.innerHTML = statusText;
 
+        const formatTime = (isoString) => {
+            if (!isoString) {
+                return '--:--';
+            }
+
+            // ISO形式から時刻部分だけを安全に抽出（Safari互換）
+            const isoMatch = /T(\d{2}):(\d{2})/.exec(isoString);
+            if (isoMatch) {
+                return `${isoMatch[1]}:${isoMatch[2]}`;
+            }
+
+            try {
+                const parsed = new Date(isoString);
+                if (Number.isNaN(parsed.getTime())) {
+                    return '--:--';
+                }
+                return parsed.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
+            } catch (error) {
+                console.error('Error formatting time:', error, isoString);
+                return '--:--';
+            }
+        };
+
         // 出勤時刻表示
         const clockInTimeElement = document.getElementById('clockInTime');
         if (clockInTimeElement) {
-            if (data && data.clockInTime && data.clockOutTime) {
-                console.log('Clock in time raw data:', data.clockInTime);
-                try {
-                    // LocalDateTimeの文字列をDateオブジェクトに変換
-                    const clockInTime = new Date(data.clockInTime).toLocaleTimeString('ja-JP', {hour: '2-digit', minute: '2-digit'});
-                    clockInTimeElement.textContent = clockInTime;
-                    console.log('Clock in time set to:', clockInTime);
-                } catch (error) {
-                    console.error('Error parsing clock in time:', error);
-                    clockInTimeElement.textContent = '';
-                }
-            } else {
-                clockInTimeElement.textContent = '';
-                console.log('No confirmed times, set to blank');
-            }
+            const formattedClockIn = formatTime(data?.clockInTime);
+            clockInTimeElement.textContent = formattedClockIn;
+            console.log('Clock in time set to:', formattedClockIn);
         } else {
             console.log('clockInTimeElement not found');
         }
@@ -381,21 +335,9 @@ class DashboardScreen {
         // 退勤時刻表示
         const clockOutTimeElement = document.getElementById('clockOutTime');
         if (clockOutTimeElement) {
-            if (data && data.clockInTime && data.clockOutTime) {
-                console.log('Clock out time raw data:', data.clockOutTime);
-                try {
-                    // LocalDateTimeの文字列をDateオブジェクトに変換
-                    const clockOutTime = new Date(data.clockOutTime).toLocaleTimeString('ja-JP', {hour: '2-digit', minute: '2-digit'});
-                    clockOutTimeElement.textContent = clockOutTime;
-                    console.log('Clock out time set to:', clockOutTime);
-                } catch (error) {
-                    console.error('Error parsing clock out time:', error);
-                    clockOutTimeElement.textContent = '';
-                }
-            } else {
-                clockOutTimeElement.textContent = '';
-                console.log('No confirmed times, set to blank');
-            }
+            const formattedClockOut = data?.clockOutTime ? formatTime(data.clockOutTime) : '--:--';
+            clockOutTimeElement.textContent = formattedClockOut;
+            console.log('Clock out time set to:', formattedClockOut);
         } else {
             console.log('clockOutTimeElement not found');
         }
@@ -404,13 +346,11 @@ class DashboardScreen {
         const workingTimeElement = document.getElementById('workingTime');
         if (workingTimeElement) {
             if (data && data.clockInTime && data.clockOutTime) {
-                workingTimeElement.textContent = TimeUtils.calculateWorkingTime(data.clockInTime, data.clockOutTime);
-                console.log('Working time set to:', TimeUtils.calculateWorkingTime(data.clockInTime, data.clockOutTime));
-            } else if (data && data.clockInTime && !data.clockOutTime) {
-                // 出勤中でも合計は空白（未確定は空白の方針）
-                workingTimeElement.textContent = '';
+                const workingTime = TimeUtils.calculateWorkingTime(data.clockInTime, data.clockOutTime);
+                workingTimeElement.textContent = workingTime;
+                console.log('Working time set to:', workingTime);
             } else {
-                workingTimeElement.textContent = '';
+                workingTimeElement.textContent = '--:--';
             }
         } else {
             console.log('workingTimeElement not found');
@@ -426,11 +366,6 @@ class DashboardScreen {
      */
     updateButtonStates(data) {
         if (!this.clockInBtn || !this.clockOutBtn) return;
-
-        if (!this.isBusinessDay(new Date())) {
-            this.applyNonBusinessDayState();
-            return;
-        }
 
         if (data && data.clockInTime && !data.clockOutTime) {
             // 出勤済み・退勤未済の場合

@@ -8,8 +8,6 @@ import com.kintai.entity.AttendanceRecord;
 import com.kintai.entity.Employee;
 import com.kintai.entity.VacationRequest;
 import com.kintai.entity.VacationStatus;
-import com.kintai.exception.AttendanceException;
-import com.kintai.exception.VacationException;
 import com.kintai.repository.AdjustmentRequestRepository;
 import com.kintai.repository.AttendanceRecordRepository;
 import com.kintai.repository.EmployeeRepository;
@@ -30,7 +28,6 @@ import java.time.LocalDateTime;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -208,31 +205,35 @@ class CancellationControllerTest {
     }
 
     @Test
-    void cannotCreateVacationRequestWithoutBusinessDay() {
+    void canCreateVacationRequestOnWeekend() {
         LocalDate sunday = LocalDate.of(2025, 9, 7);
-        assertThatThrownBy(() ->
-                vacationService.createVacationRequest(
-                        employee.getEmployeeId(), sunday, sunday, "休日申請"))
-                .isInstanceOf(VacationException.class)
-                .hasMessageContaining("申請期間に平日が含まれていません");
+
+        VacationRequestDto response = vacationService.createVacationRequest(
+                employee.getEmployeeId(), sunday, sunday, "休日申請");
+
+        assertThat(response.isSuccess()).isTrue();
+        VacationRequestDto.VacationData data = (VacationRequestDto.VacationData) response.getData();
+        assertThat(data.getDays()).isEqualTo(1);
+        assertThat(data.getStartDate()).isEqualTo(sunday);
+        assertThat(data.getEndDate()).isEqualTo(sunday);
     }
 
     @Test
-    void canCreateVacationRequestIncludingWeekendCountsWeekdaysOnly() {
-        LocalDate start = LocalDate.of(2025, 9, 1); // 月曜日
-        LocalDate end = LocalDate.of(2025, 9, 14);  // 日曜日を含む
+    void canCreateVacationRequestIncludingWeekendCountsCalendarDays() {
+        LocalDate start = LocalDate.of(2025, 9, 4); // 木曜日
+        LocalDate end = LocalDate.of(2025, 9, 7);   // 日曜日まで
 
         VacationRequestDto response = vacationService.createVacationRequest(
                 employee.getEmployeeId(), start, end, "長期休暇");
 
         VacationRequestDto.VacationData data = (VacationRequestDto.VacationData) response.getData();
-        assertThat(data.getDays()).isEqualTo(10);
+        assertThat(data.getDays()).isEqualTo(4);
         assertThat(data.getStartDate()).isEqualTo(start);
         assertThat(data.getEndDate()).isEqualTo(end);
     }
 
     @Test
-    void cannotCreateAdjustmentRequestOnHoliday() {
+    void canCreateAdjustmentRequestOnHoliday() {
         LocalDate sunday = LocalDate.of(2025, 9, 7);
         AdjustmentRequestDto dto = new AdjustmentRequestDto(
                 employee.getEmployeeId(),
@@ -242,8 +243,35 @@ class CancellationControllerTest {
                 "休日打刻修正"
         );
 
-        assertThatThrownBy(() -> adjustmentRequestService.createAdjustmentRequest(dto))
-                .isInstanceOf(AttendanceException.class)
-                .hasMessageContaining("土日祝は打刻修正を申請できません");
+        AdjustmentRequest adjustmentRequest = adjustmentRequestService.createAdjustmentRequest(dto);
+
+        assertThat(adjustmentRequest).isNotNull();
+        assertThat(adjustmentRequest.getTargetDate()).isEqualTo(sunday);
+        assertThat(adjustmentRequest.getNewClockIn()).isEqualTo(dto.getNewClockIn());
+        assertThat(adjustmentRequest.getNewClockOut()).isEqualTo(dto.getNewClockOut());
+    }
+
+    @Test
+    void apiAllowsAdjustmentRequestOnWeekend() throws Exception {
+        LocalDate sunday = LocalDate.of(2025, 9, 7);
+
+        String payload = objectMapper.writeValueAsString(
+                Map.of(
+                        "employeeId", employee.getEmployeeId().toString(),
+                        "date", sunday.toString(),
+                        "clockInDate", sunday.toString(),
+                        "clockInTime", "09:00",
+                        "clockOutDate", sunday.toString(),
+                        "clockOutTime", "18:00",
+                        "reason", "API休日申請"
+                )
+        );
+
+        mockMvc.perform(post("/api/attendance/adjustment-request")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(payload))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.message").value("修正申請が正常に作成されました"));
     }
 }
