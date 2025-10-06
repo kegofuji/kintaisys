@@ -61,8 +61,8 @@ public class AttendanceService {
      */
     public ClockResponse clockIn(ClockInRequest request) {
         Long employeeId = request.getEmployeeId();
-        LocalDate today = LocalDate.now();
         LocalDateTime now = timeCalculator.getCurrentTokyoTime();
+        LocalDate today = now.toLocalDate();
         
         // 1. 従業員存在チェック
         Employee employee = employeeRepository.findByEmployeeId(employeeId)
@@ -129,8 +129,8 @@ public class AttendanceService {
     public ClockResponse clockOut(ClockOutRequest request) {
         try {
             Long employeeId = request.getEmployeeId();
-            LocalDate today = LocalDate.now();
             LocalDateTime now = timeCalculator.getCurrentTokyoTime();
+            LocalDate today = now.toLocalDate();
             
             // 1. 従業員存在チェック
             Employee employee = employeeRepository.findByEmployeeId(employeeId)
@@ -269,7 +269,7 @@ public class AttendanceService {
             }
             
             // 3. 勤怠履歴を取得（過去30日分）
-            LocalDate endDate = LocalDate.now();
+            LocalDate endDate = timeCalculator.getCurrentTokyoTime().toLocalDate();
             LocalDate startDate = endDate.minusDays(30);
             
             List<AttendanceRecord> records = attendanceRecordRepository
@@ -339,7 +339,7 @@ public class AttendanceService {
      */
     @Transactional(readOnly = true)
     public ClockResponse getTodayAttendance(Long employeeId) {
-        LocalDate today = LocalDate.now();
+        LocalDate today = timeCalculator.getCurrentTokyoTime().toLocalDate();
         
         // 1. 従業員存在チェック
         Employee employee = employeeRepository.findByEmployeeId(employeeId)

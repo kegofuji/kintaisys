@@ -310,7 +310,6 @@ class HistoryScreen {
 
         data.forEach(record => {
             const row = document.createElement('tr');
-            row.style.cursor = 'pointer';
             row.classList.add('attendance-row');
 
             const hasIn = !!record.clockInTime;
@@ -352,11 +351,6 @@ class HistoryScreen {
                 <td>${nightWorkDisplay}</td>
                 <td>${status}</td>
             `;
-
-            // クリックイベントを追加
-            row.addEventListener('click', () => {
-                this.showAttendanceDetail(record);
-            });
 
             this.historyTableBody.appendChild(row);
         });
@@ -1134,7 +1128,6 @@ class HistoryScreen {
         if (attendance) {
             // 勤怠データがある場合
             const row = document.createElement('tr');
-            row.style.cursor = 'pointer';
             row.classList.add('attendance-row');
 
             // 時刻表示
@@ -1184,11 +1177,6 @@ class HistoryScreen {
                 <td>${status}</td>
             `;
 
-            // クリックイベントを追加
-            row.addEventListener('click', () => {
-                this.showAttendanceDetail(attendance);
-            });
-
             this.historyTableBody.appendChild(row);
         } else {
             // 勤怠データがない場合
@@ -1215,70 +1203,6 @@ class HistoryScreen {
             `;
             this.historyTableBody.appendChild(row);
         }
-    }
-
-    /**
-     * 勤怠詳細表示
-     * @param {Object} record - 勤怠記録
-     */
-    showAttendanceDetail(record) {
-        // モーダルの要素を取得
-        const modal = document.getElementById('attendanceDetailModal');
-        if (!modal) {
-            console.error('勤怠詳細モーダルが見つかりません');
-            return;
-        }
-
-        // 基本情報を設定
-        const isConfirmed = !!(record.clockInTime && record.clockOutTime);
-        // 日付をyyyy/mm/dd形式に変換
-        const formatDate = (dateStr) => {
-            if (!dateStr) return '';
-            const date = new Date(dateStr);
-            const year = date.getFullYear();
-            const month = String(date.getMonth() + 1).padStart(2, '0');
-            const day = String(date.getDate()).padStart(2, '0');
-            return `${year}/${month}/${day}`;
-        };
-        document.getElementById('detailDate').textContent = isConfirmed ? formatDate(record.attendanceDate) : '';
-        
-        const clockInTime = isConfirmed && record.clockInTime ? 
-            new Date(record.clockInTime).toLocaleTimeString('ja-JP', {hour: '2-digit', minute: '2-digit'}) : '';
-        const clockOutTime = isConfirmed && record.clockOutTime ? 
-            new Date(record.clockOutTime).toLocaleTimeString('ja-JP', {hour: '2-digit', minute: '2-digit'}) : '';
-        
-        document.getElementById('detailClockIn').textContent = clockInTime;
-        document.getElementById('detailClockOut').textContent = clockOutTime;
-
-        // 勤務時間計算
-        const workingTime = (isConfirmed && record.clockInTime && record.clockOutTime)
-            ? TimeUtils.calculateWorkingTime(record.clockInTime, record.clockOutTime)
-            : '';
-        document.getElementById('detailWorkingTime').textContent = workingTime;
-
-        // ステータス設定（未確定は空白）
-        let status = (isConfirmed) ? '退勤済み' : '';
-        document.getElementById('detailStatus').textContent = status;
-
-        // 詳細情報を設定
-        const safeFormat = (value) => formatMinutesToTime(value ?? 0);
-        const lateDisplay = isConfirmed ? safeFormat(record.lateMinutes) : '';
-        const earlyLeaveDisplay = isConfirmed ? safeFormat(record.earlyLeaveMinutes) : '';
-        const overtimeDisplay = isConfirmed ? safeFormat(record.overtimeMinutes) : '';
-        const nightWorkDisplay = isConfirmed ? safeFormat(record.nightShiftMinutes) : '';
-
-        document.getElementById('detailLate').textContent = lateDisplay;
-        document.getElementById('detailEarlyLeave').textContent = earlyLeaveDisplay;
-        document.getElementById('detailOvertime').textContent = overtimeDisplay;
-        document.getElementById('detailNightWork').textContent = nightWorkDisplay;
-
-        // 備考設定
-        const notes = record.notes || '特記事項はありません';
-        document.getElementById('detailNotes').textContent = notes;
-
-        // モーダルを表示
-        const modalInstance = new bootstrap.Modal(modal);
-        modalInstance.show();
     }
 
     /**

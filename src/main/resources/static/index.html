@@ -392,7 +392,7 @@
                                     </div>
                                     <div class="card-body">
                                         <div class="table-responsive">
-                                            <table class="table table-striped table-hover">
+                                            <table class="table table-striped">
                                                 <thead>
                                                     <tr>
                                                         <th>日付</th>
@@ -414,79 +414,6 @@
                                     </div>
                                 </div>
                             </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- 勤怠詳細モーダル -->
-            <div class="modal fade" id="attendanceDetailModal" tabindex="-1" aria-labelledby="attendanceDetailModalLabel" aria-hidden="true">
-                <div class="modal-dialog modal-lg">
-                    <div class="modal-content">
-                        <div class="modal-header">
-                            <h5 class="modal-title" id="attendanceDetailModalLabel">勤怠詳細</h5>
-                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                        </div>
-                        <div class="modal-body">
-                            <div class="row">
-                                <div class="col-md-6">
-                                    <h6>基本情報</h6>
-                                    <table class="table table-sm">
-                                        <tr>
-                                            <td><strong>日付:</strong></td>
-                                            <td id="detailDate">-</td>
-                                        </tr>
-                                        <tr>
-                                            <td><strong>出勤時刻:</strong></td>
-                                            <td id="detailClockIn">-</td>
-                                        </tr>
-                                        <tr>
-                                            <td><strong>退勤時刻:</strong></td>
-                                            <td id="detailClockOut">-</td>
-                                        </tr>
-                                        <tr>
-                                            <td><strong>勤務時間:</strong></td>
-                                            <td id="detailWorkingTime">-</td>
-                                        </tr>
-                                        <tr>
-                                            <td><strong>ステータス:</strong></td>
-                                            <td id="detailStatus">-</td>
-                                        </tr>
-                                    </table>
-                                </div>
-                                <div class="col-md-6">
-                                    <h6>詳細情報</h6>
-                                    <table class="table table-sm">
-                                        <tr>
-                                            <td><strong>遅刻時間:</strong></td>
-                                            <td id="detailLate">-</td>
-                                        </tr>
-                                        <tr>
-                                            <td><strong>早退時間:</strong></td>
-                                            <td id="detailEarlyLeave">-</td>
-                                        </tr>
-                                        <tr>
-                                            <td><strong>残業時間:</strong></td>
-                                            <td id="detailOvertime">-</td>
-                                        </tr>
-                                        <tr>
-                                            <td><strong>深夜時間:</strong></td>
-                                            <td id="detailNightWork">-</td>
-                                        </tr>
-                                    </table>
-                                </div>
-                            </div>
-                            <div class="row mt-3">
-                                <div class="col-12">
-                                    <h6>備考</h6>
-                                    <div id="detailNotes" class="border p-2 rounded bg-light">
-                                        特記事項はありません
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="modal-footer">
-                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">閉じる</button>
                         </div>
                     </div>
                 </div>
@@ -875,12 +802,6 @@
 
     <!-- カスタムスタイル -->
     <style>
-        .attendance-row:hover {
-            background-color: #f8f9fa !important;
-            transform: scale(1.01);
-            transition: all 0.2s ease;
-        }
-        
         .calendar-day:hover {
             background-color: #e3f2fd !important;
             transform: scale(1.05);
