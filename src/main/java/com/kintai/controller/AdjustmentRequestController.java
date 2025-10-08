@@ -41,7 +41,7 @@ public class AdjustmentRequestController {
             
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
-            response.put("message", "修正申請が正常に作成されました");
+            response.put("message", "打刻修正が完了しました");
             response.put("adjustmentRequestId", adjustmentRequest.getAdjustmentRequestId());
             response.put("status", adjustmentRequest.getStatus());
             response.put("createdAt", adjustmentRequest.getCreatedAt());
@@ -131,7 +131,7 @@ public class AdjustmentRequestController {
 
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
-            response.put("message", "修正申請が正常に作成されました");
+            response.put("message", "打刻修正が完了しました");
             response.put("adjustmentRequestId", adjustmentRequest.getAdjustmentRequestId());
             response.put("status", adjustmentRequest.getStatus());
             response.put("createdAt", adjustmentRequest.getCreatedAt());

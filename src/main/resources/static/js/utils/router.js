@@ -60,7 +60,7 @@ class Router {
         // 勤怠管理画面は廃止
         this.routes.set('/admin/approvals', { screen: 'adminApprovalsScreen', title: '打刻修正', admin: true });
         this.routes.set('/admin/reports', { screen: 'adminReportsScreen', title: 'レポート出力', admin: true });
-        this.routes.set('/admin/vacation-management', { screen: 'adminVacationManagementScreen', title: '有給承認・付与調整', admin: true });
+        this.routes.set('/admin/vacation-management', { screen: 'adminVacationManagementScreen', title: '有給承認', admin: true });
     }
 
     /**

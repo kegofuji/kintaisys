@@ -205,9 +205,9 @@ public class VacationService {
 
     private String buildSuccessMessage(int cancelledCount) {
         if (cancelledCount <= 0) {
-            return "有給申請を受け付けました";
+            return "有給申請が完了しました";
         }
-        return String.format("有給申請を受け付けました（該当する打刻修正申請を%d件取り消しました）", cancelledCount);
+        return String.format("有給申請が完了しました（該当する打刻修正申請を%d件取り消しました）", cancelledCount);
     }
 
     /**
