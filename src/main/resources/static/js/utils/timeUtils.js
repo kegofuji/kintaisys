@@ -57,16 +57,18 @@ class TimeUtils {
             // 総勤務分
             let totalMinutes = Math.floor((clockOut - clockIn) / (1000 * 60));
 
-            // 昼休憩(12:00-13:00)にかかった分を控除
-            const lunchStart = new Date(clockIn);
-            lunchStart.setHours(12, 0, 0, 0);
-            const lunchEnd = new Date(clockIn);
-            lunchEnd.setHours(13, 0, 0, 0);
+            // 昼休憩(12:00-13:00)にかかった分を控除（勤務時間が短い場合は昼休憩控除をしない）
+            if (totalMinutes > 60) { // 1時間以上の勤務の場合のみ昼休憩控除
+                const lunchStart = new Date(clockIn);
+                lunchStart.setHours(12, 0, 0, 0);
+                const lunchEnd = new Date(clockIn);
+                lunchEnd.setHours(13, 0, 0, 0);
 
-            const overlapStart = new Date(Math.max(clockIn.getTime(), lunchStart.getTime()));
-            const overlapEnd = new Date(Math.min(clockOut.getTime(), lunchEnd.getTime()));
-            const overlapMinutes = Math.max(0, Math.floor((overlapEnd - overlapStart) / (1000 * 60)));
-            totalMinutes -= overlapMinutes;
+                const overlapStart = new Date(Math.max(clockIn.getTime(), lunchStart.getTime()));
+                const overlapEnd = new Date(Math.min(clockOut.getTime(), lunchEnd.getTime()));
+                const overlapMinutes = Math.max(0, Math.floor((overlapEnd - overlapStart) / (1000 * 60)));
+                totalMinutes -= overlapMinutes;
+            }
 
             if (totalMinutes < 0) totalMinutes = 0;
             return this.formatMinutesToTime(totalMinutes);

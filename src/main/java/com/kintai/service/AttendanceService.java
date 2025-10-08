@@ -14,6 +14,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 
 import java.util.List;
 import org.springframework.security.core.Authentication;
@@ -23,7 +24,6 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.List;
 import java.util.Optional;
 
 /**
@@ -116,172 +116,153 @@ public class AttendanceService {
      * @return 打刻レスポンス
      */
     public ClockResponse clockOut(ClockOutRequest request) {
-        try {
-            Long employeeId = request.getEmployeeId();
-            LocalDateTime now = timeCalculator.getCurrentTokyoTime();
-            LocalDate today = now.toLocalDate();
-            
-            // 1. 従業員存在チェック
-            Employee employee = employeeRepository.findByEmployeeId(employeeId)
-                    .orElseThrow(() -> new AttendanceException(
-                            AttendanceException.EMPLOYEE_NOT_FOUND, 
-                            "従業員が見つかりません"));
-            
-            // 2. 退職者チェック
-            if (employee.isRetired()) {
-                throw new AttendanceException(
-                        AttendanceException.RETIRED_EMPLOYEE, 
-                        "退職済みの従業員です");
-            }
-            
-            // 3. 出勤済みチェック（重複データも含めて処理）
-            List<AttendanceRecord> editableRecords = attendanceRecordRepository
-                    .findEditableRecords(employeeId, today);
-            
-            if (editableRecords.isEmpty()) {
-                throw new AttendanceException(
-                        AttendanceException.NOT_CLOCKED_IN, 
-                        "出勤打刻がされていません");
-            }
-            
-            // 重複データがある場合はクリーンアップ
-            if (editableRecords.size() > 1) {
+        Long employeeId = request.getEmployeeId();
+        LocalDateTime now = timeCalculator.getCurrentTokyoTime();
+        LocalDate today = now.toLocalDate();
+        
+        // 最大3回までリトライ
+        int maxRetries = 3;
+        for (int attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                System.out.println("退勤打刻処理開始 (試行" + attempt + "/" + maxRetries + "): employeeId=" + employeeId);
+                
+                // 1. 従業員存在チェック
+                Employee employee = employeeRepository.findByEmployeeId(employeeId)
+                        .orElseThrow(() -> new AttendanceException(
+                                AttendanceException.EMPLOYEE_NOT_FOUND, 
+                                "従業員が見つかりません"));
+                
+                // 2. 退職者チェック
+                if (employee.isRetired()) {
+                    throw new AttendanceException(
+                            AttendanceException.RETIRED_EMPLOYEE, 
+                            "退職済みの従業員です");
+                }
+                
+                // 3. 重複データをクリーンアップ
                 cleanupDuplicateAttendanceRecords(employeeId, today);
-                // クリーンアップ後に再度取得
-                editableRecords = attendanceRecordRepository
-                        .findEditableRecords(employeeId, today);
-                if (editableRecords.isEmpty()) {
+                
+                // 4. 最新の勤怠記録を取得
+                Optional<AttendanceRecord> attendanceRecordOpt = attendanceRecordRepository
+                        .findByEmployeeIdAndAttendanceDate(employeeId, today);
+                
+                if (attendanceRecordOpt.isEmpty()) {
                     throw new AttendanceException(
                             AttendanceException.NOT_CLOCKED_IN, 
                             "出勤打刻がされていません");
                 }
-            }
-            
-            // 最新の編集可能な記録を取得
-            AttendanceRecord attendanceRecord = editableRecords.get(0);
-            
-            // 4. 既に退勤済チェック
-            if (attendanceRecord.getClockOutTime() != null) {
-                // 既に退勤済みの場合は、現在の状態を返す
-                ClockResponse.ClockData data = new ClockResponse.ClockData(
-                        attendanceRecord.getAttendanceId(),
-                        attendanceRecord.getAttendanceDate(),
-                        attendanceRecord.getClockInTime(),
-                        attendanceRecord.getClockOutTime(),
-                        attendanceRecord.getLateMinutes(),
-                        attendanceRecord.getEarlyLeaveMinutes(),
-                        attendanceRecord.getOvertimeMinutes(),
-                        attendanceRecord.getNightShiftMinutes(),
-                        attendanceRecord.getAttendanceStatus() != null ? attendanceRecord.getAttendanceStatus().name() : null,
-                        attendanceRecord.getAttendanceFixedFlag()
-                );
                 
-                ClockResponse response = new ClockResponse(true, "既に退勤打刻済みです", data);
+                AttendanceRecord attendanceRecord = attendanceRecordOpt.get();
+                
+                if (attendanceRecord.getClockInTime() == null) {
+                    throw new AttendanceException(
+                            AttendanceException.NOT_CLOCKED_IN, 
+                            "出勤打刻がされていません");
+                }
+                
+                // 5. 既に退勤済チェック
+                if (attendanceRecord.getClockOutTime() != null) {
+                    // 既に退勤済みの場合は、現在の状態を返す
+                    ClockResponse.ClockData data = new ClockResponse.ClockData(
+                            attendanceRecord.getAttendanceId(),
+                            attendanceRecord.getAttendanceDate(),
+                            attendanceRecord.getClockInTime(),
+                            attendanceRecord.getClockOutTime(),
+                            attendanceRecord.getLateMinutes(),
+                            attendanceRecord.getEarlyLeaveMinutes(),
+                            attendanceRecord.getOvertimeMinutes(),
+                            attendanceRecord.getNightShiftMinutes(),
+                            attendanceRecord.getAttendanceStatus() != null ? attendanceRecord.getAttendanceStatus().name() : null,
+                            attendanceRecord.getAttendanceFixedFlag()
+                    );
+                    
+                    ClockResponse response = new ClockResponse(true, "既に退勤打刻済みです", data);
+                    setUserInfoToResponse(response);
+                    return response;
+                }
+                
+                // 6. 退勤時刻設定
+                attendanceRecord.setClockOutTime(now);
+                
+                // 7. 時間計算
+                LocalDateTime clockInTime = attendanceRecord.getClockInTime();
+                
+                // 早退時間計算
+                int earlyLeaveMinutes = timeCalculator.calculateEarlyLeaveMinutes(now);
+                attendanceRecord.setEarlyLeaveMinutes(earlyLeaveMinutes);
+                
+                // 実働時間計算
+                int workingMinutes = timeCalculator.calculateWorkingMinutes(clockInTime, now);
+
+                if (workingMinutes >= TimeCalculator.STANDARD_WORKING_MINUTES) {
+                    attendanceRecord.setLateMinutes(0);
+                    attendanceRecord.setEarlyLeaveMinutes(0);
+                    earlyLeaveMinutes = 0;
+                }
+                
+                // 残業時間計算
+                int overtimeMinutes = timeCalculator.calculateOvertimeMinutes(workingMinutes);
+                attendanceRecord.setOvertimeMinutes(overtimeMinutes);
+                
+                // 深夜勤務時間計算
+                int nightShiftMinutes = timeCalculator.calculateNightShiftMinutes(clockInTime, now);
+                attendanceRecord.setNightShiftMinutes(nightShiftMinutes);
+                
+                // 8. 勤怠ステータス更新
+                updateAttendanceStatus(attendanceRecord, earlyLeaveMinutes, overtimeMinutes, nightShiftMinutes);
+                
+                // 9. メトリクス正規化
+                timeCalculator.normalizeMetrics(attendanceRecord);
+                
+                // 10. データベース保存
+                AttendanceRecord savedRecord = attendanceRecordRepository.save(attendanceRecord);
+                System.out.println("退勤打刻処理: データベース保存成功, ID=" + savedRecord.getAttendanceId());
+                
+                // 11. レスポンス作成
+                ClockResponse response = new ClockResponse(true, "退勤打刻完了", toClockData(savedRecord));
                 setUserInfoToResponse(response);
                 return response;
-            }
-            
-            // 5. 退勤時刻設定
-            attendanceRecord.setClockOutTime(now);
-            
-            // 6. 時間計算
-            LocalDateTime clockInTime = attendanceRecord.getClockInTime();
-            
-            // 早退時間計算
-            int earlyLeaveMinutes = timeCalculator.calculateEarlyLeaveMinutes(now);
-            attendanceRecord.setEarlyLeaveMinutes(earlyLeaveMinutes);
-            
-            // 実働時間計算
-            int workingMinutes = timeCalculator.calculateWorkingMinutes(clockInTime, now);
-
-            if (workingMinutes >= TimeCalculator.STANDARD_WORKING_MINUTES) {
-                attendanceRecord.setLateMinutes(0);
-                attendanceRecord.setEarlyLeaveMinutes(0);
-                earlyLeaveMinutes = 0;
-            }
-            
-            // 残業時間計算
-            int overtimeMinutes = timeCalculator.calculateOvertimeMinutes(workingMinutes);
-            attendanceRecord.setOvertimeMinutes(overtimeMinutes);
-            
-            // 深夜勤務時間計算
-            int nightShiftMinutes = timeCalculator.calculateNightShiftMinutes(clockInTime, now);
-            attendanceRecord.setNightShiftMinutes(nightShiftMinutes);
-            
-            // 7. 勤怠ステータス更新
-            updateAttendanceStatus(attendanceRecord, earlyLeaveMinutes, overtimeMinutes, nightShiftMinutes);
-            
-            // 8. データベース保存（楽観的ロック対応）
-            timeCalculator.normalizeMetrics(attendanceRecord);
-            System.out.println("退勤打刻保存前: " + attendanceRecord.getClockInTime() + " -> " + attendanceRecord.getClockOutTime());
-            AttendanceRecord savedRecord;
-            try {
-                savedRecord = attendanceRecordRepository.save(attendanceRecord);
-                System.out.println("退勤打刻保存成功: " + savedRecord.getClockInTime() + " -> " + savedRecord.getClockOutTime());
+                
+            } catch (ObjectOptimisticLockingFailureException e) {
+                System.err.println("退勤打刻処理: 楽観的ロックエラー (試行" + attempt + "/" + maxRetries + ")=" + e.getMessage());
+                
+                if (attempt == maxRetries) {
+                    // 最後の試行でも失敗した場合
+                    throw new AttendanceException("CONCURRENT_UPDATE_ERROR", 
+                            "他の操作と競合しました。しばらく時間をおいてから再度お試しください。");
+                }
+                
+                // 少し待ってから再試行
+                try {
+                    Thread.sleep(100 * attempt); // 100ms, 200ms, 300ms
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    throw new AttendanceException("INTERNAL_ERROR", "処理が中断されました");
+                }
+                
+            } catch (AttendanceException e) {
+                // AttendanceExceptionは再試行しない
+                throw e;
             } catch (Exception e) {
-                System.err.println("退勤打刻保存失敗: " + e.getMessage());
-                // 保存に失敗した場合は、最新のレコードを再取得して再試行
-                List<AttendanceRecord> latestRecords = attendanceRecordRepository
-                        .findEditableRecords(employeeId, today);
-                if (!latestRecords.isEmpty()) {
-                    AttendanceRecord latestRecord = latestRecords.get(0);
-                    if (latestRecord.getClockOutTime() == null) {
-                        latestRecord.setClockOutTime(now);
-                        latestRecord.setEarlyLeaveMinutes(earlyLeaveMinutes);
-                        latestRecord.setOvertimeMinutes(overtimeMinutes);
-                        latestRecord.setNightShiftMinutes(nightShiftMinutes);
-                        updateAttendanceStatus(latestRecord, earlyLeaveMinutes, overtimeMinutes, nightShiftMinutes);
-                        timeCalculator.normalizeMetrics(latestRecord);
-                        savedRecord = attendanceRecordRepository.save(latestRecord);
-                    } else {
-                        // 既に退勤済みの場合は、現在の状態を返す
-                        ClockResponse.ClockData data = new ClockResponse.ClockData(
-                                latestRecord.getAttendanceId(),
-                                latestRecord.getAttendanceDate(),
-                                latestRecord.getClockInTime(),
-                                latestRecord.getClockOutTime(),
-                                latestRecord.getLateMinutes(),
-                                latestRecord.getEarlyLeaveMinutes(),
-                                latestRecord.getOvertimeMinutes(),
-                                latestRecord.getNightShiftMinutes(),
-                                latestRecord.getAttendanceStatus() != null ? latestRecord.getAttendanceStatus().name() : null,
-                                latestRecord.getAttendanceFixedFlag()
-                        );
-                        
-                        ClockResponse response = new ClockResponse(true, "既に退勤打刻済みです", data);
-                        setUserInfoToResponse(response);
-                        return response;
-                    }
-                } else {
-                    throw new AttendanceException(
-                            AttendanceException.NOT_CLOCKED_IN, 
-                            "出勤打刻がされていません");
+                System.err.println("退勤打刻処理: 予期しないエラー (試行" + attempt + "/" + maxRetries + ")=" + e.getMessage());
+                e.printStackTrace();
+                
+                if (attempt == maxRetries) {
+                    throw new AttendanceException("INTERNAL_ERROR", "内部エラーが発生しました: " + e.getMessage());
+                }
+                
+                // 少し待ってから再試行
+                try {
+                    Thread.sleep(100 * attempt);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    throw new AttendanceException("INTERNAL_ERROR", "処理が中断されました");
                 }
             }
-            
-            // 9. レスポンス作成
-            ClockResponse.ClockData data = new ClockResponse.ClockData(
-                    savedRecord.getAttendanceId(),
-                    savedRecord.getAttendanceDate(),
-                    savedRecord.getClockInTime(),
-                    savedRecord.getClockOutTime(),
-                    savedRecord.getLateMinutes(),
-                    savedRecord.getEarlyLeaveMinutes(),
-                    savedRecord.getOvertimeMinutes(),
-                    savedRecord.getNightShiftMinutes(),
-                    savedRecord.getAttendanceStatus() != null ? savedRecord.getAttendanceStatus().name() : null,
-                    savedRecord.getAttendanceFixedFlag()
-            );
-            
-            ClockResponse response = new ClockResponse(true, "退勤打刻完了", toClockData(savedRecord));
-            setUserInfoToResponse(response);
-            return response;
-        } catch (AttendanceException e) {
-            throw e;
-        } catch (Exception e) {
-            e.printStackTrace();
-            throw new AttendanceException("INTERNAL_ERROR", "内部エラーが発生しました: " + e.getMessage());
         }
+        
+        // ここには到達しないはず
+        throw new AttendanceException("INTERNAL_ERROR", "予期しないエラーが発生しました");
     }
     
     /**
@@ -565,4 +546,6 @@ public class AttendanceService {
     private int safeInt(Integer value) {
         return value == null ? 0 : value;
     }
+    
+    
 }

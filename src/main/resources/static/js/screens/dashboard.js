@@ -187,17 +187,10 @@ class DashboardScreen {
                 console.warn('カレンダー更新エラー:', calendarError);
             }
         } catch (error) {
-            // エラーメッセージを適切に表示
-            let errorMessage = error.message || '退勤打刻に失敗しました';
-            if (errorMessage.includes('出勤打刻がされていません')) {
-                errorMessage = 'まず出勤打刻を行ってください。';
-            } else if (errorMessage.includes('既に退勤打刻済み')) {
-                errorMessage = '既に退勤打刻済みです。';
-                // 既に退勤済みの場合は成功として扱い、履歴を更新
-                this.loadTodayAttendance();
-                this.loadAttendanceHistory();
-            }
-            this.showAlert(errorMessage, 'warning');
+            // 出勤・退勤打刻以外のエラーダイアログは表示しない
+            // 状態を再同期のみ実行
+            this.loadTodayAttendance();
+            this.loadAttendanceHistory();
         }
     }
 

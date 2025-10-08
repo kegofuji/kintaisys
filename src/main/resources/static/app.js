@@ -250,17 +250,13 @@ async function handleClockIn() {
             await loadAttendanceHistory();
             await updateTodayAttendance();
         } else {
-            // エラーメッセージを適切に表示
-            let errorMessage = data.message || '出勤打刻に失敗しました';
-            if (errorMessage.includes('既に出勤打刻済み')) {
-                errorMessage = '既に出勤打刻済みです。退勤打刻ボタンをご利用ください。';
-            }
-            showAlert(errorMessage, 'warning');
-            await updateTodayAttendance(); // 状態を再同期
+            // 出勤・退勤打刻以外のエラーダイアログは表示しない
+            // 状態を再同期のみ実行
+            await updateTodayAttendance();
         }
     } catch (error) {
         console.error('出勤打刻エラー:', error);
-        showAlert('出勤打刻処理中にエラーが発生しました', 'danger');
+        // 出勤・退勤打刻以外のエラーダイアログは表示しない
     } finally {
         // ボタンの状態を復元
         if (clockInBtn) {
@@ -321,22 +317,13 @@ async function handleClockOut() {
                 console.warn('カレンダー更新エラー:', calendarError);
             }
         } else {
-            // エラーメッセージを適切に表示
-            let errorMessage = data.message || '退勤打刻に失敗しました';
-            if (errorMessage.includes('出勤打刻がされていません')) {
-                errorMessage = 'まず出勤打刻を行ってください。';
-            } else if (errorMessage.includes('既に退勤打刻済み')) {
-                errorMessage = '既に退勤打刻済みです。';
-                // 既に退勤済みの場合は成功として扱い、履歴を更新
-                await loadAttendanceHistory();
-                await updateTodayAttendance();
-            }
-            showAlert(errorMessage, 'warning');
-            await updateTodayAttendance(); // 状態を再同期
+            // 出勤・退勤打刻以外のエラーダイアログは表示しない
+            // 状態を再同期のみ実行
+            await updateTodayAttendance();
         }
     } catch (error) {
         console.error('退勤打刻エラー:', error);
-        showAlert('退勤打刻処理中にエラーが発生しました', 'danger');
+        // 出勤・退勤打刻以外のエラーダイアログは表示しない
     } finally {
         // ボタンの状態を復元
         if (clockOutBtn) {

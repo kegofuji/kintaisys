@@ -47,6 +47,9 @@ public class AttendanceRecord {
     @Column(name = "attendance_fixed_flag", nullable = false, columnDefinition = "BOOLEAN DEFAULT FALSE")
     private Boolean attendanceFixedFlag = false;
     
+    @Version
+    @Column(name = "version", nullable = false)
+    private Long version = 0L;
     
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
@@ -56,12 +59,14 @@ public class AttendanceRecord {
     
     // デフォルトコンストラクタ
     public AttendanceRecord() {
+        this.version = 0L;
     }
     
     // コンストラクタ
     public AttendanceRecord(Long employeeId, LocalDate attendanceDate) {
         this.employeeId = employeeId;
         this.attendanceDate = attendanceDate;
+        this.version = 0L;
         this.createdAt = LocalDateTime.now();
         this.updatedAt = LocalDateTime.now();
     }
@@ -70,6 +75,9 @@ public class AttendanceRecord {
     protected void onCreate() {
         createdAt = LocalDateTime.now();
         updatedAt = LocalDateTime.now();
+        if (version == null) {
+            version = 0L;
+        }
         normalizeMetrics();
     }
     
@@ -198,5 +206,13 @@ public class AttendanceRecord {
     
     public void setUpdatedAt(LocalDateTime updatedAt) {
         this.updatedAt = updatedAt;
+    }
+    
+    public Long getVersion() {
+        return version;
+    }
+    
+    public void setVersion(Long version) {
+        this.version = version;
     }
 }
