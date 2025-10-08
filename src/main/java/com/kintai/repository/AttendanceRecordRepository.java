@@ -17,12 +17,13 @@ import java.util.Optional;
 public interface AttendanceRecordRepository extends JpaRepository<AttendanceRecord, Long> {
     
     /**
-     * 従業員IDと勤怠日で勤怠記録を検索
+     * 従業員IDと勤怠日で勤怠記録を検索（最新の1件）
      * @param employeeId 従業員ID
      * @param attendanceDate 勤怠日
      * @return 勤怠記録（存在しない場合は空）
      */
-    Optional<AttendanceRecord> findByEmployeeIdAndAttendanceDate(Long employeeId, LocalDate attendanceDate);
+    @Query(value = "SELECT * FROM attendance_records WHERE employee_id = :employeeId AND attendance_date = :attendanceDate ORDER BY attendance_id DESC LIMIT 1", nativeQuery = true)
+    Optional<AttendanceRecord> findByEmployeeIdAndAttendanceDate(@Param("employeeId") Long employeeId, @Param("attendanceDate") LocalDate attendanceDate);
     
     /**
      * 編集可能な勤怠記録を検索（確定済みでないもの）
@@ -73,4 +74,13 @@ public interface AttendanceRecordRepository extends JpaRepository<AttendanceReco
      * @return 勤怠記録リスト（日付降順）
      */
     List<AttendanceRecord> findByEmployeeIdOrderByAttendanceDateDesc(Long employeeId);
+    
+    /**
+     * 従業員IDと勤怠日で重複する勤怠記録を検索
+     * @param employeeId 従業員ID
+     * @param attendanceDate 勤怠日
+     * @return 勤怠記録リスト（重複分）
+     */
+    @Query("SELECT ar FROM AttendanceRecord ar WHERE ar.employeeId = :employeeId AND ar.attendanceDate = :attendanceDate ORDER BY ar.attendanceId DESC")
+    List<AttendanceRecord> findDuplicatesByEmployeeIdAndAttendanceDate(@Param("employeeId") Long employeeId, @Param("attendanceDate") LocalDate attendanceDate);
 }

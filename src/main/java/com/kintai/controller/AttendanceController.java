@@ -82,8 +82,16 @@ public class AttendanceController {
      */
     @GetMapping("/today/{employeeId}")
     public ResponseEntity<ClockResponse> getTodayAttendance(@PathVariable Long employeeId) {
-        ClockResponse response = attendanceService.getTodayAttendance(employeeId);
-        return ResponseEntity.ok(response);
+        try {
+            ClockResponse response = attendanceService.getTodayAttendance(employeeId);
+            return ResponseEntity.ok(response);
+        } catch (AttendanceException e) {
+            ClockResponse errorResponse = new ClockResponse(false, e.getErrorCode(), e.getMessage());
+            return ResponseEntity.badRequest().body(errorResponse);
+        } catch (Exception e) {
+            ClockResponse errorResponse = new ClockResponse(false, "INTERNAL_ERROR", "内部エラーが発生しました");
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+        }
     }
     
     /**

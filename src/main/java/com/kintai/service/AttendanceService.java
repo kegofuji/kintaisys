@@ -339,52 +339,80 @@ public class AttendanceService {
      */
     @Transactional(readOnly = true)
     public ClockResponse getTodayAttendance(Long employeeId) {
-        LocalDate today = timeCalculator.getCurrentTokyoTime().toLocalDate();
-        
-        // 1. 従業員存在チェック
-        Employee employee = employeeRepository.findByEmployeeId(employeeId)
-                .orElseThrow(() -> new AttendanceException(
-                        AttendanceException.EMPLOYEE_NOT_FOUND, 
-                        "従業員が見つかりません"));
-        
-        // 2. 退職者チェック
-        if (employee.isRetired()) {
-            throw new AttendanceException(
-                    AttendanceException.RETIRED_EMPLOYEE, 
-                    "退職済みの従業員です");
-        }
-        
-        // 3. 今日の勤怠記録を取得
-        Optional<AttendanceRecord> attendanceRecord = attendanceRecordRepository
-                .findByEmployeeIdAndAttendanceDate(employeeId, today);
-        
-        if (attendanceRecord.isPresent()) {
-            AttendanceRecord record = attendanceRecord.get();
+        try {
+            LocalDate today = timeCalculator.getCurrentTokyoTime().toLocalDate();
             
-            ClockResponse.ClockData clockData = toClockData(record);
-            if (record.getClockInTime() != null && record.getClockOutTime() == null) {
-                clockData.setClockOutTime(null);
-                clockData.setEarlyLeaveMinutes(null);
-                clockData.setOvertimeMinutes(null);
-                clockData.setNightShiftMinutes(null);
+            // 1. 従業員存在チェック
+            Employee employee = employeeRepository.findByEmployeeId(employeeId)
+                    .orElseThrow(() -> new AttendanceException(
+                            AttendanceException.EMPLOYEE_NOT_FOUND, 
+                            "従業員が見つかりません"));
+            
+            // 2. 退職者チェック
+            if (employee.isRetired()) {
+                throw new AttendanceException(
+                        AttendanceException.RETIRED_EMPLOYEE, 
+                        "退職済みの従業員です");
             }
-            ClockResponse response = new ClockResponse();
-            response.setSuccess(true);
-            response.setMessage("今日の勤怠状況を取得しました");
-            response.setData(clockData);
-            setUserInfoToResponse(response);
-            return response;
-        } else {
-            // 今日の記録がない場合はnullを返す
-            ClockResponse response = new ClockResponse();
-            response.setSuccess(true);
-            response.setMessage("今日の勤怠記録はありません");
-            response.setData(null);
-            setUserInfoToResponse(response);
-            return response;
+            
+            // 3. 重複データをクリーンアップ
+            cleanupDuplicateAttendanceRecords(employeeId, today);
+            
+            // 4. 今日の勤怠記録を取得
+            Optional<AttendanceRecord> attendanceRecord = attendanceRecordRepository
+                    .findByEmployeeIdAndAttendanceDate(employeeId, today);
+            
+            if (attendanceRecord.isPresent()) {
+                AttendanceRecord record = attendanceRecord.get();
+                
+                ClockResponse.ClockData clockData = toClockData(record);
+                if (record.getClockInTime() != null && record.getClockOutTime() == null) {
+                    clockData.setClockOutTime(null);
+                    clockData.setEarlyLeaveMinutes(null);
+                    clockData.setOvertimeMinutes(null);
+                    clockData.setNightShiftMinutes(null);
+                }
+                ClockResponse response = new ClockResponse();
+                response.setSuccess(true);
+                response.setMessage("今日の勤怠状況を取得しました");
+                response.setData(clockData);
+                setUserInfoToResponse(response);
+                return response;
+            } else {
+                // 今日の記録がない場合はnullを返す
+                ClockResponse response = new ClockResponse();
+                response.setSuccess(true);
+                response.setMessage("今日の勤怠記録はありません");
+                response.setData(null);
+                setUserInfoToResponse(response);
+                return response;
+            }
+        } catch (AttendanceException e) {
+            throw e;
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new AttendanceException("INTERNAL_ERROR", "今日の勤怠状況の取得に失敗しました: " + e.getMessage());
         }
     }
     
+    /**
+     * 重複する勤怠記録をクリーンアップ
+     * @param employeeId 従業員ID
+     * @param date 対象日
+     */
+    @Transactional
+    public void cleanupDuplicateAttendanceRecords(Long employeeId, LocalDate date) {
+        List<AttendanceRecord> duplicates = attendanceRecordRepository
+                .findDuplicatesByEmployeeIdAndAttendanceDate(employeeId, date);
+        
+        if (duplicates.size() > 1) {
+            // 最新のレコード（最初の要素）を除いて、古いレコードを削除
+            for (int i = 1; i < duplicates.size(); i++) {
+                attendanceRecordRepository.delete(duplicates.get(i));
+            }
+        }
+    }
+
     /**
      * レスポンスにユーザー情報を設定
      * @param response レスポンス

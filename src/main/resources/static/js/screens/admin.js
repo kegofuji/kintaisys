@@ -150,11 +150,11 @@ class AdminScreen {
     }
 
     /**
-     * 管理者ダッシュボード初期化
+     * 管理者TOP初期化
      */
     initDashboard() {
-        // 管理者ダッシュボードの初期化処理
-        console.log('管理者ダッシュボードを初期化しました');
+        // 管理者TOPの初期化処理
+        console.log('管理者TOPを初期化しました');
     }
 
     /**
