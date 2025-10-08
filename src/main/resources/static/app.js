@@ -426,7 +426,7 @@ function generateMockAttendanceData() {
             clockInTime: clockIn.toISOString(),
             clockOutTime: clockOut.toISOString(),
             workingHours: workingHours,
-            status: i === 0 ? '出勤中' : '退勤済み'
+            status: i === 0 ? '出勤中' : '退勤済'
         });
     }
     
@@ -476,7 +476,7 @@ function displayAttendanceHistory(data) {
         if (record.clockInTime && !record.clockOutTime) {
             statusText = '出勤中';
         } else if (record.clockInTime && record.clockOutTime) {
-            statusText = '退勤済み';
+            statusText = '退勤済';
         }
         
         row.innerHTML = `
@@ -1267,7 +1267,7 @@ function filterAttendanceTableByDate(dateString) {
         if (attendance.clockInTime && !attendance.clockOutTime) {
             status = '出勤中';
         } else if (attendance.clockInTime && attendance.clockOutTime) {
-            status = '退勤済み';
+            status = '退勤済';
         }
 
         // 日付をyyyy/mm/dd形式に変換
@@ -1529,7 +1529,7 @@ function updateAttendanceDisplay(record, clockInTime, clockOutTime, workingTime,
         } else if (record.clockInTime && !record.clockOutTime) {
             clockStatus.innerHTML = '出勤中';
         } else {
-            clockStatus.innerHTML = '退勤済み';
+            clockStatus.innerHTML = '退勤済';
         }
     }
 }
@@ -1632,7 +1632,7 @@ function updateButtonStates(record, clockInBtn, clockOutBtn) {
         clockOutBtn.disabled = true;
         clockOutBtn.classList.remove('btn-danger');
         clockOutBtn.classList.add('btn-secondary');
-        clockOutBtn.textContent = record && record.clockOutTime ? '退勤済み' : '退勤打刻';
+        clockOutBtn.textContent = record && record.clockOutTime ? '退勤済' : '退勤打刻';
     } else {
         clockOutBtn.disabled = false;
         clockOutBtn.classList.remove('btn-secondary');

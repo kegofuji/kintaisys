@@ -26,13 +26,13 @@ public interface AttendanceRecordRepository extends JpaRepository<AttendanceReco
     Optional<AttendanceRecord> findByEmployeeIdAndAttendanceDate(@Param("employeeId") Long employeeId, @Param("attendanceDate") LocalDate attendanceDate);
     
     /**
-     * 編集可能な勤怠記録を検索（確定済みでないもの）
+     * 編集可能な勤怠記録を検索（確定済みでないもの、最新の1件）
      * @param employeeId 従業員ID
      * @param date 勤怠日
      * @return 編集可能な勤怠記録（存在しない場合は空）
      */
-    @Query("SELECT ar FROM AttendanceRecord ar WHERE ar.employeeId = :employeeId AND ar.attendanceDate = :date AND ar.attendanceFixedFlag = false")
-    Optional<AttendanceRecord> findEditableRecord(@Param("employeeId") Long employeeId, @Param("date") LocalDate date);
+    @Query(value = "SELECT * FROM attendance_records WHERE employee_id = :employeeId AND attendance_date = :date AND attendance_fixed_flag = false ORDER BY attendance_id DESC LIMIT 1", nativeQuery = true)
+    List<AttendanceRecord> findEditableRecords(@Param("employeeId") Long employeeId, @Param("date") LocalDate date);
     
     /**
      * 従業員IDと勤怠日で出勤済みかチェック
@@ -43,10 +43,10 @@ public interface AttendanceRecordRepository extends JpaRepository<AttendanceReco
     boolean existsByEmployeeIdAndAttendanceDateAndClockInTimeIsNotNull(Long employeeId, LocalDate attendanceDate);
     
     /**
-     * 従業員IDと勤怠日で退勤済みかチェック
+     * 従業員IDと勤怠日で退勤済かチェック
      * @param employeeId 従業員ID
      * @param attendanceDate 勤怠日
-     * @return 退勤済みの場合true
+     * @return 退勤済の場合true
      */
     boolean existsByEmployeeIdAndAttendanceDateAndClockOutTimeIsNotNull(Long employeeId, LocalDate attendanceDate);
     

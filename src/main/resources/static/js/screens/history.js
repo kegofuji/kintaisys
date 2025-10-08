@@ -328,7 +328,7 @@ class HistoryScreen {
             let status = '';
             if (!hasIn) status = '出勤前';
             else if (hasIn && !hasOut) status = '出勤中';
-            else if (isConfirmed) status = '退勤済み';
+            else if (isConfirmed) status = '退勤済';
 
             // 日付をyyyy/mm/dd形式に変換
             const formatDate = (dateStr) => {
@@ -1153,7 +1153,7 @@ class HistoryScreen {
             // ステータス表示
             let status = '出勤前';
             if (attendance.clockInTime && !attendance.clockOutTime) status = '出勤中';
-            if (attendance.clockInTime && attendance.clockOutTime) status = '退勤済み';
+            if (attendance.clockInTime && attendance.clockOutTime) status = '退勤済';
 
             // 日付をyyyy/mm/dd形式に変換
             const formatDate = (dateStr) => {

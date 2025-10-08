@@ -18,6 +18,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.security.core.context.SecurityContextHolder;
+
+import java.util.List;
 import org.springframework.security.core.Authentication;
 import com.kintai.entity.UserAccount;
 
@@ -145,14 +147,33 @@ public class AttendanceService {
                         "退職済みの従業員です");
             }
             
-            // 3. 出勤済みチェック
-            AttendanceRecord attendanceRecord = attendanceRecordRepository
-                    .findEditableRecord(employeeId, today)
-                    .orElseThrow(() -> new AttendanceException(
-                            AttendanceException.NOT_CLOCKED_IN, 
-                            "出勤打刻がされていません"));
+            // 3. 出勤済みチェック（重複データも含めて処理）
+            List<AttendanceRecord> editableRecords = attendanceRecordRepository
+                    .findEditableRecords(employeeId, today);
             
-            // 4. 既に退勤済みチェック
+            if (editableRecords.isEmpty()) {
+                throw new AttendanceException(
+                        AttendanceException.NOT_CLOCKED_IN, 
+                        "出勤打刻がされていません");
+            }
+            
+            // 重複データがある場合はクリーンアップ
+            if (editableRecords.size() > 1) {
+                cleanupDuplicateAttendanceRecords(employeeId, today);
+                // クリーンアップ後に再度取得
+                editableRecords = attendanceRecordRepository
+                        .findEditableRecords(employeeId, today);
+                if (editableRecords.isEmpty()) {
+                    throw new AttendanceException(
+                            AttendanceException.NOT_CLOCKED_IN, 
+                            "出勤打刻がされていません");
+                }
+            }
+            
+            // 最新の編集可能な記録を取得
+            AttendanceRecord attendanceRecord = editableRecords.get(0);
+            
+            // 4. 既に退勤済チェック
             if (attendanceRecord.getClockOutTime() != null) {
                 throw new AttendanceException(
                         AttendanceException.ALREADY_CLOCKED_IN, 
@@ -189,9 +210,39 @@ public class AttendanceService {
             // 7. 勤怠ステータス更新
             updateAttendanceStatus(attendanceRecord, earlyLeaveMinutes, overtimeMinutes, nightShiftMinutes);
             
-            // 8. データベース保存
+            // 8. データベース保存（楽観的ロック対応）
             timeCalculator.normalizeMetrics(attendanceRecord);
-            AttendanceRecord savedRecord = attendanceRecordRepository.save(attendanceRecord);
+            System.out.println("退勤打刻保存前: " + attendanceRecord.getClockInTime() + " -> " + attendanceRecord.getClockOutTime());
+            AttendanceRecord savedRecord;
+            try {
+                savedRecord = attendanceRecordRepository.save(attendanceRecord);
+                System.out.println("退勤打刻保存成功: " + savedRecord.getClockInTime() + " -> " + savedRecord.getClockOutTime());
+            } catch (Exception e) {
+                System.err.println("退勤打刻保存失敗: " + e.getMessage());
+                // 保存に失敗した場合は、最新のレコードを再取得して再試行
+                List<AttendanceRecord> latestRecords = attendanceRecordRepository
+                        .findEditableRecords(employeeId, today);
+                if (!latestRecords.isEmpty()) {
+                    AttendanceRecord latestRecord = latestRecords.get(0);
+                    if (latestRecord.getClockOutTime() == null) {
+                        latestRecord.setClockOutTime(now);
+                        latestRecord.setEarlyLeaveMinutes(earlyLeaveMinutes);
+                        latestRecord.setOvertimeMinutes(overtimeMinutes);
+                        latestRecord.setNightShiftMinutes(nightShiftMinutes);
+                        updateAttendanceStatus(latestRecord, earlyLeaveMinutes, overtimeMinutes, nightShiftMinutes);
+                        timeCalculator.normalizeMetrics(latestRecord);
+                        savedRecord = attendanceRecordRepository.save(latestRecord);
+                    } else {
+                        throw new AttendanceException(
+                                AttendanceException.ALREADY_CLOCKED_IN, 
+                                "既に退勤打刻済みです");
+                    }
+                } else {
+                    throw new AttendanceException(
+                            AttendanceException.NOT_CLOCKED_IN, 
+                            "出勤打刻がされていません");
+                }
+            }
             
             // 9. レスポンス作成
             ClockResponse.ClockData data = new ClockResponse.ClockData(
@@ -364,6 +415,7 @@ public class AttendanceService {
             
             if (attendanceRecord.isPresent()) {
                 AttendanceRecord record = attendanceRecord.get();
+                System.out.println("今日の勤怠記録取得: 出勤=" + record.getClockInTime() + ", 退勤=" + record.getClockOutTime());
                 
                 ClockResponse.ClockData clockData = toClockData(record);
                 if (record.getClockInTime() != null && record.getClockOutTime() == null) {
@@ -402,14 +454,24 @@ public class AttendanceService {
      */
     @Transactional
     public void cleanupDuplicateAttendanceRecords(Long employeeId, LocalDate date) {
-        List<AttendanceRecord> duplicates = attendanceRecordRepository
-                .findDuplicatesByEmployeeIdAndAttendanceDate(employeeId, date);
-        
-        if (duplicates.size() > 1) {
-            // 最新のレコード（最初の要素）を除いて、古いレコードを削除
-            for (int i = 1; i < duplicates.size(); i++) {
-                attendanceRecordRepository.delete(duplicates.get(i));
+        try {
+            List<AttendanceRecord> duplicates = attendanceRecordRepository
+                    .findDuplicatesByEmployeeIdAndAttendanceDate(employeeId, date);
+            
+            if (duplicates.size() > 1) {
+                // 最新のレコード（最初の要素）を除いて、古いレコードを削除
+                for (int i = 1; i < duplicates.size(); i++) {
+                    try {
+                        attendanceRecordRepository.delete(duplicates.get(i));
+                    } catch (Exception e) {
+                        // 削除に失敗した場合はログを出力して続行
+                        System.err.println("Failed to delete duplicate record: " + e.getMessage());
+                    }
+                }
             }
+        } catch (Exception e) {
+            // クリーンアップに失敗した場合はログを出力して続行
+            System.err.println("Failed to cleanup duplicates: " + e.getMessage());
         }
     }
 

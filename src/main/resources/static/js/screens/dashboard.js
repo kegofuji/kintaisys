@@ -153,13 +153,19 @@ class DashboardScreen {
         }
 
         try {
+            console.log('退勤打刻を開始します。従業員ID:', window.currentEmployeeId);
             const data = await fetchWithAuth.handleApiCall(
                 () => fetchWithAuth.post('/api/attendance/clock-out', { employeeId: window.currentEmployeeId }),
                 '退勤打刻に失敗しました'
             );
 
+            console.log('退勤打刻APIレスポンス:', data);
             this.showAlert(data.message, 'success');
+            
+            console.log('今日の勤怠状況を再読み込みします');
             await this.loadTodayAttendance();
+            
+            console.log('勤怠履歴を再読み込みします');
             await this.loadAttendanceHistory();
             
             // 履歴カレンダーを即時更新
@@ -286,14 +292,14 @@ class DashboardScreen {
             return;
         }
 
-        // ステータス表示（未確定は空白）→ 出勤前/出勤中/退勤済みに統一
+        // ステータス表示（未確定は空白）→ 出勤前/出勤中/退勤済に統一
         let statusText = '';
         if (!data || !data.clockInTime) {
             statusText = '出勤前';
         } else if (data.clockInTime && !data.clockOutTime) {
             statusText = '出勤中';
         } else if (data.clockInTime && data.clockOutTime) {
-            statusText = '退勤済み';
+            statusText = '退勤済';
         }
 
         console.log('Setting status:', statusText);
@@ -368,22 +374,22 @@ class DashboardScreen {
         if (!this.clockInBtn || !this.clockOutBtn) return;
 
         if (data && data.clockInTime && !data.clockOutTime) {
-            // 出勤済み・退勤未済の場合
+            // 出勤済・退勤未済の場合
             this.clockInBtn.disabled = true;
-            this.clockInBtn.innerHTML = '出勤済み';
+            this.clockInBtn.innerHTML = '出勤済';
             this.clockInBtn.className = 'btn btn-secondary btn-lg me-3 clock-btn';
             
             this.clockOutBtn.disabled = false;
             this.clockOutBtn.innerHTML = '退勤打刻';
             this.clockOutBtn.className = 'btn btn-danger btn-lg clock-btn';
         } else if (data && data.clockInTime && data.clockOutTime) {
-            // 出勤済み・退勤済みの場合
+            // 出勤済・退勤済の場合
             this.clockInBtn.disabled = true;
-            this.clockInBtn.innerHTML = '出勤済み';
+            this.clockInBtn.innerHTML = '出勤済';
             this.clockInBtn.className = 'btn btn-secondary btn-lg me-3 clock-btn';
             
             this.clockOutBtn.disabled = true;
-            this.clockOutBtn.innerHTML = '退勤済み';
+            this.clockOutBtn.innerHTML = '退勤済';
             this.clockOutBtn.className = 'btn btn-secondary btn-lg clock-btn';
         } else {
             // 未出勤の場合
@@ -450,7 +456,7 @@ class DashboardScreen {
                 clockInTime: clockIn.toISOString(),
                 clockOutTime: clockOut.toISOString(),
                 workingHours: workingHours,
-                status: i === 0 ? '出勤中' : '退勤済み'
+                status: i === 0 ? '出勤中' : '退勤済'
             });
         }
 
@@ -492,7 +498,7 @@ class DashboardScreen {
             if (record.clockInTime && !record.clockOutTime) {
                 statusText = '出勤中';
             } else if (record.clockInTime && record.clockOutTime) {
-                statusText = '退勤済み';
+                statusText = '退勤済';
             }
 
             row.innerHTML = `
