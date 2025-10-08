@@ -1627,7 +1627,7 @@ function updateButtonStates(record, clockInBtn, clockOutBtn) {
         clockInBtn.disabled = true;
         clockInBtn.classList.remove('btn-success');
         clockInBtn.classList.add('btn-secondary');
-        clockInBtn.textContent = '出勤済み';
+        clockInBtn.textContent = '出勤済';
     }
 
     // 退勤打刻ボタン
