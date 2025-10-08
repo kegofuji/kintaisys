@@ -327,6 +327,9 @@ async function handleClockOut() {
                 errorMessage = 'まず出勤打刻を行ってください。';
             } else if (errorMessage.includes('既に退勤打刻済み')) {
                 errorMessage = '既に退勤打刻済みです。';
+                // 既に退勤済みの場合は成功として扱い、履歴を更新
+                await loadAttendanceHistory();
+                await updateTodayAttendance();
             }
             showAlert(errorMessage, 'warning');
             await updateTodayAttendance(); // 状態を再同期

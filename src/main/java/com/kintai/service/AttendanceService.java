@@ -6,13 +6,9 @@ import com.kintai.dto.ClockResponse;
 import com.kintai.entity.AttendanceRecord;
 import com.kintai.entity.AttendanceStatus;
 import com.kintai.entity.Employee;
-import com.kintai.entity.VacationRequest;
-import com.kintai.entity.AdjustmentRequest;
 import com.kintai.exception.AttendanceException;
 import com.kintai.repository.AttendanceRecordRepository;
 import com.kintai.repository.EmployeeRepository;
-import com.kintai.repository.VacationRequestRepository;
-import com.kintai.repository.AdjustmentRequestRepository;
 import com.kintai.util.TimeCalculator;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -25,13 +21,9 @@ import com.kintai.entity.UserAccount;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.YearMonth;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -50,11 +42,6 @@ public class AttendanceService {
     @Autowired
     private TimeCalculator timeCalculator;
     
-    @Autowired
-    private VacationRequestRepository vacationRequestRepository;
-    
-    @Autowired
-    private AdjustmentRequestRepository adjustmentRequestRepository;
     
     /**
      * 出勤打刻処理
@@ -175,9 +162,23 @@ public class AttendanceService {
             
             // 4. 既に退勤済チェック
             if (attendanceRecord.getClockOutTime() != null) {
-                throw new AttendanceException(
-                        AttendanceException.ALREADY_CLOCKED_IN, 
-                        "既に退勤打刻済みです");
+                // 既に退勤済みの場合は、現在の状態を返す
+                ClockResponse.ClockData data = new ClockResponse.ClockData(
+                        attendanceRecord.getAttendanceId(),
+                        attendanceRecord.getAttendanceDate(),
+                        attendanceRecord.getClockInTime(),
+                        attendanceRecord.getClockOutTime(),
+                        attendanceRecord.getLateMinutes(),
+                        attendanceRecord.getEarlyLeaveMinutes(),
+                        attendanceRecord.getOvertimeMinutes(),
+                        attendanceRecord.getNightShiftMinutes(),
+                        attendanceRecord.getAttendanceStatus() != null ? attendanceRecord.getAttendanceStatus().name() : null,
+                        attendanceRecord.getAttendanceFixedFlag()
+                );
+                
+                ClockResponse response = new ClockResponse(true, "既に退勤打刻済みです", data);
+                setUserInfoToResponse(response);
+                return response;
             }
             
             // 5. 退勤時刻設定
@@ -233,9 +234,23 @@ public class AttendanceService {
                         timeCalculator.normalizeMetrics(latestRecord);
                         savedRecord = attendanceRecordRepository.save(latestRecord);
                     } else {
-                        throw new AttendanceException(
-                                AttendanceException.ALREADY_CLOCKED_IN, 
-                                "既に退勤打刻済みです");
+                        // 既に退勤済みの場合は、現在の状態を返す
+                        ClockResponse.ClockData data = new ClockResponse.ClockData(
+                                latestRecord.getAttendanceId(),
+                                latestRecord.getAttendanceDate(),
+                                latestRecord.getClockInTime(),
+                                latestRecord.getClockOutTime(),
+                                latestRecord.getLateMinutes(),
+                                latestRecord.getEarlyLeaveMinutes(),
+                                latestRecord.getOvertimeMinutes(),
+                                latestRecord.getNightShiftMinutes(),
+                                latestRecord.getAttendanceStatus() != null ? latestRecord.getAttendanceStatus().name() : null,
+                                latestRecord.getAttendanceFixedFlag()
+                        );
+                        
+                        ClockResponse response = new ClockResponse(true, "既に退勤打刻済みです", data);
+                        setUserInfoToResponse(response);
+                        return response;
                     }
                 } else {
                     throw new AttendanceException(
