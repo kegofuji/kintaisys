@@ -272,6 +272,6 @@ class CancellationControllerTest {
                         .content(payload))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.message").value("修正申請が正常に作成されました"));
+                .andExpect(jsonPath("$.message").value("打刻修正が完了しました"));
     }
 }
