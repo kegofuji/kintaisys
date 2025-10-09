@@ -221,7 +221,6 @@ async function loadCSRFToken() {
 // 出勤打刻
 async function handleClockIn() {
     if (!currentEmployeeId) {
-        showAlert('従業員IDが取得できません', 'danger');
         return;
     }
     
@@ -250,13 +249,13 @@ async function handleClockIn() {
             await loadAttendanceHistory();
             await updateTodayAttendance();
         } else {
-            // 出勤・退勤打刻以外のエラーダイアログは表示しない
-            // 状態を再同期のみ実行
+            // エラー時は状態を再同期のみ実行
             await updateTodayAttendance();
         }
     } catch (error) {
         console.error('出勤打刻エラー:', error);
-        // 出勤・退勤打刻以外のエラーダイアログは表示しない
+        // エラー時は状態を再同期のみ実行
+        await updateTodayAttendance();
     } finally {
         // ボタンの状態を復元
         if (clockInBtn) {
@@ -269,7 +268,6 @@ async function handleClockIn() {
 // 退勤打刻
 async function handleClockOut() {
     if (!currentEmployeeId) {
-        showAlert('従業員IDが取得できません', 'danger');
         return;
     }
     
@@ -317,13 +315,13 @@ async function handleClockOut() {
                 console.warn('カレンダー更新エラー:', calendarError);
             }
         } else {
-            // 出勤・退勤打刻以外のエラーダイアログは表示しない
-            // 状態を再同期のみ実行
+            // エラー時は状態を再同期のみ実行
             await updateTodayAttendance();
         }
     } catch (error) {
         console.error('退勤打刻エラー:', error);
-        // 出勤・退勤打刻以外のエラーダイアログは表示しない
+        // エラー時は状態を再同期のみ実行
+        await updateTodayAttendance();
     } finally {
         // ボタンの状態を復元
         if (clockOutBtn) {

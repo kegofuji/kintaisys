@@ -29,7 +29,7 @@ class HistoryScreen {
         this.eventsBound = false;
         this.realtimeTimer = null;
         this.currentSnapshot = '';
-        this.pollIntervalMs = 5000;
+        this.pollIntervalMs = 1000;
         this.visibilityChangeHandler = null;
         this.pollingInProgress = false;
     }
@@ -42,8 +42,7 @@ class HistoryScreen {
         this.setupEventListeners();
         this.setupModalActions();
         this.generateMonthOptions();
-        await this.loadCalendarData();
-        // generateCalendar()はloadCalendarData()内で呼び出されるため、ここでは呼び出さない
+        await this.loadCalendarData(true); // 初回読み込み時はカレンダーを生成
         this.currentSnapshot = this.calculateSnapshot();
         this.startRealtimePolling(true);
         // 初期の月末申請ボタン状態を反映（関数が存在する場合のみ）
@@ -121,8 +120,9 @@ class HistoryScreen {
 
     /**
      * カレンダーデータ読み込み
+     * @param {boolean} shouldRegenerate - カレンダーを再生成するかどうか（デフォルト: false）
      */
-    async loadCalendarData() {
+    async loadCalendarData(shouldRegenerate = false) {
         if (!window.currentEmployeeId) {
             console.warn('従業員IDが取得できません');
             return;
@@ -157,8 +157,10 @@ class HistoryScreen {
             // 打刻修正申請データも読み込み（履歴カレンダー用）
             await this.loadAdjustmentRequests();
             
-            // カレンダーを再生成
-            this.generateCalendar();
+            // カレンダーを再生成（shouldRegenerateがtrueの場合のみ）
+            if (shouldRegenerate) {
+                this.generateCalendar();
+            }
         } catch (error) {
             console.error('勤怠履歴読み込みエラー:', error);
             // エラーの場合もモックデータは使用しない
@@ -380,8 +382,7 @@ class HistoryScreen {
             this.historyMonthSelect.value = normalizedValue;
         }
 
-        await this.loadCalendarData();
-        this.generateCalendar();
+        await this.loadCalendarData(true); // 月変更時はカレンダーを再生成
 
     }
 
@@ -1522,8 +1523,7 @@ class HistoryScreen {
 
             if (refreshRequired) {
                 try {
-                    await this.loadCalendarData();
-                    this.generateCalendar();
+                    await this.loadCalendarData(true); // 取消後はカレンダーを再生成
                 } catch (refreshError) {
                     console.error('修正申請取消後の再描画に失敗しました:', refreshError);
                 }
@@ -1774,8 +1774,7 @@ class HistoryScreen {
 
             if (refreshRequired) {
                 try {
-                    await this.loadCalendarData();
-                    this.generateCalendar();
+                    await this.loadCalendarData(true); // 取消後はカレンダーを再生成
                 } catch (refreshError) {
                     console.error('有給申請取消後の再描画に失敗しました:', refreshError);
                 }

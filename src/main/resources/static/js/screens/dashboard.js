@@ -125,21 +125,22 @@ class DashboardScreen {
      */
     async handleClockIn() {
         if (!window.currentEmployeeId) {
-            this.showAlert('従業員IDが取得できません', 'danger');
             return;
         }
 
         try {
             const data = await fetchWithAuth.handleApiCall(
                 () => fetchWithAuth.post('/api/attendance/clock-in', { employeeId: window.currentEmployeeId }),
-                '出勤打刻に失敗しました'
+                ''
             );
 
             this.showAlert(data.message, 'success');
             await this.loadTodayAttendance();
             await this.loadAttendanceHistory();
         } catch (error) {
-            this.showAlert(error.message, 'danger');
+            // エラー時は状態を再同期のみ実行
+            await this.loadTodayAttendance();
+            await this.loadAttendanceHistory();
         }
     }
 
@@ -148,7 +149,6 @@ class DashboardScreen {
      */
     async handleClockOut() {
         if (!window.currentEmployeeId) {
-            this.showAlert('従業員IDが取得できません', 'danger');
             return;
         }
 
@@ -156,7 +156,7 @@ class DashboardScreen {
             console.log('退勤打刻を開始します。従業員ID:', window.currentEmployeeId);
             const data = await fetchWithAuth.handleApiCall(
                 () => fetchWithAuth.post('/api/attendance/clock-out', { employeeId: window.currentEmployeeId }),
-                '退勤打刻に失敗しました'
+                ''
             );
 
             console.log('退勤打刻APIレスポンス:', data);
@@ -187,10 +187,9 @@ class DashboardScreen {
                 console.warn('カレンダー更新エラー:', calendarError);
             }
         } catch (error) {
-            // 出勤・退勤打刻以外のエラーダイアログは表示しない
-            // 状態を再同期のみ実行
-            this.loadTodayAttendance();
-            this.loadAttendanceHistory();
+            // エラー時は状態を再同期のみ実行
+            await this.loadTodayAttendance();
+            await this.loadAttendanceHistory();
         }
     }
 
