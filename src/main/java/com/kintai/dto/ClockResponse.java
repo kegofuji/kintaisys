@@ -102,6 +102,7 @@ public class ClockResponse {
         private Integer earlyLeaveMinutes;
         private Integer overtimeMinutes;
         private Integer nightShiftMinutes;
+        private Integer workingMinutes;
         private String attendanceStatus;
         private Boolean attendanceFixed;
 
@@ -112,7 +113,7 @@ public class ClockResponse {
         // コンストラクタ
         public ClockData(Long attendanceId, LocalDate attendanceDate, LocalDateTime clockInTime, LocalDateTime clockOutTime,
                         Integer lateMinutes, Integer earlyLeaveMinutes, Integer overtimeMinutes, Integer nightShiftMinutes,
-                        String attendanceStatus, Boolean attendanceFixed) {
+                        Integer workingMinutes, String attendanceStatus, Boolean attendanceFixed) {
             this.attendanceId = attendanceId;
             this.attendanceDate = attendanceDate;
             this.clockInTime = clockInTime;
@@ -121,6 +122,7 @@ public class ClockResponse {
             this.earlyLeaveMinutes = earlyLeaveMinutes;
             this.overtimeMinutes = overtimeMinutes;
             this.nightShiftMinutes = nightShiftMinutes;
+            this.workingMinutes = workingMinutes;
             this.attendanceStatus = attendanceStatus;
             this.attendanceFixed = attendanceFixed;
         }
@@ -204,6 +206,14 @@ public class ClockResponse {
 
         public void setAttendanceFixed(Boolean attendanceFixed) {
             this.attendanceFixed = attendanceFixed;
+        }
+        
+        public Integer getWorkingMinutes() {
+            return workingMinutes;
+        }
+
+        public void setWorkingMinutes(Integer workingMinutes) {
+            this.workingMinutes = workingMinutes;
         }
     }
 

@@ -99,6 +99,7 @@ public class AttendanceService {
                 null,
                 null,
                 null,
+                null,
                 savedRecord.getAttendanceStatus() != null ? savedRecord.getAttendanceStatus().name() : null,
                 savedRecord.getAttendanceFixedFlag()
         );
@@ -163,6 +164,12 @@ public class AttendanceService {
                 // 5. 既に退勤済チェック
                 if (attendanceRecord.getClockOutTime() != null) {
                     // 既に退勤済みの場合は、現在の状態を返す
+                    // 勤務時間を計算
+                    int workingMinutes = timeCalculator.calculateWorkingMinutes(
+                            attendanceRecord.getClockInTime(), 
+                            attendanceRecord.getClockOutTime()
+                    );
+                    
                     ClockResponse.ClockData data = new ClockResponse.ClockData(
                             attendanceRecord.getAttendanceId(),
                             attendanceRecord.getAttendanceDate(),
@@ -172,6 +179,7 @@ public class AttendanceService {
                             attendanceRecord.getEarlyLeaveMinutes(),
                             attendanceRecord.getOvertimeMinutes(),
                             attendanceRecord.getNightShiftMinutes(),
+                            workingMinutes,
                             attendanceRecord.getAttendanceStatus() != null ? attendanceRecord.getAttendanceStatus().name() : null,
                             attendanceRecord.getAttendanceFixedFlag()
                     );
@@ -480,6 +488,16 @@ public class AttendanceService {
             return null;
         }
         int nightShiftMinutes = resolveNightShiftMinutes(record);
+        
+        // 勤務時間を計算
+        int workingMinutes = 0;
+        if (record.getClockInTime() != null && record.getClockOutTime() != null) {
+            workingMinutes = timeCalculator.calculateWorkingMinutes(
+                    record.getClockInTime(), 
+                    record.getClockOutTime()
+            );
+        }
+        
         return new ClockResponse.ClockData(
                 record.getAttendanceId(),
                 record.getAttendanceDate(),
@@ -489,6 +507,7 @@ public class AttendanceService {
                 safeInt(record.getEarlyLeaveMinutes()),
                 safeInt(record.getOvertimeMinutes()),
                 nightShiftMinutes,
+                workingMinutes,
                 record.getAttendanceStatus() != null ? record.getAttendanceStatus().name() : null,
                 record.getAttendanceFixedFlag()
         );

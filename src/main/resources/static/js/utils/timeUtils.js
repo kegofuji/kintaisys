@@ -36,6 +36,7 @@ class TimeUtils {
 
     /**
      * 勤務時間を計算（出勤時刻と退勤時刻から）
+     * 労働基準法第34条に基づく休憩時間を自動控除する
      * @param {string} clockInTime - 出勤時刻
      * @param {string} clockOutTime - 退勤時刻
      * @returns {string} 勤務時間（時間:分形式）
@@ -54,27 +55,41 @@ class TimeUtils {
                 return '0:00';
             }
 
-            // 総勤務分
+            // 総勤務分（丸目処理なし、正確な分数を計算）
             let totalMinutes = Math.floor((clockOut - clockIn) / (1000 * 60));
 
-            // 昼休憩(12:00-13:00)にかかった分を控除（勤務時間が短い場合は昼休憩控除をしない）
-            if (totalMinutes > 60) { // 1時間以上の勤務の場合のみ昼休憩控除
-                const lunchStart = new Date(clockIn);
-                lunchStart.setHours(12, 0, 0, 0);
-                const lunchEnd = new Date(clockIn);
-                lunchEnd.setHours(13, 0, 0, 0);
-
-                const overlapStart = new Date(Math.max(clockIn.getTime(), lunchStart.getTime()));
-                const overlapEnd = new Date(Math.min(clockOut.getTime(), lunchEnd.getTime()));
-                const overlapMinutes = Math.max(0, Math.floor((overlapEnd - overlapStart) / (1000 * 60)));
-                totalMinutes -= overlapMinutes;
-            }
+            // 労働基準法第34条に基づく休憩時間を控除
+            const breakMinutes = this.calculateRequiredBreakMinutes(totalMinutes);
+            totalMinutes -= breakMinutes;
 
             if (totalMinutes < 0) totalMinutes = 0;
             return this.formatMinutesToTime(totalMinutes);
         } catch (error) {
             console.error('Error calculating working time:', error);
             return '0:00';
+        }
+    }
+
+    /**
+     * 労働基準法第34条に基づく必要休憩時間を計算する（分）
+     * @param {number} totalWorkMinutes - 総勤務時間（分）
+     * @returns {number} 必要休憩時間（分）
+     */
+    static calculateRequiredBreakMinutes(totalWorkMinutes) {
+        const WORK_HOURS_6_HOURS = 360;     // 6時間（分）
+        const WORK_HOURS_8_HOURS = 480;     // 8時間（分）
+        const MIN_BREAK_6_TO_8_HOURS = 45;  // 6時間超8時間以下：45分
+        const MIN_BREAK_OVER_8_HOURS = 60;  // 8時間超：60分
+
+        if (totalWorkMinutes <= WORK_HOURS_6_HOURS) {
+            // 6時間以下の場合：休憩時間なし
+            return 0;
+        } else if (totalWorkMinutes <= WORK_HOURS_8_HOURS) {
+            // 6時間超8時間以下の場合：45分の休憩
+            return MIN_BREAK_6_TO_8_HOURS;
+        } else {
+            // 8時間超の場合：60分の休憩
+            return MIN_BREAK_OVER_8_HOURS;
         }
     }
 

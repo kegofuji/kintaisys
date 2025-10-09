@@ -43,7 +43,7 @@ class HistoryScreen {
         this.setupModalActions();
         this.generateMonthOptions();
         await this.loadCalendarData();
-        this.generateCalendar();
+        // generateCalendar()はloadCalendarData()内で呼び出されるため、ここでは呼び出さない
         this.currentSnapshot = this.calculateSnapshot();
         this.startRealtimePolling(true);
         // 初期の月末申請ボタン状態を反映（関数が存在する場合のみ）
@@ -156,6 +156,9 @@ class HistoryScreen {
 
             // 打刻修正申請データも読み込み（履歴カレンダー用）
             await this.loadAdjustmentRequests();
+            
+            // カレンダーを再生成
+            this.generateCalendar();
         } catch (error) {
             console.error('勤怠履歴読み込みエラー:', error);
             // エラーの場合もモックデータは使用しない
@@ -318,7 +321,10 @@ class HistoryScreen {
 
             const clockInTime = hasIn ? new Date(record.clockInTime).toLocaleTimeString('ja-JP', {hour: '2-digit', minute: '2-digit'}) : '';
             const clockOutTime = hasOut ? new Date(record.clockOutTime).toLocaleTimeString('ja-JP', {hour: '2-digit', minute: '2-digit'}) : '';
-            const workingTime = isConfirmed ? TimeUtils.calculateWorkingTime(record.clockInTime, record.clockOutTime) : '';
+            const workingTime = isConfirmed ? 
+                (record.workingMinutes !== undefined && record.workingMinutes !== null ? 
+                    TimeUtils.formatMinutesToTime(record.workingMinutes) : 
+                    TimeUtils.calculateWorkingTime(record.clockInTime, record.clockOutTime)) : '';
             const safeFormat = (value) => formatMinutesToTime(value ?? 0);
             const lateDisplay = isConfirmed ? safeFormat(record.lateMinutes) : '';
             const earlyLeaveDisplay = isConfirmed ? safeFormat(record.earlyLeaveMinutes) : '';
@@ -521,8 +527,10 @@ class HistoryScreen {
             
             // 申請状況を表示（申請中・承認済・却下のみ）
             // デバッグ用ログ
-            if (attendance && attendance.clockInTime) {
-                console.log(`日付 ${dateString}: 出勤打刻あり`, attendance);
+            if (attendance) {
+                console.log(`日付 ${dateString}: 勤怠データあり`, attendance);
+            } else {
+                console.log(`日付 ${dateString}: 勤怠データなし`);
             }
             if (vacationRequest || adjustmentRequest) {
                 console.log(`日付 ${dateString}: 申請あり`, { 
@@ -1136,10 +1144,12 @@ class HistoryScreen {
             const clockOutTime = attendance.clockOutTime ? 
                 new Date(attendance.clockOutTime).toLocaleTimeString('ja-JP', {hour: '2-digit', minute: '2-digit'}) : '';
 
-            // 勤務時間の計算（0:00形式に統一）
+            // 勤務時間の計算（バックエンドの値を優先）
             const isConfirmedAttendance = attendance.clockInTime && attendance.clockOutTime;
             const workingTime = isConfirmedAttendance
-                ? TimeUtils.calculateWorkingTime(attendance.clockInTime, attendance.clockOutTime)
+                ? (attendance.workingMinutes !== undefined && attendance.workingMinutes !== null ? 
+                    TimeUtils.formatMinutesToTime(attendance.workingMinutes) : 
+                    TimeUtils.calculateWorkingTime(attendance.clockInTime, attendance.clockOutTime))
                 : '';
 
             // 遅刻・早退・残業・深夜の表示（0:00形式に統一）

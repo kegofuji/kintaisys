@@ -448,10 +448,14 @@ function displayAttendanceHistory(data) {
         const clockInTime = record.clockInTime ? formatTimeDisplay(record.clockInTime) : '-';
         const clockOutTime = record.clockOutTime ? formatTimeDisplay(record.clockOutTime) : '-';
         
-        // 勤務時間計算（未確定は空白）
+        // 勤務時間計算（バックエンドの値を優先、未確定は空白）
         let workingHours = '';
         if (record.clockInTime && record.clockOutTime) {
-            workingHours = TimeUtils.calculateWorkingTime(record.clockInTime, record.clockOutTime);
+            if (record.workingMinutes !== undefined && record.workingMinutes !== null) {
+                workingHours = TimeUtils.formatMinutesToTime(record.workingMinutes);
+            } else {
+                workingHours = TimeUtils.calculateWorkingTime(record.clockInTime, record.clockOutTime);
+            }
         }
         
         // 遅刻・早退・残業・深夜（未確定は空白）。深夜は nightWorkMinutes に統一
@@ -1231,18 +1235,13 @@ function filterAttendanceTableByDate(dateString) {
         const clockOutTime = attendance.clockOutTime ? 
             new Date(attendance.clockOutTime).toLocaleTimeString('ja-JP', {hour: '2-digit', minute: '2-digit'}) : '-';
 
-        // 勤務時間の計算（0:00形式に統一）
+        // 勤務時間の計算（バックエンドの値を優先）
         let workingTime = '0:00';
         if (attendance.clockInTime && attendance.clockOutTime) {
-            try {
-                const clockIn = new Date(attendance.clockInTime);
-                const clockOut = new Date(attendance.clockOutTime);
-                const diffMs = clockOut - clockIn;
-                const totalMinutes = Math.floor(diffMs / (1000 * 60));
-                workingTime = TimeUtils.formatMinutesToTime(totalMinutes);
-            } catch (error) {
-                console.error('Error calculating working time:', error);
-                workingTime = '0:00';
+            if (attendance.workingMinutes !== undefined && attendance.workingMinutes !== null) {
+                workingTime = TimeUtils.formatMinutesToTime(attendance.workingMinutes);
+            } else {
+                workingTime = TimeUtils.calculateWorkingTime(attendance.clockInTime, attendance.clockOutTime);
             }
         }
 
@@ -1505,11 +1504,15 @@ function updateAttendanceDisplay(record, clockInTime, clockOutTime, workingTime,
         clockOutTime.textContent = record.clockOutTime ? formatTimeDisplay(record.clockOutTime) : '--:--';
     }
     
-    // 勤務時間計算 - 確定まで空白
+    // 勤務時間表示 - バックエンドから取得した値を優先
     if (workingTime) {
-        workingTime.textContent = (record.clockInTime && record.clockOutTime)
-            ? TimeUtils.calculateWorkingTime(record.clockInTime, record.clockOutTime)
-            : '--:--';
+        if (record.workingMinutes !== undefined && record.workingMinutes !== null) {
+            workingTime.textContent = TimeUtils.formatMinutesToTime(record.workingMinutes);
+        } else if (record.clockInTime && record.clockOutTime) {
+            workingTime.textContent = TimeUtils.calculateWorkingTime(record.clockInTime, record.clockOutTime);
+        } else {
+            workingTime.textContent = '--:--';
+        }
     }
     
     // ステータス表示
