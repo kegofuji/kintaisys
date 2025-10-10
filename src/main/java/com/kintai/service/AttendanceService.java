@@ -67,10 +67,37 @@ public class AttendanceService {
         }
         
         // 3. 重複出勤チェック
-        if (attendanceRecordRepository.existsByEmployeeIdAndAttendanceDateAndClockInTimeIsNotNull(employeeId, today)) {
-            throw new AttendanceException(
-                    AttendanceException.ALREADY_CLOCKED_IN, 
-                    "既に出勤打刻済みです");
+        Optional<AttendanceRecord> existingRecord = attendanceRecordRepository
+                .findByEmployeeIdAndAttendanceDate(employeeId, today);
+        
+        if (existingRecord.isPresent() && existingRecord.get().getClockInTime() != null) {
+            // 既に出勤済みの場合は、現在の状態を返す
+            AttendanceRecord record = existingRecord.get();
+            Integer workingMinutes = null;
+            if (record.getClockOutTime() != null) {
+                workingMinutes = timeCalculator.calculateWorkingMinutes(
+                        record.getClockInTime(), 
+                        record.getClockOutTime()
+                );
+            }
+            
+            ClockResponse.ClockData data = new ClockResponse.ClockData(
+                    record.getAttendanceId(),
+                    record.getAttendanceDate(),
+                    record.getClockInTime(),
+                    record.getClockOutTime(),
+                    record.getLateMinutes(),
+                    record.getEarlyLeaveMinutes(),
+                    record.getOvertimeMinutes(),
+                    record.getNightShiftMinutes(),
+                    workingMinutes,
+                    record.getAttendanceStatus() != null ? record.getAttendanceStatus().name() : null,
+                    record.getAttendanceFixedFlag()
+            );
+            
+            ClockResponse response = new ClockResponse(true, "出勤打刻完了", data);
+            setUserInfoToResponse(response);
+            return response;
         }
         
         // 4. 出勤打刻記録作成
@@ -184,7 +211,7 @@ public class AttendanceService {
                             attendanceRecord.getAttendanceFixedFlag()
                     );
                     
-                    ClockResponse response = new ClockResponse(true, "既に退勤打刻済みです", data);
+                    ClockResponse response = new ClockResponse(true, "退勤打刻完了", data);
                     setUserInfoToResponse(response);
                     return response;
                 }
