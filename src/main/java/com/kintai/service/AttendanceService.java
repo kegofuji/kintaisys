@@ -67,35 +67,39 @@ public class AttendanceService {
         }
         
         // 3. 重複出勤チェック
-        Optional<AttendanceRecord> existingRecord = attendanceRecordRepository
+        Optional<AttendanceRecord> existingRecordOpt = attendanceRecordRepository
                 .findByEmployeeIdAndAttendanceDate(employeeId, today);
         
-        if (existingRecord.isPresent() && existingRecord.get().getClockInTime() != null) {
+        if (existingRecordOpt.isPresent() && existingRecordOpt.get().getClockInTime() != null) {
             // 既に出勤済みの場合は、現在の状態を返す
-            AttendanceRecord record = existingRecord.get();
+            AttendanceRecord existingRecord = existingRecordOpt.get();
+            
             Integer workingMinutes = null;
-            if (record.getClockOutTime() != null) {
+            if (existingRecord.getClockOutTime() != null) {
                 workingMinutes = timeCalculator.calculateWorkingMinutes(
-                        record.getClockInTime(), 
-                        record.getClockOutTime()
+                        existingRecord.getClockInTime(), 
+                        existingRecord.getClockOutTime()
                 );
             }
             
             ClockResponse.ClockData data = new ClockResponse.ClockData(
-                    record.getAttendanceId(),
-                    record.getAttendanceDate(),
-                    record.getClockInTime(),
-                    record.getClockOutTime(),
-                    record.getLateMinutes(),
-                    record.getEarlyLeaveMinutes(),
-                    record.getOvertimeMinutes(),
-                    record.getNightShiftMinutes(),
+                    existingRecord.getAttendanceId(),
+                    existingRecord.getAttendanceDate(),
+                    existingRecord.getClockInTime(),
+                    existingRecord.getClockOutTime(),
+                    existingRecord.getLateMinutes(),
+                    existingRecord.getEarlyLeaveMinutes(),
+                    existingRecord.getOvertimeMinutes(),
+                    existingRecord.getNightShiftMinutes(),
                     workingMinutes,
-                    record.getAttendanceStatus() != null ? record.getAttendanceStatus().name() : null,
-                    record.getAttendanceFixedFlag()
+                    existingRecord.getAttendanceStatus() != null ? existingRecord.getAttendanceStatus().name() : null,
+                    existingRecord.getAttendanceFixedFlag()
             );
             
-            ClockResponse response = new ClockResponse(true, "出勤打刻完了", data);
+            ClockResponse response = new ClockResponse();
+            response.setSuccess(true);
+            response.setMessage("出勤打刻完了");
+            response.setData(data);
             setUserInfoToResponse(response);
             return response;
         }
@@ -133,7 +137,10 @@ public class AttendanceService {
         
         String message = "出勤打刻完了";
         
-        ClockResponse response = new ClockResponse(true, message, data);
+        ClockResponse response = new ClockResponse();
+        response.setSuccess(true);
+        response.setMessage(message);
+        response.setData(data);
         setUserInfoToResponse(response);
         return response;
     }
@@ -174,19 +181,16 @@ public class AttendanceService {
                 Optional<AttendanceRecord> attendanceRecordOpt = attendanceRecordRepository
                         .findByEmployeeIdAndAttendanceDate(employeeId, today);
                 
-                if (attendanceRecordOpt.isEmpty()) {
-                    throw new AttendanceException(
-                            AttendanceException.NOT_CLOCKED_IN, 
-                            "出勤打刻がされていません");
+                if (attendanceRecordOpt.isEmpty() || attendanceRecordOpt.get().getClockInTime() == null) {
+                    // 出勤打刻がない場合は、空の成功レスポンスを返す
+                    ClockResponse response = new ClockResponse();
+                    response.setSuccess(true);
+                    response.setMessage("");
+                    setUserInfoToResponse(response);
+                    return response;
                 }
                 
                 AttendanceRecord attendanceRecord = attendanceRecordOpt.get();
-                
-                if (attendanceRecord.getClockInTime() == null) {
-                    throw new AttendanceException(
-                            AttendanceException.NOT_CLOCKED_IN, 
-                            "出勤打刻がされていません");
-                }
                 
                 // 5. 既に退勤済チェック
                 if (attendanceRecord.getClockOutTime() != null) {
@@ -197,23 +201,26 @@ public class AttendanceService {
                             attendanceRecord.getClockOutTime()
                     );
                     
-                    ClockResponse.ClockData data = new ClockResponse.ClockData(
-                            attendanceRecord.getAttendanceId(),
-                            attendanceRecord.getAttendanceDate(),
-                            attendanceRecord.getClockInTime(),
-                            attendanceRecord.getClockOutTime(),
-                            attendanceRecord.getLateMinutes(),
-                            attendanceRecord.getEarlyLeaveMinutes(),
-                            attendanceRecord.getOvertimeMinutes(),
-                            attendanceRecord.getNightShiftMinutes(),
-                            workingMinutes,
-                            attendanceRecord.getAttendanceStatus() != null ? attendanceRecord.getAttendanceStatus().name() : null,
-                            attendanceRecord.getAttendanceFixedFlag()
-                    );
-                    
-                    ClockResponse response = new ClockResponse(true, "退勤打刻完了", data);
-                    setUserInfoToResponse(response);
-                    return response;
+                ClockResponse.ClockData data = new ClockResponse.ClockData(
+                        attendanceRecord.getAttendanceId(),
+                        attendanceRecord.getAttendanceDate(),
+                        attendanceRecord.getClockInTime(),
+                        attendanceRecord.getClockOutTime(),
+                        attendanceRecord.getLateMinutes(),
+                        attendanceRecord.getEarlyLeaveMinutes(),
+                        attendanceRecord.getOvertimeMinutes(),
+                        attendanceRecord.getNightShiftMinutes(),
+                        workingMinutes,
+                        attendanceRecord.getAttendanceStatus() != null ? attendanceRecord.getAttendanceStatus().name() : null,
+                        attendanceRecord.getAttendanceFixedFlag()
+                );
+                
+                ClockResponse response = new ClockResponse();
+                response.setSuccess(true);
+                response.setMessage("退勤打刻完了");
+                response.setData(data);
+                setUserInfoToResponse(response);
+                return response;
                 }
                 
                 // 6. 退勤時刻設定
@@ -254,7 +261,10 @@ public class AttendanceService {
                 System.out.println("退勤打刻処理: データベース保存成功, ID=" + savedRecord.getAttendanceId());
                 
                 // 11. レスポンス作成
-                ClockResponse response = new ClockResponse(true, "退勤打刻完了", toClockData(savedRecord));
+                ClockResponse response = new ClockResponse();
+                response.setSuccess(true);
+                response.setMessage("退勤打刻完了");
+                response.setData(toClockData(savedRecord));
                 setUserInfoToResponse(response);
                 return response;
                 
