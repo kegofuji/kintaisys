@@ -12,7 +12,7 @@ const LEAVE_TYPE_LABELS = {
 
 // 休暇時間単位ラベル
 const LEAVE_TIME_UNIT_LABELS = {
-    FULL_DAY: '全日',
+    FULL_DAY: '',
     HALF_AM: 'AM',
     HALF_PM: 'PM'
 };
@@ -20,8 +20,8 @@ const LEAVE_TIME_UNIT_LABELS = {
 // 休暇時間単位マーカー
 const LEAVE_TIME_UNIT_MARKERS = {
     FULL_DAY: '',
-    HALF_AM: 'AM',
-    HALF_PM: 'PM'
+    HALF_AM: 'AM有休',
+    HALF_PM: 'PM有休'
 };
 
 // グローバルに公開

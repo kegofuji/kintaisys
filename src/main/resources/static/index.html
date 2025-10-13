@@ -556,7 +556,12 @@
                     </div>
                     <div class="card-body">
                         <div class="mb-4">
-                            <h6 class="mb-3"><i class="fas fa-calendar-check me-2"></i>残休暇日数</h6>
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <h6 class="mb-0"><i class="fas fa-calendar-check me-2"></i>残休暇日数</h6>
+                                <button type="button" class="btn btn-outline-primary btn-sm" id="refreshLeaveBalance">
+                                    <i class="fas fa-sync-alt me-1"></i>更新
+                                </button>
+                            </div>
                             <div class="row g-2 mb-3">
                                 <div class="col-6">
                                     <div class="card border-primary h-100">
@@ -571,7 +576,7 @@
                                         <div class="card-body text-center py-3">
                                             <div class="h5 mb-1 text-success" id="summerLeaveRemaining">--</div>
                                             <small class="text-muted">夏季休暇</small>
-                                            <div class="small text-dark mt-1" id="summerValidity" style="display: none;">有効期限：--</div>
+                                            <div class="small text-info mt-1 fw-bold" id="summerValidity" style="display: none;"><i class="fas fa-calendar-alt me-1"></i>有効期限：未設定</div>
                                         </div>
                                     </div>
                                 </div>
@@ -582,7 +587,7 @@
                                         <div class="card-body text-center py-3">
                                             <div class="h5 mb-1 text-warning" id="winterLeaveRemaining">--</div>
                                             <small class="text-muted">冬季休暇</small>
-                                            <div class="small text-dark mt-1" id="winterValidity" style="display: none;">有効期限：--</div>
+                                            <div class="small text-info mt-1 fw-bold" id="winterValidity" style="display: none;"><i class="fas fa-calendar-alt me-1"></i>有効期限：未設定</div>
                                         </div>
                                     </div>
                                 </div>
@@ -591,6 +596,7 @@
                                         <div class="card-body text-center py-3">
                                             <div class="h5 mb-1 text-secondary" id="specialLeaveRemaining">--</div>
                                             <small class="text-muted">特別休暇</small>
+                                            <div class="small text-info mt-1 fw-bold" id="specialValidity" style="display: none;"><i class="fas fa-calendar-alt me-1"></i>有効期限：未設定</div>
                                         </div>
                                     </div>
                                 </div>
@@ -601,9 +607,9 @@
                             <div class="mb-3">
                                 <label for="vacationTypeSelect" class="form-label">休暇種別 <span class="text-danger">*</span></label>
                                 <select class="form-select" id="vacationTypeSelect" required>
-                                    <option value="PAID_LEAVE:FULL_DAY">有休（全日）</option>
-                                    <option value="PAID_LEAVE:HALF_AM">有休（AM）</option>
-                                    <option value="PAID_LEAVE:HALF_PM">有休（PM）</option>
+                                    <option value="PAID_LEAVE:FULL_DAY">有休</option>
+                                    <option value="PAID_LEAVE:HALF_AM">AM有休</option>
+                                    <option value="PAID_LEAVE:HALF_PM">PM有休</option>
                                     <option value="SUMMER:FULL_DAY">夏季休暇</option>
                                     <option value="WINTER:FULL_DAY">冬季休暇</option>
                                     <option value="SPECIAL:FULL_DAY">特別休暇</option>
@@ -818,20 +824,11 @@
                                             <option value="SPECIAL">特別休暇</option>
                                         </select>
                                     </div>
-                                    <div class="mb-3" id="leaveGrantSpecialDatesWrapper" style="display: none;">
-                                        <label class="form-label">利用可能開始日 <span class="text-danger">*</span></label>
-                                        <div class="d-flex gap-2 mb-2 align-items-start">
-                                            <input type="date" class="form-control flex-grow-1" id="leaveGrantSpecialDateInput">
-                                            <button type="button" class="btn btn-outline-primary flex-shrink-0" id="addSpecialDateButton" style="min-width: 60px; white-space: normal; writing-mode: horizontal-tb; text-align: center;">追加</button>
-                                            <button type="button" class="btn btn-success flex-shrink-0" id="confirmSpecialDateButton" style="min-width: 60px; white-space: normal; writing-mode: horizontal-tb; text-align: center;">確定</button>
-                                        </div>
-                                        <div id="leaveGrantSpecialDateList" class="small text-muted">未指定</div>
-                                    </div>
                                     <div class="mb-3" id="leaveGrantDaysGroup">
                                         <label for="leaveGrantDays" class="form-label">付与日数 <span class="text-danger">*</span></label>
                                         <input type="number" step="0.5" min="0.5" class="form-control" id="leaveGrantDays" autocomplete="off" required>
                                     </div>
-                                    <!-- 夏季・冬季休暇の有効期限範囲 -->
+                                    <!-- 夏季・冬季・特別休暇の有効期限範囲 -->
                                     <div class="mb-3" id="leaveGrantDateRangeGroup" style="display: none;">
                                         <label class="form-label">有効期限 <span class="text-danger">*</span></label>
                                         <div class="row">
@@ -853,8 +850,9 @@
                                         </select>
                                     </div>
                                     <div class="mb-3" id="leaveGrantEmployeeSelectWrapper" style="display: none;">
-                                        <label for="leaveGrantEmployeeSelect" class="form-label">対象社員（複数選択可）</label>
+                                        <label for="leaveGrantEmployeeSelect" class="form-label">対象社員（複数選択可） <span class="text-danger">*</span></label>
                                         <select id="leaveGrantEmployeeSelect" class="form-select" multiple size="6"></select>
+                                        <div class="form-text">Ctrlキー（MacではCmdキー）を押しながらクリックして複数選択してください</div>
                                     </div>
                                     <button type="submit" class="btn btn-primary w-100">付与する</button>
                                 </form>

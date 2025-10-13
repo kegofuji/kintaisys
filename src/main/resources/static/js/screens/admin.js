@@ -23,10 +23,6 @@ class AdminScreen {
         this.leaveGrantScopeSelect = null;
         this.leaveGrantEmployeeWrapper = null;
         this.leaveGrantEmployeeSelect = null;
-        this.leaveGrantSpecialDatesWrapper = null;
-        this.leaveGrantSpecialDateInput = null;
-        this.leaveGrantSpecialDateList = null;
-        this.leaveGrantAddDateButton = null;
         this.leaveGrantDaysGroup = null;
         this.leaveBalanceTableBody = null;
         this.refreshLeaveBalancesButton = null;
@@ -39,7 +35,6 @@ class AdminScreen {
         this.approvalConfirmReasonInput = null;
         this.approvalConfirmButton = null;
         this.approvalCancelButton = null;
-        this.leaveGrantSelectedDates = [];
         this.employeeCache = null;
         this.selectedGrantEmployees = [];
         this.vacationManagementLoading = false;
@@ -504,10 +499,6 @@ class AdminScreen {
         this.leaveGrantScopeSelect = document.getElementById('leaveGrantScope');
         this.leaveGrantEmployeeWrapper = document.getElementById('leaveGrantEmployeeSelectWrapper');
         this.leaveGrantEmployeeSelect = document.getElementById('leaveGrantEmployeeSelect');
-        this.leaveGrantSpecialDatesWrapper = document.getElementById('leaveGrantSpecialDatesWrapper');
-        this.leaveGrantSpecialDateInput = document.getElementById('leaveGrantSpecialDateInput');
-        this.leaveGrantSpecialDateList = document.getElementById('leaveGrantSpecialDateList');
-        this.leaveGrantAddDateButton = document.getElementById('addSpecialDateButton');
         this.leaveGrantDaysGroup = document.getElementById('leaveGrantDaysGroup');
         this.leaveBalanceTableBody = document.getElementById('leaveBalanceTableBody');
         this.refreshLeaveBalancesButton = document.getElementById('refreshLeaveBalancesButton');
@@ -627,27 +618,7 @@ class AdminScreen {
             this.leaveGrantScopeSelect.dataset.bound = 'true';
         }
 
-        if (this.leaveGrantAddDateButton && !this.leaveGrantAddDateButton.dataset.bound) {
-            this.leaveGrantAddDateButton.addEventListener('click', () => this.handleAddSpecialDate());
-            this.leaveGrantAddDateButton.dataset.bound = 'true';
-        }
 
-        const confirmSpecialDateButton = document.getElementById('confirmSpecialDateButton');
-        if (confirmSpecialDateButton && !confirmSpecialDateButton.dataset.bound) {
-            confirmSpecialDateButton.addEventListener('click', () => this.handleConfirmSpecialDate());
-            confirmSpecialDateButton.dataset.bound = 'true';
-        }
-
-        if (this.leaveGrantSpecialDateList && !this.leaveGrantSpecialDateList.dataset.bound) {
-            this.leaveGrantSpecialDateList.addEventListener('click', (e) => {
-                const badge = e.target.closest('span.badge[data-date]');
-                if (!badge) return;
-                const date = badge.getAttribute('data-date');
-                this.leaveGrantSelectedDates = this.leaveGrantSelectedDates.filter(item => item !== date);
-                this.renderSpecialDateList();
-            });
-            this.leaveGrantSpecialDateList.dataset.bound = 'true';
-        }
 
         if (this.refreshLeaveRequestsButton && !this.refreshLeaveRequestsButton.dataset.bound) {
             this.refreshLeaveRequestsButton.addEventListener('click', () => this.loadVacationManagementData());
@@ -672,7 +643,6 @@ class AdminScreen {
         // 初期表示用にタイプによる制御を反映
         this.handleLeaveGrantTypeChange();
         this.handleLeaveGrantScopeChange();
-        this.renderSpecialDateList();
     }
 
     startVacationManagementPolling() {
@@ -1065,68 +1035,54 @@ class AdminScreen {
 
         const type = this.leaveGrantTypeSelect?.value || 'PAID_LEAVE';
         const scope = this.leaveGrantScopeSelect?.value || 'ALL';
-        const isSpecial = type === 'SPECIAL';
         
         let grantedDate = null;
         let grantedDays = null;
         let expiresAt = null;
 
-        if (isSpecial) {
-            // 特別休暇の場合
-            if (!Array.isArray(this.leaveGrantSelectedDates) || this.leaveGrantSelectedDates.length === 0) {
-                this.showAlert('特別休暇の日付を追加してください', 'warning');
-                this.leaveGrantSpecialDateInput?.focus();
-                return;
-            }
-            // 特別休暇では最初の日付を利用可能開始日として使用
-            grantedDate = this.leaveGrantSelectedDates[0];
-            // 有効期限は最後の日付を使用
-            expiresAt = this.leaveGrantSelectedDates[this.leaveGrantSelectedDates.length - 1];
-        } else {
-            // 通常の休暇の場合
-            const parsed = parseFloat(this.leaveGrantDaysInput?.value ?? '0');
-            if (!Number.isFinite(parsed) || parsed <= 0) {
-                this.showAlert('付与日数を入力してください', 'warning');
-                this.leaveGrantDaysInput?.focus();
-                return;
-            }
-            grantedDays = parsed;
+        // 通常の休暇の場合
+        const parsed = parseFloat(this.leaveGrantDaysInput?.value ?? '0');
+        if (!Number.isFinite(parsed) || parsed <= 0) {
+            this.showAlert('付与日数を入力してください', 'warning');
+            this.leaveGrantDaysInput?.focus();
+            return;
+        }
+        grantedDays = parsed;
+        
+        // 夏季・冬季・特別休暇の場合は有効期限の開始日と終了日を取得
+        if (type === 'SUMMER' || type === 'WINTER' || type === 'SPECIAL') {
+            grantedDate = this.leaveGrantStartDateInput?.value;
+            expiresAt = this.leaveGrantEndDateInput?.value;
             
-            // 夏季・冬季休暇の場合は有効期限の開始日と終了日を取得
-            if (type === 'SUMMER' || type === 'WINTER') {
-                grantedDate = this.leaveGrantStartDateInput?.value;
-                expiresAt = this.leaveGrantEndDateInput?.value;
-                
-                if (!grantedDate) {
-                    this.showAlert('有効期限の開始日を選択してください', 'warning');
-                    this.leaveGrantStartDateInput?.focus();
-                    return;
-                }
-                
-                if (!expiresAt) {
-                    this.showAlert('有効期限の終了日を選択してください', 'warning');
-                    this.leaveGrantEndDateInput?.focus();
-                    return;
-                }
-                
-                // 開始日が終了日より後の場合はエラー
-                if (new Date(grantedDate) > new Date(expiresAt)) {
-                    this.showAlert('開始日は終了日より前の日付を選択してください', 'warning');
-                    this.leaveGrantStartDateInput?.focus();
-                    return;
-                }
-            } else {
-                // 有休休暇の場合は有効期限なし
-                grantedDate = null;
-                expiresAt = null;
+            if (!grantedDate) {
+                this.showAlert('有効期限の開始日を選択してください', 'warning');
+                this.leaveGrantStartDateInput?.focus();
+                return;
             }
+            
+            if (!expiresAt) {
+                this.showAlert('有効期限の終了日を選択してください', 'warning');
+                this.leaveGrantEndDateInput?.focus();
+                return;
+            }
+            
+            // 開始日が終了日より後の場合はエラー
+            if (new Date(grantedDate) > new Date(expiresAt)) {
+                this.showAlert('開始日は終了日より前の日付を選択してください', 'warning');
+                this.leaveGrantStartDateInput?.focus();
+                return;
+            }
+        } else {
+            // 有休休暇の場合は有効期限なし
+            grantedDate = null;
+            expiresAt = null;
         }
 
         if (scope === 'INDIVIDUAL') {
             await this.ensureEmployeeOptions();
             const selected = Array.from(this.leaveGrantEmployeeSelect?.selectedOptions || []).map(opt => Number(opt.value));
             if (selected.length === 0) {
-                this.showAlert('付与対象の社員を選択してください', 'warning');
+                this.showAlert('付与対象の社員を選択してください（チェックボックスで選択が必要です）', 'warning');
                 return;
             }
             this.selectedGrantEmployees = selected;
@@ -1137,7 +1093,7 @@ class AdminScreen {
         // 確認ダイアログを表示
         const typeLabel = this.getLeaveTypeLabel(type);
         const scopeLabel = scope === 'ALL' ? '全社員' : '指定社員';
-        const daysText = isSpecial ? `${this.leaveGrantSelectedDates.length}日（特別休暇）` : `${grantedDays}日`;
+        const daysText = `${grantedDays}日`;
         
         let message = `
             <div style="font-size: 14px; line-height: 1.6;">
@@ -1150,24 +1106,21 @@ class AdminScreen {
                     <div class="mb-2">
                         <strong style="color: #495057; min-width: 140px; display: inline-block;">付与日数:</strong>
                         <span style="color: #212529; font-weight: 600;">${daysText}</span>
-                    </div>
-                    <div class="mb-2">
-                        <strong style="color: #495057; min-width: 140px; display: inline-block;">利用可能開始日:</strong>
-                        <span style="color: #212529;">${this.formatDate(grantedDate)}</span>
                     </div>`;
         
-        if (isSpecial) {
-            const formattedDates = this.leaveGrantSelectedDates.map(date => this.formatDate(date)).join('、 ');
+        if (grantedDate && !expiresAt) {
             message += `
                     <div class="mb-2">
-                        <strong style="color: #495057; min-width: 140px; display: inline-block;">対象日:</strong>
-                        <span style="color: #212529;">${formattedDates}</span>
+                        <strong style="color: #495057; min-width: 140px; display: inline-block;">付与日:</strong>
+                        <span style="color: #212529;">${this.formatDate(grantedDate)}</span>
                     </div>`;
-        } else if (expiresAt) {
+        }
+        
+        if (expiresAt) {
             message += `
                     <div class="mb-2">
                         <strong style="color: #495057; min-width: 140px; display: inline-block;">有効期限:</strong>
-                        <span style="color: #212529;">${this.formatDate(expiresAt)}</span>
+                        <span style="color: #212529;">${this.formatDate(grantedDate)} ～ ${this.formatDate(expiresAt)}</span>
                     </div>`;
         }
         
@@ -1200,14 +1153,10 @@ class AdminScreen {
             leaveType: type,
             scope,
             grantedDate,
-            grantedDays: isSpecial ? 1 : grantedDays,
+            grantedDays,
             expiresAt: expiresAt || null,
             employeeIds: scope === 'INDIVIDUAL' ? this.selectedGrantEmployees : []
         };
-
-        if (isSpecial) {
-            payload.specificDates = [...this.leaveGrantSelectedDates];
-        }
         
         console.log('送信するペイロード:', payload);
 
@@ -1223,8 +1172,6 @@ class AdminScreen {
             if (response?.success) {
                 this.showAlert(response.message || '休暇を付与しました', 'success');
                 this.leaveGrantForm.reset();
-                this.leaveGrantSelectedDates = [];
-                this.renderSpecialDateList();
                 this.handleLeaveGrantTypeChange();
                 await this.loadVacationManagementData();
                 await this.loadLeaveBalances();
@@ -1241,25 +1188,17 @@ class AdminScreen {
 
     handleLeaveGrantTypeChange() {
         const type = this.leaveGrantTypeSelect?.value || 'PAID_LEAVE';
-        const isSpecial = type === 'SPECIAL';
 
         if (this.leaveGrantDaysGroup) {
-            this.leaveGrantDaysGroup.style.display = isSpecial ? 'none' : '';
+            this.leaveGrantDaysGroup.style.display = ''; // 全ての休暇種別で付与日数を表示
         }
         if (this.leaveGrantDaysInput) {
-            this.leaveGrantDaysInput.required = !isSpecial;
-            if (isSpecial) {
-                this.leaveGrantDaysInput.value = '';
-            }
-        }
-
-        if (this.leaveGrantSpecialDatesWrapper) {
-            this.leaveGrantSpecialDatesWrapper.style.display = isSpecial ? '' : 'none';
+            this.leaveGrantDaysInput.required = true; // 全ての休暇種別で付与日数は必須
         }
 
         // 有効期限の表示制御
         if (this.leaveGrantDateRangeGroup) {
-            const showDateRange = type === 'SUMMER' || type === 'WINTER';
+            const showDateRange = type === 'SUMMER' || type === 'WINTER' || type === 'SPECIAL';
             this.leaveGrantDateRangeGroup.style.display = showDateRange ? '' : 'none';
             
             // 有効期限フィールドの必須属性設定
@@ -1281,10 +1220,6 @@ class AdminScreen {
             }
         }
 
-        if (!isSpecial) {
-            this.leaveGrantSelectedDates = [];
-            this.renderSpecialDateList();
-        }
     }
 
     async handleLeaveGrantScopeChange() {
@@ -1294,49 +1229,21 @@ class AdminScreen {
             this.leaveGrantEmployeeWrapper.style.display = show ? '' : 'none';
             if (show) {
                 await this.ensureEmployeeOptions();
-            } else if (this.leaveGrantEmployeeSelect) {
-                Array.from(this.leaveGrantEmployeeSelect.options).forEach(opt => opt.selected = false);
+                // 指定社員選択時は必須にする
+                if (this.leaveGrantEmployeeSelect) {
+                    this.leaveGrantEmployeeSelect.required = true;
+                    this.leaveGrantEmployeeSelect.setAttribute('data-required', 'true');
+                }
+            } else {
+                if (this.leaveGrantEmployeeSelect) {
+                    Array.from(this.leaveGrantEmployeeSelect.options).forEach(opt => opt.selected = false);
+                    this.leaveGrantEmployeeSelect.required = false;
+                    this.leaveGrantEmployeeSelect.removeAttribute('data-required');
+                }
             }
         }
     }
 
-    handleAddSpecialDate() {
-        if (!this.leaveGrantSpecialDateInput) return;
-        const value = this.leaveGrantSpecialDateInput.value;
-        if (!value) {
-            this.showAlert('日付を選択してください', 'warning');
-            return;
-        }
-        if (!this.leaveGrantSelectedDates.includes(value)) {
-            this.leaveGrantSelectedDates.push(value);
-            this.leaveGrantSelectedDates.sort();
-            this.renderSpecialDateList();
-        }
-        this.leaveGrantSpecialDateInput.value = '';
-    }
-
-    handleConfirmSpecialDate() {
-        // 確定ボタンが押された時の処理
-        // 現在選択されている日付を最終確定として処理
-        if (this.leaveGrantSelectedDates.length === 0) {
-            this.showAlert('利用可能開始日を追加してください', 'warning');
-            return;
-        }
-        
-        // 確定処理（現在は何もしない、将来的にフォーム送信時の処理で使用）
-        this.showAlert(`${this.leaveGrantSelectedDates.length}件の日付を確定しました`, 'success');
-    }
-
-    renderSpecialDateList() {
-        if (!this.leaveGrantSpecialDateList) return;
-        if (!this.leaveGrantSelectedDates.length) {
-            this.leaveGrantSpecialDateList.textContent = '未指定';
-            return;
-        }
-        this.leaveGrantSpecialDateList.innerHTML = this.leaveGrantSelectedDates
-            .map(date => `<span class="badge bg-secondary me-1 mb-1" data-date="${date}" role="button">${this.formatDate(date)} ×</span>`)
-            .join('');
-    }
 
     async ensureEmployeeOptions() {
         if (!Array.isArray(this.employeeCache)) {
@@ -1415,6 +1322,13 @@ class AdminScreen {
             const summer = this.formatRemainingValue(remaining, 'SUMMER');
             const winter = this.formatRemainingValue(remaining, 'WINTER');
             const special = this.formatRemainingValue(remaining, 'SPECIAL');
+
+            // 退職者の場合はグレーマスクを適用
+            if (employee.isActive === false) {
+                row.style.color = '#6c757d';
+                row.style.backgroundColor = '#f8f9fa';
+                row.style.opacity = '0.6';
+            }
 
             row.innerHTML = `
                 <td>${name}</td>

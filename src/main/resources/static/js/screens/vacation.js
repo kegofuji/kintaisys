@@ -1,5 +1,6 @@
 /**
  * 休暇申請画面モジュール
+ * Version: 2024-10-13-1030
  */
 class VacationScreen {
     constructor() {
@@ -17,6 +18,7 @@ class VacationScreen {
         this.specialLeaveRemaining = null;
         this.summerValidity = null;
         this.winterValidity = null;
+        this.specialValidity = null;
         this.reasonLabel = null;
         this.reasonRequiredMark = null;
         this.specialNotice = null;
@@ -26,19 +28,18 @@ class VacationScreen {
         this.listenersBound = false;
         this.remainingByType = {};
         this.activeGrantsByType = new Map();
-        this.specialAllowedDates = new Set();
 
         this.leaveTypeDisplayMap = {
             PAID_LEAVE: '有休',
-            SUMMER: '有休',
-            WINTER: '有休',
-            SPECIAL: '有休'
+            SUMMER: '夏季休暇',
+            WINTER: '冬季休暇',
+            SPECIAL: '特別休暇'
         };
 
         this.timeUnitDisplayMap = {
-            FULL_DAY: '全日',
-            HALF_AM: 'AM',
-            HALF_PM: 'PM'
+            FULL_DAY: '',
+            HALF_AM: 'AM有休',
+            HALF_PM: 'PM有休'
         };
     }
 
@@ -70,11 +71,13 @@ class VacationScreen {
         this.specialLeaveRemaining = document.getElementById('specialLeaveRemaining');
         this.summerValidity = document.getElementById('summerValidity');
         this.winterValidity = document.getElementById('winterValidity');
+        this.specialValidity = document.getElementById('specialValidity');
         this.reasonLabel = document.getElementById('vacationReasonLabel');
         this.reasonRequiredMark = document.getElementById('vacationReasonRequiredMark');
         this.specialNotice = document.getElementById('vacationSpecialNotice');
         this.prefillCancelButton = document.getElementById('vacationFormCancel');
         this.formTitle = document.getElementById('vacationFormTitle');
+        this.refreshLeaveBalanceButton = document.getElementById('refreshLeaveBalance');
     }
 
     /**
@@ -97,6 +100,10 @@ class VacationScreen {
 
         if (this.vacationEndDate) {
             this.vacationEndDate.addEventListener('change', () => this.handleDateRangeChange());
+        }
+
+        if (this.refreshLeaveBalanceButton) {
+            this.refreshLeaveBalanceButton.addEventListener('click', () => this.handleRefreshLeaveBalance());
         }
 
         this.listenersBound = true;
@@ -240,7 +247,6 @@ class VacationScreen {
             );
 
             this.activeGrantsByType = new Map();
-            this.specialAllowedDates = new Set();
 
             if (data && data.success && Array.isArray(data.data)) {
                 console.log('休暇付与データ:', data.data);
@@ -250,34 +256,13 @@ class VacationScreen {
                         this.activeGrantsByType.set(type, []);
                     }
                     this.activeGrantsByType.get(type).push(grant);
-
-                    if (type === 'SPECIAL') {
-                        const grantedDate = this.normalizeDateString(grant.grantedAt);
-                        const expiresAt = this.normalizeDateString(grant.expiresAt);
-                        if (grantedDate) {
-                            const today = new Date();
-                            const grantDateObj = this.parseDate(grantedDate);
-                            let isValid = !!grantDateObj;
-                            if (isValid && expiresAt) {
-                                const expires = this.parseDate(expiresAt);
-                                isValid = expires && expires.getTime() >= today.setHours(0, 0, 0, 0);
-                            }
-                            if (isValid) {
-                                this.specialAllowedDates.add(grantedDate);
-                            }
-                        }
-                    }
                 });
             }
-
-            this.updateSpecialNotice();
             // 有効期限情報を含めて残数サマリを再描画
             this.renderBalanceSummary();
         } catch (error) {
             console.error('休暇付与情報取得エラー:', error);
             this.activeGrantsByType = new Map();
-            this.specialAllowedDates = new Set();
-            this.updateSpecialNotice();
             // エラー時も残数サマリを再描画
             this.renderBalanceSummary();
         }
@@ -309,13 +294,17 @@ class VacationScreen {
             
             // 夏季休暇の有効期限
             const summerValidity = this.getValidityPeriod('SUMMER');
+            console.log('夏季休暇の有効期限情報:', summerValidity);
+            console.log('this.summerValidity要素:', this.summerValidity);
             if (this.summerValidity) {
-                if (summerValidity && summerDays > 0) {
-                    this.summerValidity.textContent = `有効期限：${summerValidity}`;
+                if (summerValidity) {
+                    this.summerValidity.innerHTML = `<i class="fas fa-calendar-alt me-1"></i>有効期限：${summerValidity}`;
                     this.summerValidity.style.display = 'block';
+                    this.summerValidity.className = 'small text-info mt-1 fw-bold';
+                    console.log('夏季休暇の有効期限を表示しました:', summerValidity);
                 } else {
-                    this.summerValidity.textContent = '有効期限：--';
                     this.summerValidity.style.display = 'none';
+                    console.log('夏季休暇の有効期限を非表示にしました（未設定）');
                 }
             }
         }
@@ -328,11 +317,11 @@ class VacationScreen {
             // 冬季休暇の有効期限
             const winterValidity = this.getValidityPeriod('WINTER');
             if (this.winterValidity) {
-                if (winterValidity && winterDays > 0) {
-                    this.winterValidity.textContent = `有効期限：${winterValidity}`;
+                if (winterValidity) {
+                    this.winterValidity.innerHTML = `<i class="fas fa-calendar-alt me-1"></i>有効期限：${winterValidity}`;
                     this.winterValidity.style.display = 'block';
+                    this.winterValidity.className = 'small text-info mt-1 fw-bold';
                 } else {
-                    this.winterValidity.textContent = '有効期限：--';
                     this.winterValidity.style.display = 'none';
                 }
             }
@@ -342,6 +331,18 @@ class VacationScreen {
         if (this.specialLeaveRemaining) {
             const specialDays = this.getRemainingDays('SPECIAL');
             this.specialLeaveRemaining.textContent = specialDays % 1 === 0 ? specialDays + '日' : specialDays.toFixed(1) + '日';
+            
+            // 特別休暇の有効期限
+            const specialValidity = this.getValidityPeriod('SPECIAL');
+            if (this.specialValidity) {
+                if (specialValidity) {
+                    this.specialValidity.innerHTML = `<i class="fas fa-calendar-alt me-1"></i>有効期限：${specialValidity}`;
+                    this.specialValidity.style.display = 'block';
+                    this.specialValidity.className = 'small text-info mt-1 fw-bold';
+                } else {
+                    this.specialValidity.style.display = 'none';
+                }
+            }
         }
     }
 
@@ -372,6 +373,7 @@ class VacationScreen {
         const startDate = this.formatDateForDisplay(latestGrant.grantedAt);
         const endDate = this.formatDateForDisplay(latestGrant.expiresAt);
         
+        console.log(`${leaveType}の有効期限表示: ${startDate}～${endDate}`);
         return `${startDate}～${endDate}`;
     }
 
@@ -393,27 +395,6 @@ class VacationScreen {
         }
     }
 
-    /**
-     * 特別休暇案内の更新
-     */
-    updateSpecialNotice() {
-        if (!this.specialNotice) {
-            return;
-        }
-
-        if (this.specialAllowedDates.size === 0) {
-            this.specialNotice.classList.add('d-none');
-            this.specialNotice.textContent = '';
-            return;
-        }
-
-        const dates = Array.from(this.specialAllowedDates)
-            .sort()
-            .map((date) => this.formatDateForDisplay(date));
-        this.specialNotice.classList.remove('d-none');
-        this.specialNotice.classList.add('alert', 'alert-info');
-        this.specialNotice.textContent = `特別休暇の申請可能日: ${dates.join(', ')}`;
-    }
 
     /**
      * 休暇種別選択変更時の処理
@@ -422,7 +403,6 @@ class VacationScreen {
         const { leaveType, timeUnit } = this.getSelectedLeaveType();
         const isPaidLeave = leaveType === 'PAID_LEAVE';
         const isHalfDay = timeUnit === 'HALF_AM' || timeUnit === 'HALF_PM';
-        const isSpecial = leaveType === 'SPECIAL';
 
         if (this.vacationReason) {
             if (isPaidLeave) {
@@ -441,22 +421,10 @@ class VacationScreen {
         }
 
         if (this.vacationEndDate) {
-            const disableEndDate = isHalfDay || isSpecial;
+            const disableEndDate = isHalfDay;
             this.vacationEndDate.disabled = disableEndDate;
             if (disableEndDate && this.vacationStartDate && this.vacationStartDate.value) {
                 this.vacationEndDate.value = this.vacationStartDate.value;
-            }
-        }
-
-        if (this.specialNotice) {
-            if (isSpecial) {
-                if (this.specialAllowedDates.size > 0) {
-                    this.specialNotice.classList.remove('d-none');
-                } else {
-                    this.specialNotice.classList.add('d-none');
-                }
-            } else if (this.specialAllowedDates.size === 0) {
-                this.specialNotice.classList.add('d-none');
             }
         }
     }
@@ -470,9 +438,8 @@ class VacationScreen {
         }
         const { leaveType, timeUnit } = this.getSelectedLeaveType();
         const isHalfDay = timeUnit === 'HALF_AM' || timeUnit === 'HALF_PM';
-        const isSpecial = leaveType === 'SPECIAL';
 
-        if (isHalfDay || isSpecial) {
+        if (isHalfDay) {
             this.vacationEndDate.value = this.vacationStartDate.value;
         }
     }
@@ -486,14 +453,18 @@ class VacationScreen {
      */
     updateLeaveTypeAvailability() {
         if (!this.leaveTypeSelect) {
+            console.log('leaveTypeSelectが見つかりません');
             return;
         }
 
+        console.log('休暇種別の選択肢を更新中...');
         const options = Array.from(this.leaveTypeSelect.options);
         options.forEach((option) => {
             const { leaveType, timeUnit } = this.parseOptionValue(option.value);
             let canSelect = true;
             const remaining = this.getRemainingDays(leaveType);
+
+            console.log(`休暇種別: ${leaveType}, 時間単位: ${timeUnit}, 残日数: ${remaining}`);
 
             if (leaveType === 'PAID_LEAVE') {
                 if (timeUnit === 'HALF_AM' || timeUnit === 'HALF_PM') {
@@ -502,14 +473,13 @@ class VacationScreen {
                     canSelect = remaining >= 1;
                 }
             } else {
+                // 有休休暇以外は残日数が1日以上の場合のみ選択可能
                 canSelect = remaining >= 1;
             }
 
-            if (leaveType === 'SPECIAL') {
-                canSelect = canSelect && this.specialAllowedDates.size > 0;
-            }
-
+            console.log(`${leaveType}(${timeUnit}): 残日数=${remaining}, 選択可能=${canSelect}`);
             option.disabled = !canSelect;
+            console.log(`option.disabled = ${option.disabled} (${option.textContent})`);
         });
 
         if (this.leaveTypeSelect && this.leaveTypeSelect.value) {
@@ -578,7 +548,14 @@ class VacationScreen {
         const displayStart = this.formatDateForDisplay(startDate);
         const displayEnd = this.formatDateForDisplay(endDate);
         const rangeText = displayStart === displayEnd ? displayStart : `${displayStart} 〜 ${displayEnd}`;
-        const summaryLabel = unitLabel ? `${leaveLabel}（${unitLabel}）` : leaveLabel;
+        
+        // 有休の場合は「有休」「AM有休」「PM有休」の形式で表示
+        let summaryLabel;
+        if (leaveLabel === '有休') {
+            summaryLabel = unitLabel || '有休';
+        } else {
+            summaryLabel = unitLabel ? `${leaveLabel}（${unitLabel}）` : leaveLabel;
+        }
         const confirmMessage = `休暇種別: ${summaryLabel}\n対象日: ${rangeText}\n休暇申請を送信します。よろしいですか？`;
 
         const confirmHandler = window.employeeDialog?.confirm;
@@ -660,18 +637,8 @@ class VacationScreen {
             return false;
         }
 
-        // 特別休暇は指定日のみ
-        if (leaveType === 'SPECIAL') {
-            const selectedDates = this.expandDateRange(startDate, endDate);
-            const invalid = selectedDates.filter((date) => !this.specialAllowedDates.has(date));
-            if (invalid.length > 0) {
-                this.showAlert('特別休暇は管理者が指定した日以外では申請できません', 'warning');
-                return false;
-            }
-        }
-
-        // 夏季・冬季休暇は有効期間内のみ
-        if (leaveType === 'SUMMER' || leaveType === 'WINTER') {
+        // 夏季・冬季・特別休暇は有効期間内のみ
+        if (leaveType === 'SUMMER' || leaveType === 'WINTER' || leaveType === 'SPECIAL') {
             const selectedDates = this.expandDateRange(startDate, endDate);
             const grants = this.activeGrantsByType.get(leaveType) || [];
             const invalid = selectedDates.filter((date) => !this.isDateCoveredByGrant(date, grants));
@@ -986,6 +953,50 @@ class VacationScreen {
             return '';
         }
         return normalized.replace(/-/g, '/');
+    }
+
+    /**
+     * 残休暇日数の更新ボタンクリック処理
+     */
+    async handleRefreshLeaveBalance() {
+        if (!this.refreshLeaveBalanceButton) {
+            console.error('更新ボタンが見つかりません');
+            return;
+        }
+
+        // ボタンを無効化してローディング状態にする
+        const originalText = this.refreshLeaveBalanceButton.innerHTML;
+        this.refreshLeaveBalanceButton.disabled = true;
+        this.refreshLeaveBalanceButton.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>更新中...';
+
+        try {
+            console.log('残休暇日数の手動更新を開始');
+            
+            // 残休暇日数を再取得
+            await this.loadRemainingVacationDays();
+            
+            // 休暇種別の選択肢を更新
+            this.updateLeaveTypeAvailability();
+            
+            console.log('残休暇日数の更新が完了しました');
+            
+            // 成功メッセージを表示（短時間）
+            this.refreshLeaveBalanceButton.innerHTML = '<i class="fas fa-check me-1"></i>更新完了';
+            setTimeout(() => {
+                this.refreshLeaveBalanceButton.innerHTML = originalText;
+                this.refreshLeaveBalanceButton.disabled = false;
+            }, 1000);
+            
+        } catch (error) {
+            console.error('残休暇日数の更新エラー:', error);
+            
+            // エラーメッセージを表示
+            this.refreshLeaveBalanceButton.innerHTML = '<i class="fas fa-exclamation-triangle me-1"></i>更新失敗';
+            setTimeout(() => {
+                this.refreshLeaveBalanceButton.innerHTML = originalText;
+                this.refreshLeaveBalanceButton.disabled = false;
+            }, 2000);
+        }
     }
 }
 

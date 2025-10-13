@@ -231,29 +231,6 @@ public class LeaveRequestService {
         leaveBalanceRepository.save(balance);
     }
 
-    /**
-     * 特別休暇の複数日付与処理
-     */
-    public void applySpecialLeaveGrant(Long employeeId, List<String> specificDates, Long grantedBy) {
-        if (specificDates == null || specificDates.isEmpty()) {
-            throw new VacationException(VacationException.INVALID_REQUEST, "付与日付が不正です");
-        }
-
-        Employee employee = employeeRepository.findByEmployeeId(employeeId)
-                .orElseThrow(() -> new VacationException(VacationException.EMPLOYEE_NOT_FOUND, "従業員が見つかりません"));
-
-        // 各日付に対して個別のLeaveGrantレコードを作成
-        for (String dateStr : specificDates) {
-            LocalDate date = LocalDate.parse(dateStr);
-            LeaveGrant grant = new LeaveGrant(employeeId, LeaveType.SPECIAL, BigDecimal.ONE, date, date, grantedBy);
-            leaveGrantRepository.save(grant);
-        }
-
-        // LeaveBalanceは一度だけ更新（複数日分を一括追加）
-        LeaveBalance balance = ensureBalance(employee, LeaveType.SPECIAL);
-        balance.addToTotal(new BigDecimal(specificDates.size()));
-        leaveBalanceRepository.save(balance);
-    }
 
     private void validateInputs(LeaveType leaveType,
                                 LeaveTimeUnit timeUnit,
@@ -363,21 +340,10 @@ public class LeaveRequestService {
             throw new VacationException(VacationException.INVALID_REQUEST, "残日数が不足しています");
         }
 
-        if (leaveType == LeaveType.SUMMER || leaveType == LeaveType.WINTER) {
+        if (leaveType == LeaveType.SUMMER || leaveType == LeaveType.WINTER || leaveType == LeaveType.SPECIAL) {
             List<LeaveGrant> grants = leaveGrantRepository.findActiveGrants(balance.getEmployeeId(), leaveType, LocalDate.now());
             if (grants.isEmpty()) {
                 throw new VacationException(VacationException.INVALID_REQUEST, "この休暇の有効期限が切れています");
-            }
-        }
-
-        if (leaveType == LeaveType.SPECIAL) {
-            LocalDate cursor = startDate;
-            while (!cursor.isAfter(endDate)) {
-                List<LeaveGrant> grants = leaveGrantRepository.findSpecialGrantsCoveringDate(balance.getEmployeeId(), cursor);
-                if (grants.isEmpty()) {
-                    throw new VacationException(VacationException.INVALID_REQUEST, "特別休暇は管理者指定日以外では申請できません");
-                }
-                cursor = cursor.plusDays(1);
             }
         }
     }

@@ -273,12 +273,34 @@ class CalendarScreen {
                     const typeLabel = LEAVE_TYPE_LABELS[vacationRequest.leaveType] || '休暇';
                     const unitMarker = LEAVE_TIME_UNIT_MARKERS[vacationRequest.timeUnit] || '';
                     
-                    // 申請中の場合は「休暇申請中」、承認済みの場合は「（全日）」などの単位を表示
+                    // 申請中の場合は「有休申請中」「AM有休申請中」、承認済みの場合は「有休承認済」「AM有休承認済」などの単位を表示
                     let badgeText;
                     if (statusUpper === 'PENDING') {
-                        badgeText = typeLabel === '有休' ? '有休申請中' : `${typeLabel}休暇申請中`;
+                        if (typeLabel === '有休') {
+                            // 有休の場合、時間単位に応じて表示を決定
+                            if (vacationRequest.timeUnit === 'HALF_AM') {
+                                badgeText = 'AM有休申請中';
+                            } else if (vacationRequest.timeUnit === 'HALF_PM') {
+                                badgeText = 'PM有休申請中';
+                            } else {
+                                badgeText = '有休申請中';
+                            }
+                        } else {
+                            badgeText = `${typeLabel}休暇申請中`;
+                        }
                     } else {
-                        badgeText = `${typeLabel}${unitMarker ? ` ${unitMarker}` : ''} ${statusLabel}`;
+                        if (typeLabel === '有休') {
+                            // 有休の場合、時間単位に応じて表示を決定
+                            if (vacationRequest.timeUnit === 'HALF_AM') {
+                                badgeText = `AM有休${statusLabel}`;
+                            } else if (vacationRequest.timeUnit === 'HALF_PM') {
+                                badgeText = `PM有休${statusLabel}`;
+                            } else {
+                                badgeText = `有休${statusLabel}`;
+                            }
+                        } else {
+                            badgeText = `${typeLabel}${unitMarker ? ` ${unitMarker}` : ''} ${statusLabel}`;
+                        }
                     }
                     badges += `<span class="badge ${statusClass} badge-sm">${badgeText}</span>`;
                 }

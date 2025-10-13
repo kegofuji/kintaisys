@@ -26,11 +26,4 @@ public interface LeaveGrantRepository extends JpaRepository<LeaveGrant, Long> {
             "AND (lg.expiresAt IS NULL OR lg.expiresAt >= :today)")
     List<LeaveGrant> findActiveGrants(@Param("employeeId") Long employeeId,
                                       @Param("today") LocalDate today);
-
-    @Query("SELECT lg FROM LeaveGrant lg WHERE lg.employeeId = :employeeId " +
-            "AND lg.leaveType = 'SPECIAL' " +
-            "AND lg.grantedAt <= :targetDate " +
-            "AND (lg.expiresAt IS NULL OR lg.expiresAt >= :targetDate)")
-    List<LeaveGrant> findSpecialGrantsCoveringDate(@Param("employeeId") Long employeeId,
-                                                   @Param("targetDate") LocalDate targetDate);
 }

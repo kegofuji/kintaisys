@@ -568,16 +568,25 @@ class HistoryScreen {
 
                 const leaveTypeText = LEAVE_TYPE_LABELS[vacationRequest.leaveType] || '有休';
                 const unitLabel = LEAVE_TIME_UNIT_LABELS[vacationRequest.timeUnit] || '';
+                const unitMarker = LEAVE_TIME_UNIT_MARKERS[vacationRequest.timeUnit] || '';
                 
-                // 申請中の場合は「休暇申請中」、承認済みの場合は「（全日）」などの単位を表示
+                // 申請中の場合は「有休申請中」「AM有休申請中」、承認済みの場合は「有休承認済」「AM有休承認済」などの単位を表示
                 let badgeMain;
                 if (statusUpper === 'PENDING') {
-                    badgeMain = leaveTypeText === '有休' ? '有休申請中' : `${leaveTypeText}休暇申請中`;
+                    if (leaveTypeText === '有休') {
+                        badgeMain = unitMarker ? `${unitMarker}申請中` : '有休申請中';
+                    } else {
+                        badgeMain = `${leaveTypeText}休暇申請中`;
+                    }
                 } else {
-                    badgeMain = unitLabel ? `${leaveTypeText}（${unitLabel}）` : leaveTypeText;
+                    if (leaveTypeText === '有休') {
+                        badgeMain = unitMarker ? `${unitMarker}${statusLabel}` : `有休${statusLabel}`;
+                    } else {
+                        badgeMain = unitLabel ? `${leaveTypeText}（${unitLabel}） ${statusLabel}` : `${leaveTypeText} ${statusLabel}`;
+                    }
                 }
                 
-                const badgeText = statusUpper === 'PENDING' ? badgeMain : `${badgeMain} ${statusLabel}`;
+                const badgeText = badgeMain;
                 const dataAttrs = [
                     `data-vacation-id="${vacationRequest.vacationId || ''}"`,
                     `data-status="${vacationRequest.status}"`,

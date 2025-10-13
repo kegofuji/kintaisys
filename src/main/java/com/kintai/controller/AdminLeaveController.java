@@ -103,38 +103,27 @@ public class AdminLeaveController {
             LocalDate expiresAt = request.getExpiresAt();
             Long approverId = resolveApproverId();
 
+            // 夏季・冬季・特別休暇の場合は有効期限が必須
+            if ((leaveType == LeaveType.SUMMER || leaveType == LeaveType.WINTER || leaveType == LeaveType.SPECIAL) 
+                && (grantedOn == null || expiresAt == null)) {
+                throw new VacationException(VacationException.INVALID_REQUEST, "有効期限の開始日と終了日を指定してください");
+            }
+
             List<Long> targetEmployees = resolveTargetEmployees(request);
             if (targetEmployees.isEmpty()) {
                 throw new VacationException(VacationException.INVALID_REQUEST, "付与対象の従業員が見つかりません");
             }
 
-            if (leaveType == LeaveType.SPECIAL) {
-                if (request.getSpecificDates() == null || request.getSpecificDates().isEmpty()) {
-                    throw new VacationException(VacationException.INVALID_REQUEST, "特別休暇の日付を指定してください");
-                }
-                for (Long employeeId : targetEmployees) {
-                    for (LocalDate specificDate : request.getSpecificDates()) {
-                        leaveRequestService.applyGrant(
-                                employeeId,
-                                leaveType,
-                                BigDecimal.ONE,
-                                specificDate,
-                                specificDate,
-                                approverId
-                        );
-                    }
-                }
-            } else {
-                for (Long employeeId : targetEmployees) {
-                    leaveRequestService.applyGrant(
-                            employeeId,
-                            leaveType,
-                            days,
-                            grantedOn,
-                            expiresAt,
-                            approverId
-                    );
-                }
+            // 全ての休暇種別で同じ処理を行う
+            for (Long employeeId : targetEmployees) {
+                leaveRequestService.applyGrant(
+                        employeeId,
+                        leaveType,
+                        days,
+                        grantedOn,
+                        expiresAt,
+                        approverId
+                );
             }
 
             Map<String, Object> body = new HashMap<>();
@@ -223,13 +212,11 @@ public class AdminLeaveController {
         @NotNull(message = "付与日数は必須です")
         @DecimalMin(value = "0.5", message = "0.5日以上で指定してください")
         private BigDecimal grantedDays;
-        @NotNull(message = "利用可能開始日を指定してください")
         private LocalDate grantedDate;
         private LocalDate expiresAt;
         @NotNull(message = "付与対象を指定してください")
         private GrantScope scope;
         private List<Long> employeeIds;
-        private List<LocalDate> specificDates;
 
         public String getLeaveType() {
             return leaveType;
@@ -279,13 +266,7 @@ public class AdminLeaveController {
             this.employeeIds = employeeIds;
         }
 
-        public List<LocalDate> getSpecificDates() {
-            return specificDates;
-        }
 
-        public void setSpecificDates(List<LocalDate> specificDates) {
-            this.specificDates = specificDates;
-        }
     }
 
     public enum GrantScope {
