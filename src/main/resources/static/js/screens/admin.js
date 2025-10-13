@@ -1013,7 +1013,7 @@ class AdminScreen {
                 : '<span class="text-muted">処理済</span>';
 
             const typeLabel = this.getLeaveTypeLabel(entry.leaveType);
-            const unitLabel = LEAVE_TIME_UNIT_LABELS[entry.timeUnit] || entry.timeUnit || '-';
+            const unitLabel = LEAVE_TIME_UNIT_LABELS[entry.timeUnit] || '';
 
             row.innerHTML = `
                 <td>${entry.employeeName}</td>
@@ -1368,14 +1368,6 @@ class AdminScreen {
         const message = `
             <div style="font-size: 14px; line-height: 1.6;">
                 <p class="mb-3">${typeLabel}を${actionText}しますか？</p>
-                <div class="card border-0 bg-light p-3 mb-0">
-                    <div style="text-align: center;">
-                        <span style="color: ${actionColor}; font-weight: 600; font-size: 16px;">
-                            <i class="bi bi-${isApprove ? 'check-circle' : 'x-circle'} me-2"></i>
-                            ${actionText}
-                        </span>
-                    </div>
-                </div>
             </div>
         `;
         

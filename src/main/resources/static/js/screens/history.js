@@ -582,7 +582,7 @@ class HistoryScreen {
                     if (leaveTypeText === '有休') {
                         badgeMain = unitMarker ? `${unitMarker}${statusLabel}` : `有休${statusLabel}`;
                     } else {
-                        badgeMain = unitLabel ? `${leaveTypeText}（${unitLabel}） ${statusLabel}` : `${leaveTypeText} ${statusLabel}`;
+                        badgeMain = unitLabel ? `${leaveTypeText}（${unitLabel}） ${statusLabel}` : `${leaveTypeText}休暇${statusLabel}`;
                     }
                 }
                 
@@ -1644,7 +1644,7 @@ class HistoryScreen {
             : (request.days != null ? `${request.days}日` : '-');
 
         const leaveTypeLabel = LEAVE_TYPE_LABELS[request.leaveType] || '有休';
-        const timeUnitLabel = LEAVE_TIME_UNIT_LABELS[request.timeUnit] || '-';
+        const timeUnitLabel = LEAVE_TIME_UNIT_LABELS[request.timeUnit] || '';
         const startDisplay = formatDate(request.startDate);
         const endDisplay = formatDate(request.endDate);
         let targetDisplay = '-';

@@ -299,7 +299,7 @@ class CalendarScreen {
                                 badgeText = `有休${statusLabel}`;
                             }
                         } else {
-                            badgeText = `${typeLabel}${unitMarker ? ` ${unitMarker}` : ''} ${statusLabel}`;
+                            badgeText = `${typeLabel}休暇${statusLabel}`;
                         }
                     }
                     badges += `<span class="badge ${statusClass} badge-sm">${badgeText}</span>`;
