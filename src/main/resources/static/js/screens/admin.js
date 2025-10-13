@@ -749,18 +749,29 @@ class AdminScreen {
             const deactivateText = employee.isActive ? '退職処理' : '復職処理';
             const deactivateClass = employee.isActive ? 'btn-outline-danger' : 'btn-outline-success';
             
+            // 退職者の判定をより確実にする
+            const isRetired = employee.isActive === false || 
+                             employee.isActive === 'false' || 
+                             employee.isActive === 0 || 
+                             employee.isActive === '0' ||
+                             statusText === '退職';
+            
+            if (isRetired) {
+                // 退職者：グレーマスクを適用（休暇残数と同じスタイル）
+                row.style.color = '#6c757d';
+                row.style.backgroundColor = '#f8f9fa';
+                row.style.opacity = '0.7';
+                row.classList.add('table-secondary');
+            }
+            
             // ユーザー名を取得（UserAccountから取得するか、デフォルト値を使用）
             const username = employee.username || `emp${employee.employeeId}`;
             const displayName = `${employee.lastName || 'ユーザー'} ${employee.firstName || username}`;
             const email = employee.email || `${username}@example.com`;
             const hireDate = employee.hireDate ? new Date(employee.hireDate).toLocaleDateString('ja-JP') : '-';
 
-            // 退職済み社員には有休調整ボタンを表示しない
-            const vacationAdjustButton = employee.isActive 
-                ? `<button class="btn btn-sm btn-outline-primary me-1 edit-employee-btn" data-employee-id="${employee.employeeId}">
-                     <i class="fas fa-hand-holding-medical"></i> 有休調整
-                   </button>`
-                : '';
+            // 有休調整機能は廃止
+            const vacationAdjustButton = '';
 
             // 退職済み社員には復職処理ボタンも表示しない（通常の業務フローでは復職は稀）
             const deactivateButton = employee.isActive 
@@ -1080,9 +1091,9 @@ class AdminScreen {
 
         if (scope === 'INDIVIDUAL') {
             await this.ensureEmployeeOptions();
-            const selected = Array.from(this.leaveGrantEmployeeSelect?.selectedOptions || []).map(opt => Number(opt.value));
+            const selected = Array.from(this.leaveGrantEmployeeSelect?.querySelectorAll('input[type="checkbox"]:checked') || []).map(checkbox => Number(checkbox.value));
             if (selected.length === 0) {
-                this.showAlert('付与対象の社員を選択してください（チェックボックスで選択が必要です）', 'warning');
+                this.showAlert('付与対象の社員を選択してください', 'warning');
                 return;
             }
             this.selectedGrantEmployees = selected;
@@ -1260,16 +1271,44 @@ class AdminScreen {
         }
 
         if (this.leaveGrantEmployeeSelect) {
-            const selectedIds = new Set(Array.from(this.leaveGrantEmployeeSelect.selectedOptions || []).map(opt => Number(opt.value)));
-            this.leaveGrantEmployeeSelect.innerHTML = '';
-            (this.employeeCache || []).forEach(emp => {
-                const option = document.createElement('option');
-                option.value = emp.employeeId;
-                option.textContent = this.getDisplayEmployeeName(emp);
-                if (selectedIds.has(emp.employeeId)) {
-                    option.selected = true;
+            // 既存の選択状態を保持
+            const selectedIds = new Set();
+            const checkboxes = this.leaveGrantEmployeeSelect.querySelectorAll('input[type="checkbox"]');
+            checkboxes.forEach(checkbox => {
+                if (checkbox.checked) {
+                    selectedIds.add(Number(checkbox.value));
                 }
-                this.leaveGrantEmployeeSelect.appendChild(option);
+            });
+
+            this.leaveGrantEmployeeSelect.innerHTML = '';
+            
+            // アクティブな社員のみを表示
+            const activeEmployees = (this.employeeCache || []).filter(emp => emp.isActive !== false);
+            
+            if (activeEmployees.length === 0) {
+                this.leaveGrantEmployeeSelect.innerHTML = '<div class="text-muted text-center py-2">アクティブな社員がありません</div>';
+                return;
+            }
+
+            activeEmployees.forEach(emp => {
+                const div = document.createElement('div');
+                div.className = 'form-check';
+                
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.className = 'form-check-input';
+                checkbox.id = `employee_${emp.employeeId}`;
+                checkbox.value = emp.employeeId;
+                checkbox.checked = selectedIds.has(emp.employeeId);
+                
+                const label = document.createElement('label');
+                label.className = 'form-check-label';
+                label.htmlFor = `employee_${emp.employeeId}`;
+                label.textContent = this.getDisplayEmployeeName(emp);
+                
+                div.appendChild(checkbox);
+                div.appendChild(label);
+                this.leaveGrantEmployeeSelect.appendChild(div);
             });
         }
     }
@@ -1327,7 +1366,8 @@ class AdminScreen {
             if (employee.isActive === false) {
                 row.style.color = '#6c757d';
                 row.style.backgroundColor = '#f8f9fa';
-                row.style.opacity = '0.6';
+                row.style.opacity = '0.7';
+                row.classList.add('table-secondary');
             }
 
             row.innerHTML = `
@@ -1585,102 +1625,12 @@ class AdminScreen {
     }
 
     /**
-     * 社員編集
+     * 社員編集（有休調整機能は廃止）
      * @param {number} employeeId - 社員ID
      */
     async editEmployee(employeeId) {
-        // 有休調整ダイアログ
-        let currentRemaining = null;
-        try {
-            const data = await fetchWithAuth
-                .handleApiCall(
-                    () => fetchWithAuth.get(`/api/leave/remaining/${employeeId}`),
-                    '残有休日数の取得に失敗しました'
-                );
-            if (data && data.success && typeof data.remainingDays === 'number') {
-                currentRemaining = data.remainingDays;
-            }
-        } catch (error) {
-            console.warn('残有休日数の取得に失敗しました:', error);
-        }
-
-        const header = currentRemaining !== null
-            ? `現在の残有休日数: ${currentRemaining}日\n\n`
-            : '';
-        const deltaStr = prompt(`${header}有休日数の増減を入力してください（例: +2 または -1。単位: 日）`);
-        if (deltaStr === null) return;
-        const normalized = (deltaStr || '').trim();
-        if (!/^[-+]?\d+$/.test(normalized)) {
-            this.showAlert('整数で入力してください（例: +1, -2）', 'warning');
-            return;
-        }
-        const delta = parseInt(normalized, 10);
-        if (delta === 0) {
-            this.showAlert('0日は処理不要です', 'info');
-            return;
-        }
-        let message;
-        if (currentRemaining !== null) {
-            const absDelta = Math.abs(delta);
-            const actionWord = delta > 0 ? '追加' : '減算';
-            const projected = currentRemaining + delta;
-            const changeColor = delta > 0 ? '#28a745' : '#dc3545';
-            const changeIcon = delta > 0 ? 'arrow-up-circle' : 'arrow-down-circle';
-            
-            message = `
-                <div style="font-size: 14px; line-height: 1.6;">
-                    <p class="mb-3">以下の内容で有休残数を調整します。よろしいですか？</p>
-                    <div class="card border-0 bg-light p-3 mb-0">
-                        <div class="mb-2">
-                            <strong style="color: #495057; min-width: 120px; display: inline-block;">現在の残数:</strong>
-                            <span style="color: #212529; font-weight: 600;">${currentRemaining}日</span>
-                        </div>
-                        <div class="mb-2">
-                            <strong style="color: #495057; min-width: 120px; display: inline-block;">調整内容:</strong>
-                            <span style="color: ${changeColor}; font-weight: 600;">
-                                <i class="bi bi-${changeIcon} me-1"></i>
-                                ${delta >= 0 ? '+' : ''}${delta}日（${actionWord}）
-                            </span>
-                        </div>
-                        <div style="padding-top: 10px; margin-top: 10px; border-top: 1px solid #dee2e6;">
-                            <strong style="color: #495057; min-width: 120px; display: inline-block;">調整後の残数:</strong>
-                            <span style="color: #212529; font-weight: 600; font-size: 16px;">${projected}日</span>
-                        </div>
-                    </div>
-                </div>
-            `;
-        } else {
-            const changeColor = delta > 0 ? '#28a745' : '#dc3545';
-            const changeIcon = delta > 0 ? 'arrow-up-circle' : 'arrow-down-circle';
-            
-            message = `
-                <div style="font-size: 14px; line-height: 1.6;">
-                    <p class="mb-3">有休残数を調整します。よろしいですか？</p>
-                    <div class="card border-0 bg-light p-3 mb-0">
-                        <div class="text-center">
-                            <strong style="color: #495057;">調整内容:</strong>
-                            <span style="color: ${changeColor}; font-weight: 600; font-size: 16px; margin-left: 10px;">
-                                <i class="bi bi-${changeIcon} me-1"></i>
-                                ${delta >= 0 ? '+' : ''}${delta}日
-                            </span>
-                        </div>
-                    </div>
-                </div>
-            `;
-        }
-
-        const { confirmed } = await this.promptApprovalDialog({
-            title: '有休残数調整',
-            message,
-            confirmLabel: '調整する',
-            requireReason: false
-        });
-
-        if (!confirmed) {
-            return;
-        }
-
-        this.adjustVacationBalance(employeeId, delta, '');
+        // 有休調整機能は廃止
+        this.showAlert('有休調整機能は廃止されました', 'info');
     }
 
     /**
@@ -1688,21 +1638,93 @@ class AdminScreen {
      * @param {number} employeeId - 社員ID
      */
     async deactivateEmployee(employeeId) {
-        if (confirm('この社員を退職処理しますか？')) {
-            try {
-                const data = await fetchWithAuth.handleApiCall(
-                    () => fetchWithAuth.put(`/api/admin/employee-management/${employeeId}/deactivate`),
-                    '退職処理に失敗しました'
-                );
-
-                this.showAlert(data.message, 'success');
-                await this.loadEmployees();
-                // 社員一覧更新後に次の社員番号も更新
-                this.updateNextEmployeeNumber();
-            } catch (error) {
-                this.showAlert(error.message, 'danger');
-            }
+        // 社員情報を取得
+        const employee = (this.employeeCache || []).find(emp => emp.employeeId === employeeId);
+        const employeeName = employee ? this.getDisplayEmployeeName(employee) : `社員ID: ${employeeId}`;
+        
+        // 専用モーダルを使用
+        const confirmed = await this.showDeactivateEmployeeModal(employeeName);
+        if (!confirmed) {
+            return;
         }
+
+        try {
+            const data = await fetchWithAuth.handleApiCall(
+                () => fetchWithAuth.put(`/api/admin/employee-management/${employeeId}/deactivate`),
+                '退職処理に失敗しました'
+            );
+
+            this.showAlert(data.message || '退職処理が完了しました', 'success');
+            await this.loadEmployees();
+            // 社員一覧更新後に次の社員番号も更新
+            this.updateNextEmployeeNumber();
+            
+            // 休暇残数一覧も更新（退職者がグレー表示になるように）
+            if (window.router?.getCurrentRoute?.() === '/admin/vacation-management') {
+                await this.loadLeaveBalances();
+            }
+        } catch (error) {
+            this.showAlert(error.message || '退職処理に失敗しました', 'danger');
+        }
+    }
+
+    /**
+     * 退職処理確認モーダル表示
+     * @param {string} employeeName - 社員名
+     * @returns {Promise<boolean>} - 確認されたかどうか
+     */
+    async showDeactivateEmployeeModal(employeeName) {
+        const modalEl = document.getElementById('deactivateEmployeeModal');
+        const nameEl = document.getElementById('deactivateEmployeeName');
+        const confirmBtn = document.getElementById('deactivateEmployeeConfirmButton');
+        const cancelBtn = document.getElementById('deactivateEmployeeCancelButton');
+
+        if (!modalEl || !nameEl || !confirmBtn || !cancelBtn) {
+            // フォールバック: 標準のconfirmダイアログ
+            return confirm(`${employeeName} を退職処理しますか？`);
+        }
+
+        // 社員名を設定
+        nameEl.textContent = employeeName;
+
+        const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+        
+        return new Promise((resolve) => {
+            let resolved = false;
+
+            const cleanup = () => {
+                confirmBtn.removeEventListener('click', onConfirm);
+                cancelBtn.removeEventListener('click', onCancel);
+                modalEl.removeEventListener('hidden.bs.modal', onHidden);
+            };
+
+            const finalize = (result) => {
+                if (resolved) return;
+                resolved = true;
+                cleanup();
+                resolve(result);
+            };
+
+            const onConfirm = () => {
+                modal.hide();
+                finalize(true);
+            };
+
+            const onCancel = () => {
+                modal.hide();
+                finalize(false);
+            };
+
+            const onHidden = () => {
+                finalize(false);
+            };
+
+            confirmBtn.addEventListener('click', onConfirm);
+            cancelBtn.addEventListener('click', onCancel);
+            modalEl.addEventListener('hidden.bs.modal', onHidden, { once: true });
+
+            modal.show();
+        });
     }
 
     /**
@@ -2050,25 +2072,7 @@ class AdminScreen {
      * @param {number} deltaDays 正負の整数（日）
      * @param {string} reason 理由
      */
-    async adjustVacationBalance(employeeId, deltaDays, reason) {
-        try {
-            const payload = { employeeId, deltaDays, reason };
-            const data = await fetchWithAuth.handleApiCall(
-                () => fetchWithAuth.post('/api/admin/leave/balances/adjust', payload),
-                '有休残数の調整に失敗しました'
-            );
-
-            if (data && (data.success === true || data.status === 'OK')) {
-                this.showAlert('有休残数を調整しました', 'success');
-                await this.loadLeaveBalances();
-            } else {
-                this.showAlert((data && data.message) || '有休残数の調整に失敗しました', 'danger');
-            }
-        } catch (error) {
-            console.error('有休調整エラー:', error);
-            this.showAlert('有休残数の調整中にエラーが発生しました', 'danger');
-        }
-    }
+    // adjustVacationBalance メソッドは廃止（有休調整機能の廃止により）
 
     // 復職/退職はAPIに一本化（上の async deactivateEmployee を使用）
 

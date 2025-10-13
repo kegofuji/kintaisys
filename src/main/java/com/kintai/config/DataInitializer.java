@@ -109,6 +109,31 @@ public class DataInitializer {
             System.out.println("emp2 user already exists");
         }
         
+        // emp3用の従業員データを作成（employeeId=3、在籍）
+        if (!employeeRepository.existsById(3L)) {
+            Employee emp3Employee = new Employee("EMP003");
+            emp3Employee.setEmployeeId(3L);
+            emp3Employee.setIsActive(true); // 在籍
+            Employee savedEmp3 = employeeRepository.save(emp3Employee);
+            System.out.println("Created emp3 employee with ID: " + savedEmp3.getEmployeeId());
+        } else {
+            System.out.println("emp3 employee already exists");
+        }
+        
+        // emp3ユーザーアカウントを作成
+        if (!userAccountRepository.findByUsername("emp3").isPresent()) {
+            UserAccount emp3 = new UserAccount();
+            emp3.setUsername("emp3");
+            emp3.setPassword(passwordEncoder.encode("pass"));
+            emp3.setRole(UserAccount.UserRole.EMPLOYEE);
+            emp3.setEmployeeId(3L);
+            emp3.setEnabled(true);
+            userAccountRepository.save(emp3);
+            System.out.println("Created emp3 user with employeeId: 3");
+        } else {
+            System.out.println("emp3 user already exists");
+        }
+        
         // admin用の管理者データを作成（adminId=1）
         Admin adminData = new Admin("ADM001");
         adminData.setAdminId(1L);
@@ -147,8 +172,8 @@ public class DataInitializer {
         try {
             System.out.println("DataInitializer: Initializing leave balances...");
             
-            // emp1とemp2の両方に対して休暇残数を初期化
-            Long[] employeeIds = {1L, 2L};
+            // emp1、emp2、emp3の全てに対して休暇残数を初期化
+            Long[] employeeIds = {1L, 2L, 3L};
             
             for (Long employeeId : employeeIds) {
                 // 各従業員に対してすべての休暇種別の残数レコードを作成（既存のものも更新）
@@ -170,8 +195,7 @@ public class DataInitializer {
                             Employee employee = employeeRepository.findByEmployeeId(employeeId).orElse(null);
                             if (employee != null) {
                                 int base = employee.getPaidLeaveBaseDays();
-                                int adjustment = employee.getPaidLeaveAdjustment();
-                                BigDecimal total = BigDecimal.valueOf(base + adjustment);
+                                BigDecimal total = BigDecimal.valueOf(base);
                                 balance.setTotalDays(total);
                                 balance.setRemainingDays(total);
                             } else {

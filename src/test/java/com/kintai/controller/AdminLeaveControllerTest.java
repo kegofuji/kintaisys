@@ -19,7 +19,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
+// BigDecimal import は廃止（有休調整機能の廃止により使用されなくなった）
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
@@ -146,32 +146,5 @@ class AdminLeaveControllerTest {
         assertThat(updated.getStatus()).isEqualTo(LeaveStatus.APPROVED);
     }
 
-    @Test
-    void adjustBalanceEndpointIncrementsPaidLeaveAdjustment() throws Exception {
-        int beforeAdjustment = employeeRepository.findById(employee.getEmployeeId())
-                .orElseThrow()
-                .getPaidLeaveAdjustment();
-
-        Map<String, Object> payload = Map.of(
-                "employeeId", employee.getEmployeeId(),
-                "deltaDays", 2,
-                "reason", "テスト調整"
-        );
-
-        mockMvc.perform(post("/api/admin/leave/balances/adjust")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(payload)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.adjustmentTotal").value(beforeAdjustment + 2));
-
-        int updatedAdjustment = employeeRepository.findById(employee.getEmployeeId())
-                .orElseThrow()
-                .getPaidLeaveAdjustment();
-        assertThat(updatedAdjustment).isEqualTo(beforeAdjustment + 2);
-
-        var remaining = leaveRequestService.getRemainingLeaveSummary(employee.getEmployeeId());
-        BigDecimal expectedRemaining = BigDecimal.valueOf(employee.getPaidLeaveBaseDays() + updatedAdjustment);
-        assertThat(remaining.get(LeaveType.PAID_LEAVE)).isEqualByComparingTo(expectedRemaining);
-    }
+    // adjustBalanceEndpointIncrementsPaidLeaveAdjustment テストは廃止（有休調整機能の廃止により）
 }

@@ -299,8 +299,7 @@ public class LeaveRequestService {
         switch (leaveType) {
             case PAID_LEAVE -> {
                 int base = employee.getPaidLeaveBaseDays();
-                int adjustment = employee.getPaidLeaveAdjustment();
-                BigDecimal total = BigDecimal.valueOf(base + adjustment);
+                BigDecimal total = BigDecimal.valueOf(base);
                 balance.setTotalDays(total);
                 balance.setRemainingDays(total);
             }
@@ -390,8 +389,7 @@ public class LeaveRequestService {
                 .orElseGet(() -> initializeBalance(employee, LeaveType.PAID_LEAVE));
 
         int base = employee.getPaidLeaveBaseDays();
-        int adjustment = employee.getPaidLeaveAdjustment();
-        BigDecimal total = BigDecimal.valueOf(base + adjustment);
+        BigDecimal total = BigDecimal.valueOf(base);
         BigDecimal used = Optional.ofNullable(balance.getUsedDays()).orElse(BigDecimal.ZERO);
         BigDecimal remaining = total.subtract(used);
         if (remaining.signum() < 0) {

@@ -37,25 +37,7 @@ public class AdminLeaveController {
     @Autowired
     private EmployeeRepository employeeRepository;
 
-    @PostMapping("/balances/adjust")
-    public ResponseEntity<Map<String, Object>> adjustPaidLeave(@Valid @RequestBody AdjustBalanceRequest request) {
-        if (request.getDeltaDays() == null || request.getDeltaDays().intValue() == 0) {
-            return ResponseEntity.badRequest().body(error("INVALID_REQUEST", "増減日数を指定してください"));
-        }
-        return employeeRepository.findById(request.getEmployeeId())
-                .map(emp -> {
-                    int current = emp.getPaidLeaveAdjustment();
-                    emp.setPaidLeaveAdjustment(current + request.getDeltaDays());
-                    employeeRepository.save(emp);
-                    leaveRequestService.refreshPaidLeaveBalance(emp.getEmployeeId());
-                    Map<String, Object> body = new HashMap<>();
-                    body.put("success", true);
-                    body.put("message", "有休残数を調整しました");
-                    body.put("adjustmentTotal", emp.getPaidLeaveAdjustment());
-                    return ResponseEntity.ok(body);
-                })
-                .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND).body(error("NOT_FOUND", "従業員が見つかりません")));
-    }
+    // adjustPaidLeave エンドポイントは廃止（有休調整機能の廃止により）
 
     @PostMapping("/requests/{leaveRequestId}/decision")
     public ResponseEntity<Map<String, Object>> decideRequest(@PathVariable Long leaveRequestId,
@@ -160,6 +142,7 @@ public class AdminLeaveController {
         if (request.getScope() == GrantScope.ALL) {
             return employeeRepository.findAll()
                     .stream()
+                    .filter(employee -> employee.getIsActive() != null && employee.getIsActive())
                     .map(com.kintai.entity.Employee::getEmployeeId)
                     .collect(Collectors.toList());
         }
@@ -168,6 +151,7 @@ public class AdminLeaveController {
         }
         Set<Long> existing = employeeRepository.findAllById(request.getEmployeeIds())
                 .stream()
+                .filter(employee -> employee.getIsActive() != null && employee.getIsActive())
                 .map(com.kintai.entity.Employee::getEmployeeId)
                 .collect(Collectors.toSet());
         return request.getEmployeeIds()
@@ -274,43 +258,7 @@ public class AdminLeaveController {
         INDIVIDUAL
     }
 
-    public static class AdjustBalanceRequest {
-        @NotNull(message = "従業員IDは必須です")
-        private Long employeeId;
-        @NotNull(message = "増減日数は必須です")
-        private Integer deltaDays;
-        private String reason;
+    // AdjustBalanceRequest クラスは廃止（有休調整機能の廃止により）
 
-        public Long getEmployeeId() {
-            return employeeId;
-        }
-
-        public void setEmployeeId(Long employeeId) {
-            this.employeeId = employeeId;
-        }
-
-        public Integer getDeltaDays() {
-            return deltaDays;
-        }
-
-        public void setDeltaDays(Integer deltaDays) {
-            this.deltaDays = deltaDays;
-        }
-
-        public String getReason() {
-            return reason;
-        }
-
-        public void setReason(String reason) {
-            this.reason = reason;
-        }
-    }
-
-    private Map<String, Object> error(String code, String message) {
-        Map<String, Object> body = new HashMap<>();
-        body.put("success", false);
-        body.put("errorCode", code);
-        body.put("message", message);
-        return body;
-    }
+    // error メソッドは廃止（有休調整機能の廃止により使用されなくなった）
 }

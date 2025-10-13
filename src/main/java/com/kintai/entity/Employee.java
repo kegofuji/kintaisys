@@ -22,8 +22,7 @@ public class Employee {
     @Column(name = "is_active", nullable = false, columnDefinition = "BOOLEAN DEFAULT TRUE")
     private Boolean isActive = true;
     
-    @Column(name = "paid_leave_adjustment", nullable = false, columnDefinition = "INT DEFAULT 0")
-    private Integer paidLeaveAdjustment = 0;
+    // paid_leave_adjustment カラムは廃止（有休調整機能の廃止により）
 
     @Column(name = "paid_leave_base_days", nullable = false, columnDefinition = "INT DEFAULT 10")
     private Integer paidLeaveBaseDays = 10;
@@ -37,7 +36,6 @@ public class Employee {
     // デフォルトコンストラクタ
     public Employee() {
         this.isActive = true;
-        this.paidLeaveAdjustment = 0;
         this.paidLeaveBaseDays = 10;
     }
     
@@ -45,7 +43,6 @@ public class Employee {
     public Employee(String employeeCode) {
         this.employeeCode = employeeCode;
         this.isActive = true;
-        this.paidLeaveAdjustment = 0;
         this.paidLeaveBaseDays = 10;
         this.createdAt = LocalDateTime.now();
         this.updatedAt = LocalDateTime.now();
@@ -55,9 +52,6 @@ public class Employee {
     protected void onCreate() {
         if (isActive == null) {
             isActive = true;
-        }
-        if (paidLeaveAdjustment == null) {
-            paidLeaveAdjustment = 0;
         }
         if (paidLeaveBaseDays == null) {
             paidLeaveBaseDays = 10;
@@ -125,13 +119,7 @@ public class Employee {
         return !isActive;
     }
 
-    public Integer getPaidLeaveAdjustment() {
-        return paidLeaveAdjustment == null ? 0 : paidLeaveAdjustment;
-    }
-
-    public void setPaidLeaveAdjustment(Integer paidLeaveAdjustment) {
-        this.paidLeaveAdjustment = paidLeaveAdjustment == null ? 0 : paidLeaveAdjustment;
-    }
+    // getPaidLeaveAdjustment と setPaidLeaveAdjustment メソッドは廃止（有休調整機能の廃止により）
 
     public Integer getPaidLeaveBaseDays() {
         return paidLeaveBaseDays == null ? 10 : paidLeaveBaseDays;
