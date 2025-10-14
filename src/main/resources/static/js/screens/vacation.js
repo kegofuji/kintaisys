@@ -300,7 +300,7 @@ class VacationScreen {
                 if (summerValidity) {
                     this.summerValidity.innerHTML = `<i class="fas fa-calendar-alt me-1"></i>有効期限：${summerValidity}`;
                     this.summerValidity.style.display = 'block';
-                    this.summerValidity.className = 'small text-info mt-1 fw-bold';
+                    this.summerValidity.className = 'small text-dark mt-1 fw-bold';
                     console.log('夏季休暇の有効期限を表示しました:', summerValidity);
                 } else {
                     this.summerValidity.style.display = 'none';
@@ -320,7 +320,7 @@ class VacationScreen {
                 if (winterValidity) {
                     this.winterValidity.innerHTML = `<i class="fas fa-calendar-alt me-1"></i>有効期限：${winterValidity}`;
                     this.winterValidity.style.display = 'block';
-                    this.winterValidity.className = 'small text-info mt-1 fw-bold';
+                    this.winterValidity.className = 'small text-dark mt-1 fw-bold';
                 } else {
                     this.winterValidity.style.display = 'none';
                 }
@@ -338,7 +338,7 @@ class VacationScreen {
                 if (specialValidity) {
                     this.specialValidity.innerHTML = `<i class="fas fa-calendar-alt me-1"></i>有効期限：${specialValidity}`;
                     this.specialValidity.style.display = 'block';
-                    this.specialValidity.className = 'small text-info mt-1 fw-bold';
+                    this.specialValidity.className = 'small text-dark mt-1 fw-bold';
                 } else {
                     this.specialValidity.style.display = 'none';
                 }
@@ -975,10 +975,13 @@ class VacationScreen {
             // 残休暇日数を再取得
             await this.loadRemainingVacationDays();
             
+            // 有効期限情報を再取得
+            await this.loadActiveGrants();
+            
             // 休暇種別の選択肢を更新
             this.updateLeaveTypeAvailability();
             
-            console.log('残休暇日数の更新が完了しました');
+            console.log('残休暇日数と有効期限の更新が完了しました');
             
             // 成功メッセージを表示（短時間）
             this.refreshLeaveBalanceButton.innerHTML = '<i class="fas fa-check me-1"></i>更新完了';

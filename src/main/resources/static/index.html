@@ -564,39 +564,39 @@
                             </div>
                             <div class="row g-2 mb-3">
                                 <div class="col-6">
-                                    <div class="card border-primary h-100">
+                                    <div class="card border-secondary h-100">
                                         <div class="card-body text-center py-3">
-                                            <div class="h5 mb-1 text-primary" id="paidLeaveRemaining">--</div>
+                                            <div class="h5 mb-1 text-dark" id="paidLeaveRemaining">--</div>
                                             <small class="text-muted">有休休暇</small>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class="col-6">
-                                    <div class="card border-success h-100">
-                                        <div class="card-body text-center py-3">
-                                            <div class="h5 mb-1 text-success" id="summerLeaveRemaining">--</div>
-                                            <small class="text-muted">夏季休暇</small>
-                                            <div class="small text-info mt-1 fw-bold" id="summerValidity" style="display: none;"><i class="fas fa-calendar-alt me-1"></i>有効期限：未設定</div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="row g-2">
-                                <div class="col-6">
-                                    <div class="card border-warning h-100">
-                                        <div class="card-body text-center py-3">
-                                            <div class="h5 mb-1 text-warning" id="winterLeaveRemaining">--</div>
-                                            <small class="text-muted">冬季休暇</small>
-                                            <div class="small text-info mt-1 fw-bold" id="winterValidity" style="display: none;"><i class="fas fa-calendar-alt me-1"></i>有効期限：未設定</div>
                                         </div>
                                     </div>
                                 </div>
                                 <div class="col-6">
                                     <div class="card border-secondary h-100">
                                         <div class="card-body text-center py-3">
-                                            <div class="h5 mb-1 text-secondary" id="specialLeaveRemaining">--</div>
+                                            <div class="h5 mb-1 text-dark" id="summerLeaveRemaining">--</div>
+                                            <small class="text-muted">夏季休暇</small>
+                                            <div class="small text-dark mt-1 fw-bold" id="summerValidity" style="display: none;"><i class="fas fa-calendar-alt me-1"></i>有効期限：未設定</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="row g-2">
+                                <div class="col-6">
+                                    <div class="card border-secondary h-100">
+                                        <div class="card-body text-center py-3">
+                                            <div class="h5 mb-1 text-dark" id="winterLeaveRemaining">--</div>
+                                            <small class="text-muted">冬季休暇</small>
+                                            <div class="small text-dark mt-1 fw-bold" id="winterValidity" style="display: none;"><i class="fas fa-calendar-alt me-1"></i>有効期限：未設定</div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="card border-secondary h-100">
+                                        <div class="card-body text-center py-3">
+                                            <div class="h5 mb-1 text-dark" id="specialLeaveRemaining">--</div>
                                             <small class="text-muted">特別休暇</small>
-                                            <div class="small text-info mt-1 fw-bold" id="specialValidity" style="display: none;"><i class="fas fa-calendar-alt me-1"></i>有効期限：未設定</div>
+                                            <div class="small text-dark mt-1 fw-bold" id="specialValidity" style="display: none;"><i class="fas fa-calendar-alt me-1"></i>有効期限：未設定</div>
                                         </div>
                                     </div>
                                 </div>
@@ -984,6 +984,53 @@
 
     <!-- カスタムスタイル -->
     <style>
+        /* 全体的なフォントサイズアップ */
+        body {
+            font-size: 1.1rem;
+        }
+        
+        .card-body {
+            font-size: 1.05rem;
+        }
+        
+        .form-label {
+            font-size: 1.1rem;
+            font-weight: 600;
+        }
+        
+        .form-control, .form-select {
+            font-size: 1.05rem;
+        }
+        
+        .btn {
+            font-size: 1.05rem;
+        }
+        
+        .h5 {
+            font-size: 1.4rem;
+        }
+        
+        .h4 {
+            font-size: 1.6rem;
+        }
+        
+        .h3 {
+            font-size: 1.8rem;
+        }
+        
+        .h2 {
+            font-size: 2.0rem;
+        }
+        
+        .h1 {
+            font-size: 2.2rem;
+        }
+        
+        /* 有効期限のフォントサイズを大きく */
+        .text-dark.fw-bold {
+            font-size: 1.0rem;
+        }
+        
         .calendar-day:hover {
             background-color: #e3f2fd !important;
             transform: scale(1.05);
