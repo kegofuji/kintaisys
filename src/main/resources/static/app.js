@@ -838,7 +838,10 @@ function setupNavigationListeners() {
                 fallbackActiveLink: adminEmployeesNavLink,
                 fallbackInit: () => {
                     if (window.adminScreen) {
-                        window.adminScreen.initEmployees();
+                        console.log('app.jsから社員管理画面を初期化します');
+                        setTimeout(() => {
+                            window.adminScreen.initEmployees();
+                        }, 50);
                     }
                 }
             });

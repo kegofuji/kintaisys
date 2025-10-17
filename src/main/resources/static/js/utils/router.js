@@ -241,7 +241,13 @@ class Router {
                 break;
             case 'adminEmployeesScreen':
                 if (window.adminScreen) {
-                    window.adminScreen.initEmployees();
+                    console.log('ルーターから社員管理画面を初期化します');
+                    // DOM要素の準備を待ってから初期化
+                    setTimeout(() => {
+                        window.adminScreen.initEmployees();
+                    }, 50);
+                } else {
+                    console.error('AdminScreenインスタンスが見つかりません');
                 }
                 break;
             // adminAttendanceScreen は廃止

@@ -40,6 +40,7 @@ class AdminScreen {
         this.vacationManagementLoading = false;
         this.vacationManagementPoller = null;
         this.vacationManagementVisibilityHandler = null;
+        this.lastVacationManagementData = null; // 最後に取得したデータを保存
     }
 
     /**
@@ -388,10 +389,21 @@ class AdminScreen {
      * 社員管理画面初期化
      */
     initEmployees() {
+        console.log('社員管理画面の初期化を開始します');
+        
+        // DOM要素の存在確認
+        if (!this.waitForElement('addEmployeeBtn')) {
+            console.error('社員追加ボタンが見つかりません。初期化を遅延します。');
+            setTimeout(() => this.initEmployees(), 100);
+            return;
+        }
+        
         this.stopVacationManagementPolling();
         this.initializeEmployeeElements();
         this.setupEmployeeEventListeners();
         this.loadEmployees();
+        
+        console.log('社員管理画面の初期化が完了しました');
     }
 
     /**
@@ -515,10 +527,16 @@ class AdminScreen {
      * 社員管理イベントリスナー設定
      */
     setupEmployeeEventListeners() {
+        // 既存のイベントリスナーを削除して重複を防ぐ
+        this.removeEmployeeEventListeners();
+        
         // 社員追加ボタン
         const addEmployeeBtn = document.getElementById('addEmployeeBtn');
         if (addEmployeeBtn) {
+            console.log('社員追加ボタンのイベントリスナーを設定します');
             addEmployeeBtn.addEventListener('click', () => this.showAddEmployeeModal());
+        } else {
+            console.error('社員追加ボタンが見つかりません: addEmployeeBtn');
         }
 
         // 社員追加フォーム送信ボタン
@@ -621,7 +639,7 @@ class AdminScreen {
 
 
         if (this.refreshLeaveRequestsButton && !this.refreshLeaveRequestsButton.dataset.bound) {
-            this.refreshLeaveRequestsButton.addEventListener('click', () => this.loadVacationManagementData());
+            this.refreshLeaveRequestsButton.addEventListener('click', () => this.loadVacationManagementData(false)); // 通常更新
             this.refreshLeaveRequestsButton.dataset.bound = 'true';
         }
 
@@ -634,7 +652,7 @@ class AdminScreen {
             this.vacationManagementVisibilityHandler = () => {
                 if (document.hidden) return;
                 if (window.router?.getCurrentRoute?.() === '/admin/vacation-management') {
-                    this.loadVacationManagementData();
+                    this.loadVacationManagementData(true); // サイレント更新
                 }
             };
             document.addEventListener('visibilitychange', this.vacationManagementVisibilityHandler);
@@ -654,8 +672,8 @@ class AdminScreen {
             if (window.router?.getCurrentRoute?.() !== '/admin/vacation-management') {
                 return;
             }
-            this.loadVacationManagementData();
-        }, 15000);
+            this.loadVacationManagementData(true); // サイレント更新を指定
+        }, 30000); // 30秒間隔に変更
     }
 
     stopVacationManagementPolling() {
@@ -952,8 +970,9 @@ class AdminScreen {
 
     /**
      * 休暇管理データ読み込み
+     * @param {boolean} silent - サイレント更新（ローディングメッセージを表示しない）
      */
-    async loadVacationManagementData() {
+    async loadVacationManagementData(silent = false) {
         if (!this.vacationManagementTableBody) {
             this.initializeVacationManagementElements();
         }
@@ -961,7 +980,10 @@ class AdminScreen {
 
         this.vacationManagementLoading = true;
 
-        this.setTableState(this.vacationManagementTableBody, 6, 'データを読み込み中...', 'text-muted');
+        // サイレント更新でない場合のみローディングメッセージを表示
+        if (!silent) {
+            this.setTableState(this.vacationManagementTableBody, 7, 'データを読み込み中...', 'text-muted');
+        }
 
         try {
             const response = await fetchWithAuth.handleApiCall(
@@ -978,13 +1000,26 @@ class AdminScreen {
                 reason: item.reason || '',
                 leaveType: item.leaveType || 'PAID_LEAVE',
                 timeUnit: item.timeUnit || 'FULL_DAY',
-                status: item.status || 'PENDING'
+                status: item.status || 'PENDING',
+                createdAt: item.createdAt || item.requestDate || item.submittedAt // 申請日
             }));
 
+            // サイレント更新の場合は、データが変更されていない場合は再描画しない
+            if (silent && this.lastVacationManagementData) {
+                const currentDataHash = JSON.stringify(entries);
+                const lastDataHash = JSON.stringify(this.lastVacationManagementData);
+                if (currentDataHash === lastDataHash) {
+                    this.vacationManagementLoading = false;
+                    return; // データが変更されていない場合は処理を終了
+                }
+            }
+
+            // データを保存
+            this.lastVacationManagementData = entries;
             this.renderVacationApprovals(entries);
         } catch (error) {
             console.error('休暇申請読み込みエラー:', error);
-            this.setTableState(this.vacationManagementTableBody, 6, '休暇申請の取得に失敗しました', 'text-danger');
+            this.setTableState(this.vacationManagementTableBody, 7, '休暇申請の取得に失敗しました', 'text-danger');
         } finally {
             this.vacationManagementLoading = false;
         }
@@ -999,13 +1034,14 @@ class AdminScreen {
         this.vacationManagementTableBody.innerHTML = '';
 
         if (!Array.isArray(entries) || entries.length === 0) {
-            this.setTableState(this.vacationManagementTableBody, 6, '現在処理すべき休暇申請はありません', 'text-muted');
+            this.setTableState(this.vacationManagementTableBody, 7, '現在処理すべき休暇申請はありません', 'text-muted');
             return;
         }
 
         entries.sort((a, b) => {
-            const dateA = new Date(a.startDate || 0).getTime();
-            const dateB = new Date(b.startDate || 0).getTime();
+            // 申請日（createdAt）の降順でソート（新しい申請が上に）
+            const dateA = new Date(a.createdAt || a.startDate || 0).getTime();
+            const dateB = new Date(b.createdAt || b.startDate || 0).getTime();
             return dateB - dateA;
         });
 
@@ -1031,6 +1067,7 @@ class AdminScreen {
                 <td>${typeLabel}</td>
                 <td>${this.formatDateRange(entry.startDate, entry.endDate)}</td>
                 <td>${unitLabel}</td>
+                <td>${entry.reason || ''}</td>
                 <td>${this.translateStatus(entry.status)}</td>
                 <td>${actionCell}</td>
             `;
@@ -1184,7 +1221,7 @@ class AdminScreen {
                 this.showAlert(response.message || '休暇を付与しました', 'success');
                 this.leaveGrantForm.reset();
                 this.handleLeaveGrantTypeChange();
-                await this.loadVacationManagementData();
+                await this.loadVacationManagementData(false); // 通常更新
                 await this.loadLeaveBalances();
             } else {
                 const message = response?.message || '休暇付与に失敗しました';
@@ -1444,7 +1481,7 @@ class AdminScreen {
             if (requestType === 'adjustment') {
                 await this.loadPendingApprovals();
             } else if (requestType === 'vacation' || requestType === 'leave') {
-                await this.loadVacationManagementData();
+                await this.loadVacationManagementData(false); // 通常更新
             }
 
             await this.refreshEmployeeScreens();
@@ -2115,10 +2152,22 @@ class AdminScreen {
      * 社員追加モーダル表示
      */
     async showAddEmployeeModal() {
+        console.log('社員追加モーダルの表示を開始します');
+        
+        // Bootstrapが利用可能かチェック
+        if (typeof bootstrap === 'undefined') {
+            console.error('Bootstrapが読み込まれていません');
+            this.showAlert('システムエラー: Bootstrapが読み込まれていません', 'danger');
+            return;
+        }
+        
         // フォームをリセット
         const form = document.getElementById('addEmployeeForm');
         if (form) {
             form.reset();
+        } else {
+            console.error('社員追加フォームが見つかりません');
+            return;
         }
 
         // 次の社員番号を取得して表示
@@ -2139,8 +2188,21 @@ class AdminScreen {
         // パスワード強度表示は撤廃
 
         // モーダルを表示
-        const modal = new bootstrap.Modal(document.getElementById('addEmployeeModal'));
-        modal.show();
+        const modalElement = document.getElementById('addEmployeeModal');
+        if (!modalElement) {
+            console.error('社員追加モーダル要素が見つかりません');
+            this.showAlert('システムエラー: モーダル要素が見つかりません', 'danger');
+            return;
+        }
+        
+        try {
+            const modal = new bootstrap.Modal(modalElement);
+            modal.show();
+            console.log('社員追加モーダルを表示しました');
+        } catch (error) {
+            console.error('モーダル表示エラー:', error);
+            this.showAlert('モーダルの表示に失敗しました', 'danger');
+        }
     }
 
     /**
@@ -2247,7 +2309,41 @@ class AdminScreen {
         }
     }
 
+    /**
+     * DOM要素の存在確認と待機
+     */
+    waitForElement(elementId, maxAttempts = 10) {
+        for (let i = 0; i < maxAttempts; i++) {
+            if (document.getElementById(elementId)) {
+                return true;
+            }
+            // 同期処理で少し待機
+            const start = Date.now();
+            while (Date.now() - start < 10) {
+                // 10ms待機
+            }
+        }
+        return false;
+    }
+
+    /**
+     * イベントリスナーの削除（重複防止）
+     */
+    removeEmployeeEventListeners() {
+        const addEmployeeBtn = document.getElementById('addEmployeeBtn');
+        if (addEmployeeBtn) {
+            // 既存のイベントリスナーを削除するために新しい要素で置き換え
+            const newBtn = addEmployeeBtn.cloneNode(true);
+            addEmployeeBtn.parentNode.replaceChild(newBtn, addEmployeeBtn);
+        }
+    }
 }
 
-// グローバルインスタンスを作成
-window.adminScreen = new AdminScreen();
+// グローバルインスタンスを作成（DOM読み込み完了後）
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+        window.adminScreen = new AdminScreen();
+    });
+} else {
+    window.adminScreen = new AdminScreen();
+}
