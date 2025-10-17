@@ -74,7 +74,7 @@ class AdminLeaveControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(payload)))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message").value("特別休暇の日付を指定してください"));
+                .andExpect(jsonPath("$.message").value("有効期限の開始日と終了日を指定してください"));
     }
 
     @Test
