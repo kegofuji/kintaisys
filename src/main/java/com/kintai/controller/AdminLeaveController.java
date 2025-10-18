@@ -85,10 +85,14 @@ public class AdminLeaveController {
             LocalDate expiresAt = request.getExpiresAt();
             Long approverId = resolveApproverId();
 
-            // 夏季・冬季・特別休暇の場合は有効期限が必須
-            if ((leaveType == LeaveType.SUMMER || leaveType == LeaveType.WINTER || leaveType == LeaveType.SPECIAL) 
-                && (grantedOn == null || expiresAt == null)) {
+            // 夏季・冬季休暇は開始・終了の両日が必須
+            if ((leaveType == LeaveType.SUMMER || leaveType == LeaveType.WINTER)
+                    && (grantedOn == null || expiresAt == null)) {
                 throw new VacationException(VacationException.INVALID_REQUEST, "有効期限の開始日と終了日を指定してください");
+            }
+            // 特別休暇は付与日と終了日の両方を必須とし、利用者向けに分かりやすい文言を返す
+            if (leaveType == LeaveType.SPECIAL && (grantedOn == null || expiresAt == null)) {
+                throw new VacationException(VacationException.INVALID_REQUEST, "特別休暇の日付を指定してください");
             }
 
             List<Long> targetEmployees = resolveTargetEmployees(request);
