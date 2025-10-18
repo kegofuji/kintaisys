@@ -3,10 +3,12 @@ package com.kintai.service;
 import com.kintai.dto.ClockInRequest;
 import com.kintai.dto.ClockOutRequest;
 import com.kintai.dto.ClockResponse;
+import com.kintai.entity.AdjustmentRequest;
 import com.kintai.entity.AttendanceRecord;
 import com.kintai.entity.AttendanceStatus;
 import com.kintai.entity.Employee;
 import com.kintai.exception.AttendanceException;
+import com.kintai.repository.AdjustmentRequestRepository;
 import com.kintai.repository.AttendanceRecordRepository;
 import com.kintai.repository.EmployeeRepository;
 import com.kintai.util.TimeCalculator;
@@ -38,6 +40,9 @@ public class AttendanceService {
     
     @Autowired
     private EmployeeRepository employeeRepository;
+    
+    @Autowired
+    private AdjustmentRequestRepository adjustmentRequestRepository;
     
     @Autowired
     private TimeCalculator timeCalculator;
@@ -75,10 +80,18 @@ public class AttendanceService {
             AttendanceRecord existingRecord = existingRecordOpt.get();
             
             Integer workingMinutes = null;
+            Integer breakMinutes = null;
             if (existingRecord.getClockOutTime() != null) {
+                breakMinutes = timeCalculator.resolveBreakMinutes(
+                        existingRecord.getClockInTime(),
+                        existingRecord.getClockOutTime(),
+                        existingRecord.getBreakMinutes()
+                );
+                existingRecord.setBreakMinutes(breakMinutes);
                 workingMinutes = timeCalculator.calculateWorkingMinutes(
                         existingRecord.getClockInTime(), 
-                        existingRecord.getClockOutTime()
+                        existingRecord.getClockOutTime(),
+                        breakMinutes
                 );
             }
             
@@ -91,10 +104,12 @@ public class AttendanceService {
                     existingRecord.getEarlyLeaveMinutes(),
                     existingRecord.getOvertimeMinutes(),
                     existingRecord.getNightShiftMinutes(),
+                    breakMinutes,
                     workingMinutes,
                     existingRecord.getAttendanceStatus() != null ? existingRecord.getAttendanceStatus().name() : null,
                     existingRecord.getAttendanceFixedFlag()
             );
+            data.setHasApprovedAdjustment(hasApprovedAdjustment(existingRecord));
             
             ClockResponse response = new ClockResponse();
             response.setSuccess(true);
@@ -131,9 +146,11 @@ public class AttendanceService {
                 null,
                 null,
                 null,
+                null,
                 savedRecord.getAttendanceStatus() != null ? savedRecord.getAttendanceStatus().name() : null,
                 savedRecord.getAttendanceFixedFlag()
         );
+        data.setHasApprovedAdjustment(Boolean.FALSE);
         
         String message = "出勤打刻完了";
         
@@ -195,32 +212,40 @@ public class AttendanceService {
                 // 5. 既に退勤済チェック
                 if (attendanceRecord.getClockOutTime() != null) {
                     // 既に退勤済みの場合は、現在の状態を返す
-                    // 勤務時間を計算
-                    int workingMinutes = timeCalculator.calculateWorkingMinutes(
-                            attendanceRecord.getClockInTime(), 
-                            attendanceRecord.getClockOutTime()
+                    int breakMinutes = timeCalculator.resolveBreakMinutes(
+                            attendanceRecord.getClockInTime(),
+                            attendanceRecord.getClockOutTime(),
+                            attendanceRecord.getBreakMinutes()
                     );
-                    
-                ClockResponse.ClockData data = new ClockResponse.ClockData(
-                        attendanceRecord.getAttendanceId(),
-                        attendanceRecord.getAttendanceDate(),
-                        attendanceRecord.getClockInTime(),
-                        attendanceRecord.getClockOutTime(),
-                        attendanceRecord.getLateMinutes(),
-                        attendanceRecord.getEarlyLeaveMinutes(),
-                        attendanceRecord.getOvertimeMinutes(),
-                        attendanceRecord.getNightShiftMinutes(),
-                        workingMinutes,
-                        attendanceRecord.getAttendanceStatus() != null ? attendanceRecord.getAttendanceStatus().name() : null,
-                        attendanceRecord.getAttendanceFixedFlag()
-                );
-                
-                ClockResponse response = new ClockResponse();
-                response.setSuccess(true);
-                response.setMessage("退勤打刻完了");
-                response.setData(data);
-                setUserInfoToResponse(response);
-                return response;
+                    attendanceRecord.setBreakMinutes(breakMinutes);
+                    int workingMinutes = timeCalculator.calculateWorkingMinutes(
+                            attendanceRecord.getClockInTime(),
+                            attendanceRecord.getClockOutTime(),
+                            breakMinutes
+                    );
+
+                    ClockResponse.ClockData data = new ClockResponse.ClockData(
+                            attendanceRecord.getAttendanceId(),
+                            attendanceRecord.getAttendanceDate(),
+                            attendanceRecord.getClockInTime(),
+                            attendanceRecord.getClockOutTime(),
+                            attendanceRecord.getLateMinutes(),
+                            attendanceRecord.getEarlyLeaveMinutes(),
+                            attendanceRecord.getOvertimeMinutes(),
+                            attendanceRecord.getNightShiftMinutes(),
+                            breakMinutes,
+                            workingMinutes,
+                            attendanceRecord.getAttendanceStatus() != null ? attendanceRecord.getAttendanceStatus().name() : null,
+                            attendanceRecord.getAttendanceFixedFlag()
+                    );
+                    data.setHasApprovedAdjustment(hasApprovedAdjustment(attendanceRecord));
+
+                    ClockResponse response = new ClockResponse();
+                    response.setSuccess(true);
+                    response.setMessage("退勤打刻完了");
+                    response.setData(data);
+                    setUserInfoToResponse(response);
+                    return response;
                 }
                 
                 // 6. 退勤時刻設定
@@ -233,8 +258,11 @@ public class AttendanceService {
                 int earlyLeaveMinutes = timeCalculator.calculateEarlyLeaveMinutes(now);
                 attendanceRecord.setEarlyLeaveMinutes(earlyLeaveMinutes);
                 
+                int breakMinutes = timeCalculator.resolveBreakMinutes(clockInTime, now, attendanceRecord.getBreakMinutes());
+                attendanceRecord.setBreakMinutes(breakMinutes);
+                
                 // 実働時間計算
-                int workingMinutes = timeCalculator.calculateWorkingMinutes(clockInTime, now);
+                int workingMinutes = timeCalculator.calculateWorkingMinutes(clockInTime, now, breakMinutes);
 
                 if (workingMinutes >= TimeCalculator.STANDARD_WORKING_MINUTES) {
                     attendanceRecord.setLateMinutes(0);
@@ -308,6 +336,54 @@ public class AttendanceService {
         
         // ここには到達しないはず
         throw new AttendanceException("INTERNAL_ERROR", "予期しないエラーが発生しました");
+    }
+
+    /**
+     * 休憩時間を更新
+     * @param attendanceId 勤怠ID
+     * @param requestedBreakMinutes 休憩時間（分）
+     * @return 更新後のレスポンス
+     */
+    public ClockResponse updateBreakMinutes(Long attendanceId, Integer requestedBreakMinutes) {
+        if (attendanceId == null) {
+            throw new AttendanceException(AttendanceException.INVALID_REQUEST, "勤怠IDが指定されていません");
+        }
+        if (requestedBreakMinutes == null || requestedBreakMinutes < 0) {
+            throw new AttendanceException(AttendanceException.INVALID_BREAK_VALUE, "休憩時間は0以上の分数で指定してください");
+        }
+
+        AttendanceRecord record = attendanceRecordRepository.findById(attendanceId)
+                .orElseThrow(() -> new AttendanceException(
+                        AttendanceException.REQUEST_NOT_FOUND,
+                        "勤怠記録が見つかりません: " + attendanceId));
+
+        if (Boolean.TRUE.equals(record.getAttendanceFixedFlag())) {
+            throw new AttendanceException(AttendanceException.FIXED_ATTENDANCE, "確定済みの勤怠は編集できません");
+        }
+
+        if (hasApprovedAdjustment(record)) {
+            throw new AttendanceException(AttendanceException.BREAK_NOT_EDITABLE,
+                    "承認済みの打刻修正が適用された勤怠は休憩時間を編集できません");
+        }
+        if (record.getClockInTime() == null || record.getClockOutTime() == null) {
+            throw new AttendanceException(AttendanceException.BREAK_NOT_EDITABLE, "退勤後に休憩時間を編集できます");
+        }
+
+        int sanitizedBreak = timeCalculator.resolveBreakMinutes(record.getClockInTime(), record.getClockOutTime(), requestedBreakMinutes);
+        record.setBreakMinutes(sanitizedBreak);
+
+        timeCalculator.calculateAttendanceMetrics(record);
+        int earlyLeaveMinutes = safeInt(record.getEarlyLeaveMinutes());
+        int overtimeMinutes = safeInt(record.getOvertimeMinutes());
+        int nightShiftMinutes = safeInt(record.getNightShiftMinutes());
+        updateAttendanceStatus(record, earlyLeaveMinutes, overtimeMinutes, nightShiftMinutes);
+        timeCalculator.normalizeMetrics(record);
+
+        AttendanceRecord saved = attendanceRecordRepository.save(record);
+
+        ClockResponse response = new ClockResponse(true, "休憩時間を更新しました", toClockData(saved));
+        setUserInfoToResponse(response);
+        return response;
     }
     
     /**
@@ -524,30 +600,61 @@ public class AttendanceService {
         if (record == null) {
             return null;
         }
+        LocalDateTime clockInTime = record.getClockInTime();
+        LocalDateTime clockOutTime = record.getClockOutTime();
+
+        Integer breakMinutes = null;
+        Integer workingMinutes = null;
+        int lateMinutes = safeInt(record.getLateMinutes());
+        int earlyLeaveMinutes = safeInt(record.getEarlyLeaveMinutes());
+        int overtimeMinutes = safeInt(record.getOvertimeMinutes());
         int nightShiftMinutes = resolveNightShiftMinutes(record);
-        
-        // 勤務時間を計算
-        int workingMinutes = 0;
-        if (record.getClockInTime() != null && record.getClockOutTime() != null) {
-            workingMinutes = timeCalculator.calculateWorkingMinutes(
-                    record.getClockInTime(), 
-                    record.getClockOutTime()
-            );
+
+        if (clockInTime != null && clockOutTime != null) {
+            int resolvedBreak = timeCalculator.resolveBreakMinutes(clockInTime, clockOutTime, record.getBreakMinutes());
+            breakMinutes = resolvedBreak;
+            workingMinutes = timeCalculator.calculateWorkingMinutes(clockInTime, clockOutTime, resolvedBreak);
+
+            int recalculatedLate = Math.max(0, timeCalculator.calculateLateMinutes(clockInTime));
+            int recalculatedEarly = Math.max(0, timeCalculator.calculateEarlyLeaveMinutes(clockOutTime));
+
+            if (workingMinutes >= TimeCalculator.STANDARD_WORKING_MINUTES) {
+                recalculatedLate = 0;
+                recalculatedEarly = 0;
+            } else {
+                int shortfall = TimeCalculator.STANDARD_WORKING_MINUTES - Math.max(0, workingMinutes);
+                int adjustedLate = Math.min(recalculatedLate, shortfall);
+                int adjustedEarly = Math.max(recalculatedEarly, 0);
+                int covered = adjustedLate + adjustedEarly;
+                if (covered < shortfall) {
+                    adjustedEarly += shortfall - covered;
+                }
+                recalculatedLate = adjustedLate;
+                recalculatedEarly = adjustedEarly;
+            }
+
+            lateMinutes = recalculatedLate;
+            earlyLeaveMinutes = recalculatedEarly;
+            overtimeMinutes = timeCalculator.calculateOvertimeMinutes(workingMinutes);
+            nightShiftMinutes = timeCalculator.calculateNightShiftMinutes(clockInTime, clockOutTime);
         }
-        
-        return new ClockResponse.ClockData(
+
+        ClockResponse.ClockData clockData = new ClockResponse.ClockData(
                 record.getAttendanceId(),
                 record.getAttendanceDate(),
                 record.getClockInTime(),
                 record.getClockOutTime(),
-                safeInt(record.getLateMinutes()),
-                safeInt(record.getEarlyLeaveMinutes()),
-                safeInt(record.getOvertimeMinutes()),
+                lateMinutes,
+                earlyLeaveMinutes,
+                overtimeMinutes,
                 nightShiftMinutes,
+                breakMinutes,
                 workingMinutes,
                 record.getAttendanceStatus() != null ? record.getAttendanceStatus().name() : null,
                 record.getAttendanceFixedFlag()
         );
+        clockData.setHasApprovedAdjustment(hasApprovedAdjustment(record));
+        return clockData;
     }
 
     private List<ClockResponse.ClockData> toClockDataList(List<AttendanceRecord> records) {
@@ -559,6 +666,22 @@ public class AttendanceService {
             dataList.add(toClockData(record));
         }
         return dataList;
+    }
+
+    private boolean hasApprovedAdjustment(AttendanceRecord record) {
+        if (record == null) {
+            return false;
+        }
+        Long employeeId = record.getEmployeeId();
+        LocalDate attendanceDate = record.getAttendanceDate();
+        if (employeeId == null || attendanceDate == null) {
+            return false;
+        }
+        // PENDING/APPROVED いずれかの修正申請が存在する場合は休憩編集を抑止したい
+        return adjustmentRequestRepository.existsActiveRequestForDate(
+                employeeId,
+                attendanceDate
+        );
     }
 
     private void setUserInfoToResponse(ClockResponse response) {

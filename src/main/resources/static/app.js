@@ -26,6 +26,18 @@ const logoutBtn = document.getElementById('logoutBtn');
 const vacationForm = document.getElementById('vacationForm');
 const submitVacationBtn = document.getElementById('submitVacationBtn');
 const alertContainer = document.getElementById('alertContainer');
+const breakTimeModalElement = document.getElementById('breakTimeModal');
+const breakTimeForm = document.getElementById('breakTimeForm');
+const breakTimeInputField = document.getElementById('breakTimeInput');
+const breakTimeErrorMessage = document.getElementById('breakTimeError');
+const saveBreakTimeBtn = document.getElementById('saveBreakTimeBtn');
+const editBreakButton = document.getElementById('editBreakTimeBtn');
+let breakTimeModalInstance = null;
+let isSavingBreakTime = false;
+
+if (breakTimeModalElement && window.bootstrap?.Modal) {
+    breakTimeModalInstance = window.bootstrap.Modal.getOrCreateInstance(breakTimeModalElement);
+}
 
 /**
  * ISO形式の文字列からHH:mmを抽出（Safari互換）
@@ -97,6 +109,9 @@ function setupEventListeners() {
         if (clockInBtn) clockInBtn.addEventListener('click', handleClockIn);
         if (clockOutBtn) clockOutBtn.addEventListener('click', handleClockOut);
         if (refreshHistoryBtn) refreshHistoryBtn.addEventListener('click', loadAttendanceHistory);
+        if (editBreakButton) editBreakButton.addEventListener('click', handleBreakTimeEditLegacy);
+        if (saveBreakTimeBtn) saveBreakTimeBtn.addEventListener('click', handleBreakTimeSaveLegacy);
+        if (breakTimeForm) breakTimeForm.addEventListener('submit', handleBreakTimeSaveLegacy);
     }
     if (monthlySubmitBtn) monthlySubmitBtn.addEventListener('click', handleMonthlySubmit);
     if (logoutBtn) logoutBtn.addEventListener('click', handleLogout);
@@ -475,8 +490,13 @@ function displayAttendanceHistory(data) {
             if (record.workingMinutes !== undefined && record.workingMinutes !== null) {
                 workingHours = TimeUtils.formatMinutesToTime(record.workingMinutes);
             } else {
-                workingHours = TimeUtils.calculateWorkingTime(record.clockInTime, record.clockOutTime);
+                workingHours = TimeUtils.calculateWorkingTime(record.clockInTime, record.clockOutTime, record.breakMinutes);
             }
+        }
+
+        let breakDisplay = '';
+        if (record.clockInTime && record.clockOutTime && record.breakMinutes !== undefined && record.breakMinutes !== null) {
+            breakDisplay = TimeUtils.formatMinutesToTime(record.breakMinutes);
         }
         
         // 遅刻・早退・残業・深夜（未確定は空白）。深夜は nightWorkMinutes に統一
@@ -498,6 +518,7 @@ function displayAttendanceHistory(data) {
             <td>${record.attendanceDate}</td>
             <td>${clockInTime}</td>
             <td>${clockOutTime}</td>
+            <td>${breakDisplay}</td>
             <td>${workingHours}</td>
             <td>${formatMinutesToTime(lateMinutes)}</td>
             <td>${formatMinutesToTime(earlyLeaveMinutes)}</td>
@@ -1144,7 +1165,7 @@ function filterAttendanceTableByDate(dateString) {
             if (attendance.workingMinutes !== undefined && attendance.workingMinutes !== null) {
                 workingTime = TimeUtils.formatMinutesToTime(attendance.workingMinutes);
             } else {
-                workingTime = TimeUtils.calculateWorkingTime(attendance.clockInTime, attendance.clockOutTime);
+                workingTime = TimeUtils.calculateWorkingTime(attendance.clockInTime, attendance.clockOutTime, attendance.breakMinutes);
             }
         }
 
@@ -1162,6 +1183,15 @@ function filterAttendanceTableByDate(dateString) {
             status = '退勤済';
         }
 
+        let breakDisplay = '';
+        if (attendance.clockInTime && attendance.clockOutTime) {
+            if (attendance.breakMinutes !== undefined && attendance.breakMinutes !== null) {
+                breakDisplay = TimeUtils.formatMinutesToTime(attendance.breakMinutes);
+            } else {
+                breakDisplay = '--:--';
+            }
+        }
+
         // 日付をyyyy/mm/dd形式に変換
         const formatDate = (dateStr) => {
             if (!dateStr) return '';
@@ -1176,6 +1206,7 @@ function filterAttendanceTableByDate(dateString) {
             <td>${formatDate(attendance.attendanceDate)}</td>
             <td>${clockInTime}</td>
             <td>${clockOutTime}</td>
+            <td>${breakDisplay}</td>
             <td>${workingTime}</td>
             <td>${lateDisplay}</td>
             <td>${earlyLeaveDisplay}</td>
@@ -1211,6 +1242,7 @@ function filterAttendanceTableByDate(dateString) {
             <td>${formatDate(dateString)}</td>
             <td>-</td>
             <td>-</td>
+            <td>--:--</td>
             <td>0:00</td>
             <td>0:00</td>
             <td>0:00</td>
@@ -1360,6 +1392,7 @@ async function updateTodayAttendance() {
     const clockInTime = document.getElementById('clockInTime');
     const clockOutTime = document.getElementById('clockOutTime');
     const workingTime = document.getElementById('workingTime');
+    const breakTime = document.getElementById('breakTime');
     const clockStatus = document.getElementById('clockStatus');
     const clockInBtn = document.getElementById('clockInBtn');
     const clockOutBtn = document.getElementById('clockOutBtn');
@@ -1374,7 +1407,7 @@ async function updateTodayAttendance() {
             const data = await response.json();
             if (data.success && data.data) {
                 const record = data.data;
-                updateAttendanceDisplay(record, clockInTime, clockOutTime, workingTime, clockStatus);
+                updateAttendanceDisplay(record, clockInTime, clockOutTime, workingTime, breakTime, clockStatus, editBreakButton);
                 updateButtonStates(record, clockInBtn, clockOutBtn);
                 return;
             }
@@ -1387,46 +1420,241 @@ async function updateTodayAttendance() {
     if (clockInTime) clockInTime.textContent = '--:--';
     if (clockOutTime) clockOutTime.textContent = '--:--';
     if (workingTime) workingTime.textContent = '--:--';
+    if (breakTime) breakTime.textContent = '--:--';
     if (clockStatus) {
         clockStatus.innerHTML = '出勤前';
+    }
+    if (editBreakButton) {
+        editBreakButton.disabled = true;
+        editBreakButton.classList.add('disabled');
+        editBreakButton.setAttribute('aria-disabled', 'true');
     }
     updateButtonStates(null, clockInBtn, clockOutBtn);
 }
 
+function calculateEffectiveBreakMinutes(record) {
+    if (!record || !record.clockInTime || !record.clockOutTime) {
+        return null;
+    }
+
+    const rawBreak = record.breakMinutes;
+    if (typeof rawBreak === 'number' && !Number.isNaN(rawBreak) && rawBreak >= 0) {
+        return rawBreak;
+    }
+
+    try {
+        const start = new Date(record.clockInTime);
+        const end = new Date(record.clockOutTime);
+        if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) {
+            return null;
+        }
+        const totalMinutes = Math.floor((end - start) / (1000 * 60));
+        if (totalMinutes <= 0) {
+            return null;
+        }
+        return Math.min(
+            Math.max(TimeUtils.calculateRequiredBreakMinutes(totalMinutes), 0),
+            totalMinutes
+        );
+    } catch (error) {
+        console.debug('Failed to calculate effective break minutes:', error);
+        return null;
+    }
+}
+
 // 勤怠状況表示を更新
-function updateAttendanceDisplay(record, clockInTime, clockOutTime, workingTime, clockStatus) {
+function updateAttendanceDisplay(record, clockInTime, clockOutTime, workingTime, breakTime, clockStatus, editBreakButton) {
     if (!record) return;
-    
-    // 出勤時刻表示
+
+    const effectiveBreakMinutes = calculateEffectiveBreakMinutes(record);
+    const attendance = { ...record };
+    if (effectiveBreakMinutes !== null &&
+        (attendance.breakMinutes === undefined || attendance.breakMinutes === null)) {
+        attendance.breakMinutes = effectiveBreakMinutes;
+    }
+
+    window.currentAttendanceRecord = attendance;
+
     if (clockInTime) {
-        clockInTime.textContent = formatTimeDisplay(record.clockInTime);
+        clockInTime.textContent = formatTimeDisplay(attendance.clockInTime);
     }
-    
-    // 退勤時刻表示 - 確定まで空白
+
     if (clockOutTime) {
-        clockOutTime.textContent = record.clockOutTime ? formatTimeDisplay(record.clockOutTime) : '--:--';
+        clockOutTime.textContent = attendance.clockOutTime ? formatTimeDisplay(attendance.clockOutTime) : '--:--';
     }
-    
-    // 勤務時間表示 - バックエンドから取得した値を優先
+
+    if (breakTime) {
+        if (attendance.clockInTime && attendance.clockOutTime &&
+            attendance.breakMinutes !== undefined && attendance.breakMinutes !== null) {
+            breakTime.textContent = TimeUtils.formatMinutesToTime(attendance.breakMinutes);
+        } else {
+            breakTime.textContent = '--:--';
+        }
+    }
+
     if (workingTime) {
-        if (record.workingMinutes !== undefined && record.workingMinutes !== null) {
-            workingTime.textContent = TimeUtils.formatMinutesToTime(record.workingMinutes);
-        } else if (record.clockInTime && record.clockOutTime) {
-            workingTime.textContent = TimeUtils.calculateWorkingTime(record.clockInTime, record.clockOutTime);
+        if (attendance.workingMinutes !== undefined && attendance.workingMinutes !== null) {
+            workingTime.textContent = TimeUtils.formatMinutesToTime(attendance.workingMinutes);
+        } else if (attendance.clockInTime && attendance.clockOutTime) {
+            workingTime.textContent = TimeUtils.calculateWorkingTime(attendance.clockInTime, attendance.clockOutTime, attendance.breakMinutes);
         } else {
             workingTime.textContent = '--:--';
         }
     }
-    
-    // ステータス表示
+
     if (clockStatus) {
-        if (!record.clockInTime) {
+        if (!attendance.clockInTime) {
             clockStatus.innerHTML = '未出勤';
-        } else if (record.clockInTime && !record.clockOutTime) {
+        } else if (attendance.clockInTime && !attendance.clockOutTime) {
             clockStatus.innerHTML = '出勤中';
         } else {
             clockStatus.innerHTML = '退勤済';
         }
+    }
+
+    if (editBreakButton) {
+        const canEditBreak = !!(attendance.clockInTime && attendance.clockOutTime && !attendance.attendanceFixed);
+        editBreakButton.disabled = !canEditBreak;
+        editBreakButton.classList.toggle('disabled', !canEditBreak);
+        if (!canEditBreak) {
+            editBreakButton.setAttribute('aria-disabled', 'true');
+        } else {
+            editBreakButton.removeAttribute('aria-disabled');
+        }
+    }
+}
+
+function handleBreakTimeEditLegacy() {
+    if (window.dashboardScreen) {
+        return;
+    }
+
+    if (!window.currentAttendanceRecord || !window.currentAttendanceRecord.attendanceId) {
+        showAlert('休憩時間は退勤後に編集できます', 'warning');
+        return;
+    }
+
+    if (!window.currentAttendanceRecord.clockOutTime) {
+        showAlert('退勤打刻後に休憩時間を編集できます', 'warning');
+        return;
+    }
+
+    if (window.currentAttendanceRecord.attendanceFixed) {
+        showAlert('確定済みの勤怠は編集できません', 'warning');
+        return;
+    }
+
+    if (!breakTimeModalInstance || !breakTimeInputField) {
+        showAlert('モーダルを初期化できませんでした', 'danger');
+        return;
+    }
+
+    const currentBreak = window.currentAttendanceRecord.breakMinutes ?? 0;
+    breakTimeInputField.value = TimeUtils.formatMinutesToTime(currentBreak);
+    clearBreakTimeModalError();
+    breakTimeInputField.classList.remove('is-invalid');
+    breakTimeInputField.removeAttribute('aria-invalid');
+    setBreakModalSavingState(false);
+
+    breakTimeModalInstance.show();
+    setTimeout(() => {
+        try {
+            breakTimeInputField.focus();
+            breakTimeInputField.select();
+        } catch (error) {
+            console.debug('休憩時間入力フォーカス失敗:', error);
+        }
+    }, 0);
+}
+
+async function handleBreakTimeSaveLegacy(event) {
+    if (event) {
+        event.preventDefault();
+    }
+
+    if (window.dashboardScreen) {
+        return;
+    }
+
+    if (!window.currentAttendanceRecord || !window.currentAttendanceRecord.attendanceId || !breakTimeInputField) {
+        return;
+    }
+
+    if (!window.currentAttendanceRecord.clockOutTime) {
+        showAlert('退勤打刻後に休憩時間を編集できます', 'warning');
+        return;
+    }
+
+    if (window.currentAttendanceRecord.attendanceFixed) {
+        showAlert('確定済みの勤怠は編集できません', 'warning');
+        return;
+    }
+
+    const rawValue = breakTimeInputField.value ? breakTimeInputField.value.trim() : '';
+    const pattern = /^\d{1,2}:[0-5]\d$/;
+
+    if (!pattern.test(rawValue)) {
+        breakTimeInputField.classList.add('is-invalid');
+        breakTimeInputField.setAttribute('aria-invalid', 'true');
+        showBreakTimeModalError('休憩時間はHH:MM形式で入力してください');
+        return;
+    }
+
+    const breakMinutes = TimeUtils.timeStringToMinutes(rawValue);
+    clearBreakTimeModalError();
+    breakTimeInputField.classList.remove('is-invalid');
+    breakTimeInputField.removeAttribute('aria-invalid');
+    setBreakModalSavingState(true);
+
+    try {
+        const response = await fetchWithAuth.put(
+            `/api/attendance/${window.currentAttendanceRecord.attendanceId}/break`,
+            { breakMinutes }
+        );
+
+        const result = await response.json().catch(() => null);
+        if (response.ok && result && result.success) {
+            showAlert(result.message || '休憩時間を更新しました', 'success');
+            await updateTodayAttendance();
+            await loadAttendanceHistory();
+            if (breakTimeModalInstance) {
+                breakTimeModalInstance.hide();
+            }
+        } else {
+            const message = result?.message || '休憩時間の更新に失敗しました';
+            showBreakTimeModalError(message);
+        }
+    } catch (error) {
+        console.error('休憩時間更新エラー:', error);
+        showBreakTimeModalError('休憩時間の更新に失敗しました');
+    } finally {
+        setBreakModalSavingState(false);
+    }
+}
+
+function showBreakTimeModalError(message) {
+    if (breakTimeErrorMessage) {
+        breakTimeErrorMessage.textContent = message;
+        breakTimeErrorMessage.classList.remove('d-none');
+    } else {
+        showAlert(message, 'danger');
+    }
+}
+
+function clearBreakTimeModalError() {
+    if (breakTimeErrorMessage) {
+        breakTimeErrorMessage.textContent = '';
+        breakTimeErrorMessage.classList.add('d-none');
+    }
+}
+
+function setBreakModalSavingState(isSaving) {
+    isSavingBreakTime = isSaving;
+    if (saveBreakTimeBtn) {
+        saveBreakTimeBtn.disabled = isSaving;
+    }
+    if (breakTimeInputField) {
+        breakTimeInputField.disabled = isSaving;
     }
 }
 

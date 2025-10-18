@@ -329,8 +329,11 @@ class HistoryScreen {
             const workingTime = isConfirmed ? 
                 (record.workingMinutes !== undefined && record.workingMinutes !== null ? 
                     TimeUtils.formatMinutesToTime(record.workingMinutes) : 
-                    TimeUtils.calculateWorkingTime(record.clockInTime, record.clockOutTime)) : '';
+                    TimeUtils.calculateWorkingTime(record.clockInTime, record.clockOutTime, record.breakMinutes)) : '';
             const safeFormat = (value) => formatMinutesToTime(value ?? 0);
+            const breakDisplay = isConfirmed && record.breakMinutes !== undefined && record.breakMinutes !== null
+                ? TimeUtils.formatMinutesToTime(record.breakMinutes)
+                : '';
             const lateDisplay = isConfirmed ? safeFormat(record.lateMinutes) : '';
             const earlyLeaveDisplay = isConfirmed ? safeFormat(record.earlyLeaveMinutes) : '';
             const overtimeDisplay = isConfirmed ? safeFormat(record.overtimeMinutes) : '';
@@ -355,6 +358,7 @@ class HistoryScreen {
                 <td>${formatDate(record.attendanceDate)}</td>
                 <td>${clockInTime}</td>
                 <td>${clockOutTime}</td>
+                <td>${breakDisplay}</td>
                 <td>${workingTime}</td>
                 <td>${lateDisplay}</td>
                 <td>${earlyLeaveDisplay}</td>
@@ -506,7 +510,8 @@ class HistoryScreen {
         for (let d = 1; d <= lastDay.getDate(); d++) {
             const currentDate = new Date(this.currentYear, this.currentMonth, d);
             const isToday = this.isToday(currentDate);
-            const isWeekend = currentDate.getDay() === 0 || currentDate.getDay() === 6;
+            const weekday = currentDate.getDay();
+            const isWeekend = weekday === 0 || weekday === 6;
             const isHoliday = this.isHoliday(currentDate);
             const dateString = this.formatDateString(currentDate);
 
@@ -523,6 +528,8 @@ class HistoryScreen {
             if (isToday) dayClasses.push('today');
             if (isWeekend) dayClasses.push('weekend');
             if (isHoliday) dayClasses.push('holiday');
+            if (weekday === 0) dayClasses.push('sunday');
+            if (weekday === 6) dayClasses.push('saturday');
             if (attendance) dayClasses.push('has-attendance');
             if (attendance && attendance.clockOutTime) dayClasses.push('clocked-out');
             if (attendance && attendance.clockInTime && !attendance.clockOutTime) dayClasses.push('clocked-in');
@@ -631,7 +638,6 @@ class HistoryScreen {
                     <div class="day-number">${d}</div>
                     <div class="day-badges">${badges}</div>
                     ${attendance ? this.renderAttendanceInfo(attendance) : ''}
-                    ${!attendance && (isWeekend || isHoliday) ? '<div class="day-status"><small>' + (isHoliday ? '祝日' : '休日') + '</small></div>' : ''}
                 </div>
             `;
         }
@@ -1200,7 +1206,10 @@ class HistoryScreen {
             const workingTime = isConfirmedAttendance
                 ? (attendance.workingMinutes !== undefined && attendance.workingMinutes !== null ? 
                     TimeUtils.formatMinutesToTime(attendance.workingMinutes) : 
-                    TimeUtils.calculateWorkingTime(attendance.clockInTime, attendance.clockOutTime))
+                    TimeUtils.calculateWorkingTime(attendance.clockInTime, attendance.clockOutTime, attendance.breakMinutes))
+                : '';
+            const breakDisplay = isConfirmedAttendance && attendance.breakMinutes !== undefined && attendance.breakMinutes !== null
+                ? TimeUtils.formatMinutesToTime(attendance.breakMinutes)
                 : '';
 
             // 遅刻・早退・残業・深夜の表示（0:00形式に統一）
@@ -1230,6 +1239,7 @@ class HistoryScreen {
                 <td>${formatDate(attendance.attendanceDate)}</td>
                 <td>${clockInTime}</td>
                 <td>${clockOutTime}</td>
+                <td>${breakDisplay}</td>
                 <td>${workingTime}</td>
                 <td>${lateDisplay}</td>
                 <td>${earlyLeaveDisplay}</td>
@@ -1252,6 +1262,7 @@ class HistoryScreen {
             }
 
             row.innerHTML = `
+                <td></td>
                 <td></td>
                 <td></td>
                 <td></td>
@@ -1392,8 +1403,12 @@ class HistoryScreen {
                 this.combineDateTime(clockOutDate, clockOutTime);
 
             // 勤務時間を計算
+            const breakMinutes = adjustmentRequest.newBreakMinutes ?? adjustmentRequest.breakMinutes ?? 0;
+            const breakDisplay = TimeUtils.formatMinutesToTime(breakMinutes);
+            document.getElementById('adjustmentDetailBreak').textContent = breakDisplay;
+
             const workingTime = (adjustmentRequest.newClockIn && adjustmentRequest.newClockOut) ?
-                TimeUtils.calculateWorkingTime(adjustmentRequest.newClockIn, adjustmentRequest.newClockOut) : '-';
+                TimeUtils.calculateWorkingTime(adjustmentRequest.newClockIn, adjustmentRequest.newClockOut, breakMinutes) : '-';
             document.getElementById('adjustmentDetailWorkingTime').textContent = workingTime;
 
             // 修正理由を設定
@@ -1935,7 +1950,8 @@ class HistoryScreen {
                     clockIn: detail.newClockIn,
                     clockOut: detail.newClockOut,
                     date: fallbackDate,
-                    reason: detail.reason || ''
+                    reason: detail.reason || '',
+                    breakMinutes: detail.newBreakMinutes ?? detail.breakMinutes
                 });
             }
         }, 150);

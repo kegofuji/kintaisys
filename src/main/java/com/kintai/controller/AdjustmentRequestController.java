@@ -107,6 +107,8 @@ public class AdjustmentRequestController {
             String clockOutDateStr = payload.getOrDefault("clockOutDate", targetDateStr);
             String clockOutTimeStr = payload.get("clockOutTime");
             String reason = payload.getOrDefault("reason", "");
+            String breakMinutesStr = payload.get("breakMinutes");
+            String breakTimeStr = payload.get("breakTime");
 
             AdjustmentRequestDto dto = new AdjustmentRequestDto();
             dto.setEmployeeId(employeeId);
@@ -126,6 +128,8 @@ public class AdjustmentRequestController {
                 dto.setNewClockOut(LocalDateTime.of(clockOutDate, LocalTime.parse(clockOutTimeStr)));
             }
             dto.setReason(reason);
+            Integer parsedBreakMinutes = parseBreakMinutes(breakMinutesStr, breakTimeStr);
+            dto.setBreakMinutes(parsedBreakMinutes);
 
             AdjustmentRequest adjustmentRequest = adjustmentRequestService.createAdjustmentRequest(dto);
 
@@ -191,5 +195,31 @@ public class AdjustmentRequestController {
         public void setEmployeeId(Long employeeId) {
             this.employeeId = employeeId;
         }
+    }
+
+    private Integer parseBreakMinutes(String breakMinutesStr, String breakTimeStr) {
+        Integer breakMinutes = null;
+        if (breakMinutesStr != null && !breakMinutesStr.isBlank()) {
+            try {
+                breakMinutes = Integer.parseInt(breakMinutesStr.trim());
+            } catch (NumberFormatException ignored) {
+                // fall back to time format
+            }
+        }
+
+        if (breakMinutes == null && breakTimeStr != null && !breakTimeStr.isBlank()) {
+            String[] parts = breakTimeStr.trim().split(":");
+            if (parts.length == 2) {
+                try {
+                    int hours = Integer.parseInt(parts[0]);
+                    int minutes = Integer.parseInt(parts[1]);
+                    if (hours >= 0 && minutes >= 0 && minutes < 60) {
+                        breakMinutes = hours * 60 + minutes;
+                    }
+                } catch (NumberFormatException ignored) {
+                }
+            }
+        }
+        return breakMinutes;
     }
 }

@@ -860,6 +860,7 @@ class AdminScreen {
                         reason: item.reason || '',
                         newClockIn: item.newClockIn,
                         newClockOut: item.newClockOut,
+                        newBreakMinutes: item.newBreakMinutes ?? item.breakMinutes,
                         status: status
                     });
                 });
@@ -906,15 +907,40 @@ class AdminScreen {
                     `
                 : '<span class="text-muted">処理済</span>';
 
-            const content = (entry.newClockIn || entry.newClockOut)
-                ? `出勤: ${this.formatTime(entry.newClockIn)}<br>退勤: ${this.formatTime(entry.newClockOut)}`
+            const formatMinutes = window.formatMinutesToTime || (typeof TimeUtils !== 'undefined' ? TimeUtils.formatMinutesToTime.bind(TimeUtils) : ((val) => val == null ? '-' : `${val}`));
+            const calcWorking = window.calculateWorkingTime || (typeof TimeUtils !== 'undefined' ? TimeUtils.calculateWorkingTime.bind(TimeUtils) : null);
+
+            const breakMinutes = entry.newBreakMinutes;
+            const breakDisplay = typeof breakMinutes === 'number'
+                ? formatMinutes(Math.max(breakMinutes, 0))
                 : '-';
+
+            let workingDisplay = '-';
+            if (calcWorking && entry.newClockIn && entry.newClockOut) {
+                workingDisplay = calcWorking(entry.newClockIn, entry.newClockOut, breakMinutes);
+            }
+
+            const segments = [];
+            if (entry.newClockIn) {
+                segments.push(`出勤: ${this.formatTime(entry.newClockIn)}`);
+            }
+            if (entry.newClockOut) {
+                segments.push(`退勤: ${this.formatTime(entry.newClockOut)}`);
+            }
+            if (breakDisplay !== '-') {
+                segments.push(`休憩: ${breakDisplay}`);
+            }
+            if (workingDisplay !== '-') {
+                segments.push(`実働: ${workingDisplay}`);
+            }
+
+            const content = segments.length > 0 ? segments.join('<br>') : '-';
 
             row.innerHTML = `
                 <td>${entry.employeeName}</td>
                 <td>${this.formatDate(entry.targetDate)}</td>
-                <td>${entry.reason || '-'}</td>
                 <td>${content}</td>
+                <td>${entry.reason || '-'}</td>
                 <td>${this.translateStatus(entry.status)}</td>
                 <td>${actionCell}</td>
             `;

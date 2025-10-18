@@ -30,6 +30,8 @@ import java.time.LocalDateTime;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.startsWith;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -91,7 +93,8 @@ class CancellationControllerTest {
                 targetDate,
                 LocalDateTime.of(2025, 9, 1, 9, 0),
                 LocalDateTime.of(2025, 9, 1, 18, 0),
-                "申請理由"
+                "申請理由",
+                60
         );
         AdjustmentRequest adjustmentRequest = adjustmentRequestService.createAdjustmentRequest(dto);
 
@@ -127,7 +130,8 @@ class CancellationControllerTest {
                 targetDate,
                 LocalDateTime.of(2025, 9, 2, 9, 0),
                 LocalDateTime.of(2025, 9, 2, 18, 0),
-                "理由"
+                "理由",
+                60
         );
         AdjustmentRequest adjustmentRequest = adjustmentRequestService.createAdjustmentRequest(dto);
 
@@ -262,7 +266,8 @@ class CancellationControllerTest {
                 sunday,
                 LocalDateTime.of(2025, 9, 7, 9, 0),
                 LocalDateTime.of(2025, 9, 7, 18, 0),
-                "休日打刻修正"
+                "休日打刻修正",
+                60
         );
 
         AdjustmentRequest adjustmentRequest = adjustmentRequestService.createAdjustmentRequest(dto);
@@ -285,7 +290,8 @@ class CancellationControllerTest {
                         "clockInTime", "09:00",
                         "clockOutDate", sunday.toString(),
                         "clockOutTime", "18:00",
-                        "reason", "API休日申請"
+                        "reason", "API休日申請",
+                        "breakTime", "1:00"
                 )
         );
 
@@ -295,5 +301,36 @@ class CancellationControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.message").value("打刻修正が完了しました"));
+    }
+
+    @Test
+    void adjustmentRequestApiReturnsBreakMinutes() throws Exception {
+        LocalDate targetDate = LocalDate.of(2025, 10, 18);
+
+        String payload = objectMapper.writeValueAsString(
+                Map.of(
+                        "employeeId", employee.getEmployeeId().toString(),
+                        "date", targetDate.toString(),
+                        "clockInDate", targetDate.toString(),
+                        "clockInTime", "09:00",
+                        "clockOutDate", targetDate.toString(),
+                        "clockOutTime", "18:09",
+                        "reason", "休憩確認",
+                        "breakTime", "1:00"
+                )
+        );
+
+        mockMvc.perform(post("/api/attendance/adjustment-request")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(payload))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true));
+
+        mockMvc.perform(get("/api/attendance/adjustment/" + employee.getEmployeeId()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data[0].newBreakMinutes").value(60))
+                .andExpect(jsonPath("$.data[0].newClockIn").value(startsWith(targetDate.toString())))
+                .andExpect(jsonPath("$.data[0].newClockOut").value(startsWith(targetDate.toString())));
     }
 }

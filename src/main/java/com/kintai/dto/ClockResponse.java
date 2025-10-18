@@ -102,9 +102,11 @@ public class ClockResponse {
         private Integer earlyLeaveMinutes;
         private Integer overtimeMinutes;
         private Integer nightShiftMinutes;
+        private Integer breakMinutes;
         private Integer workingMinutes;
         private String attendanceStatus;
         private Boolean attendanceFixed;
+        private Boolean hasApprovedAdjustment;
 
         // デフォルトコンストラクタ
         public ClockData() {
@@ -113,7 +115,7 @@ public class ClockResponse {
         // コンストラクタ
         public ClockData(Long attendanceId, LocalDate attendanceDate, LocalDateTime clockInTime, LocalDateTime clockOutTime,
                         Integer lateMinutes, Integer earlyLeaveMinutes, Integer overtimeMinutes, Integer nightShiftMinutes,
-                        Integer workingMinutes, String attendanceStatus, Boolean attendanceFixed) {
+                        Integer breakMinutes, Integer workingMinutes, String attendanceStatus, Boolean attendanceFixed) {
             this.attendanceId = attendanceId;
             this.attendanceDate = attendanceDate;
             this.clockInTime = clockInTime;
@@ -122,9 +124,11 @@ public class ClockResponse {
             this.earlyLeaveMinutes = earlyLeaveMinutes;
             this.overtimeMinutes = overtimeMinutes;
             this.nightShiftMinutes = nightShiftMinutes;
+            this.breakMinutes = breakMinutes;
             this.workingMinutes = workingMinutes;
             this.attendanceStatus = attendanceStatus;
             this.attendanceFixed = attendanceFixed;
+            this.hasApprovedAdjustment = Boolean.FALSE;
         }
         
         // ゲッター・セッター
@@ -192,6 +196,14 @@ public class ClockResponse {
             this.nightShiftMinutes = nightShiftMinutes;
         }
 
+        public Integer getBreakMinutes() {
+            return breakMinutes;
+        }
+
+        public void setBreakMinutes(Integer breakMinutes) {
+            this.breakMinutes = breakMinutes;
+        }
+
         public String getAttendanceStatus() {
             return attendanceStatus;
         }
@@ -214,6 +226,14 @@ public class ClockResponse {
 
         public void setWorkingMinutes(Integer workingMinutes) {
             this.workingMinutes = workingMinutes;
+        }
+
+        public Boolean getHasApprovedAdjustment() {
+            return hasApprovedAdjustment;
+        }
+
+        public void setHasApprovedAdjustment(Boolean hasApprovedAdjustment) {
+            this.hasApprovedAdjustment = hasApprovedAdjustment;
         }
     }
 

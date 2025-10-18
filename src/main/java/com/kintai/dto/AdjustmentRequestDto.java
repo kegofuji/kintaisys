@@ -3,6 +3,7 @@ package com.kintai.dto;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
 
 import java.time.LocalDate;
@@ -27,19 +28,23 @@ public class AdjustmentRequestDto {
     @NotBlank(message = "理由は必須です")
     @Size(max = 500, message = "理由は500文字以内で入力してください")
     private String reason;
+
+    @PositiveOrZero(message = "休憩時間は0分以上で入力してください")
+    private Integer breakMinutes;
     
     // デフォルトコンストラクタ
     public AdjustmentRequestDto() {
     }
     
     // コンストラクタ
-    public AdjustmentRequestDto(Long employeeId, LocalDate targetDate, LocalDateTime newClockIn, 
-                               LocalDateTime newClockOut, String reason) {
+    public AdjustmentRequestDto(Long employeeId, LocalDate targetDate, LocalDateTime newClockIn,
+                               LocalDateTime newClockOut, String reason, Integer breakMinutes) {
         this.employeeId = employeeId;
         this.targetDate = targetDate;
         this.newClockIn = newClockIn;
         this.newClockOut = newClockOut;
         this.reason = reason;
+        this.breakMinutes = breakMinutes;
     }
     
     // ゲッター・セッター
@@ -81,5 +86,13 @@ public class AdjustmentRequestDto {
     
     public void setReason(String reason) {
         this.reason = reason;
+    }
+
+    public Integer getBreakMinutes() {
+        return breakMinutes;
+    }
+
+    public void setBreakMinutes(Integer breakMinutes) {
+        this.breakMinutes = breakMinutes;
     }
 }

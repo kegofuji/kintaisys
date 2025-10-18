@@ -78,4 +78,5 @@ public interface AdjustmentRequestRepository extends JpaRepository<AdjustmentReq
     List<AdjustmentRequest> findActiveAdjustmentRequestsInPeriod(@Param("employeeId") Long employeeId,
                                                                 @Param("startDate") LocalDate startDate,
                                                                 @Param("endDate") LocalDate endDate);
+
 }

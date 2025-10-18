@@ -82,9 +82,21 @@ public class AdjustmentRequestService {
         // 7. 修正申請を作成
         AdjustmentRequest adjustmentRequest = new AdjustmentRequest(
                 employeeId, targetDate, newClockIn, newClockOut, requestDto.getReason());
+        int sanitizedBreak = timeCalculator.resolveBreakMinutes(newClockIn, newClockOut, requestDto.getBreakMinutes());
+        adjustmentRequest.setNewBreakMinutes(sanitizedBreak);
+
         if (currentRecord != null) {
             adjustmentRequest.setOriginalClockIn(currentRecord.getClockInTime());
             adjustmentRequest.setOriginalClockOut(currentRecord.getClockOutTime());
+            Integer originalBreak = null;
+            if (currentRecord.getClockInTime() != null && currentRecord.getClockOutTime() != null) {
+                originalBreak = timeCalculator.resolveBreakMinutes(
+                        currentRecord.getClockInTime(),
+                        currentRecord.getClockOutTime(),
+                        currentRecord.getBreakMinutes()
+                );
+            }
+            adjustmentRequest.setOriginalBreakMinutes(originalBreak);
         }
 
         return adjustmentRequestRepository.save(adjustmentRequest);
@@ -119,6 +131,13 @@ public class AdjustmentRequestService {
         // 4. 勤怠記録を更新
         attendanceRecord.setClockInTime(adjustmentRequest.getNewClockIn());
         attendanceRecord.setClockOutTime(adjustmentRequest.getNewClockOut());
+        int sanitizedBreak = timeCalculator.resolveBreakMinutes(
+                adjustmentRequest.getNewClockIn(),
+                adjustmentRequest.getNewClockOut(),
+                adjustmentRequest.getNewBreakMinutes()
+        );
+        attendanceRecord.setBreakMinutes(sanitizedBreak);
+        adjustmentRequest.setNewBreakMinutes(sanitizedBreak);
         
         // 5. 遅刻・早退・残業・深夜を再計算
         timeCalculator.calculateAttendanceMetrics(attendanceRecord);
@@ -197,6 +216,13 @@ public class AdjustmentRequestService {
                             // 旧データがない場合は申請前の状態に戻せないため、勤務時刻を初期化する
                             record.setClockInTime(null);
                             record.setClockOutTime(null);
+                        }
+
+                        Integer revertBreak = adjustmentRequest.getOriginalBreakMinutes();
+                        if (revertBreak != null) {
+                            record.setBreakMinutes(revertBreak);
+                        } else {
+                            record.setBreakMinutes(0);
                         }
 
                         timeCalculator.calculateAttendanceMetrics(record);

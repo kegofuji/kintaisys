@@ -102,8 +102,8 @@
         }
         
         .calendar-day.today {
-            background-color: #e3f2fd;
-            border: 2px solid #2196f3;
+            background-color: #fffbe6;
+            border: 2px solid #ffe58f;
             font-weight: bold;
         }
         
@@ -329,20 +329,31 @@
                                             <span class="badge bg-secondary fs-6">未出勤</span>
                                         </div>
                                         <div id="attendanceInfo" class="mt-3">
-                                            <div class="row">
-                                                <div class="col-md-4">
+                                            <div class="row g-3 g-md-0">
+                                                <div class="col-6 col-md-3">
                                                     <div class="text-center">
                                                         <div class="fw-bold">出勤時刻</div>
                                                         <div id="clockInTime" class="h5">--:--</div>
                                                     </div>
                                                 </div>
-                                                <div class="col-md-4">
+                                                <div class="col-6 col-md-3">
                                                     <div class="text-center">
                                                         <div class="fw-bold">退勤時刻</div>
                                                         <div id="clockOutTime" class="h5">--:--</div>
                                                     </div>
                                                 </div>
-                                                <div class="col-md-4">
+                                                <div class="col-6 col-md-3">
+                                                    <div class="text-center">
+                                                        <div class="fw-bold d-flex justify-content-center align-items-center gap-2">
+                                                            <span>休憩時間</span>
+                                                            <button id="editBreakTimeBtn" type="button" class="btn btn-link btn-sm p-0 text-white" title="休憩時間を編集" aria-label="休憩時間を編集">
+                                                                <i class="fas fa-pen"></i>
+                                                            </button>
+                                                        </div>
+                                                        <div id="breakTime" class="h5">--:--</div>
+                                                    </div>
+                                                </div>
+                                                <div class="col-6 col-md-3">
                                                     <div class="text-center">
                                                         <div class="fw-bold">勤務時間</div>
                                                         <div id="workingTime" class="h5">0:00</div>
@@ -398,7 +409,8 @@
                                                         <th>日付</th>
                                                         <th>出勤時刻</th>
                                                         <th>退勤時刻</th>
-                                                        <th>勤務時間</th>
+                                                        <th>休憩</th>
+                                                        <th>勤務</th>
                                                         <th>遅刻</th>
                                                         <th>早退</th>
                                                         <th>残業</th>
@@ -414,6 +426,34 @@
                                     </div>
                                 </div>
                             </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 休憩時間編集モーダル -->
+            <div class="modal fade" id="breakTimeModal" tabindex="-1" aria-labelledby="breakTimeModalLabel" aria-hidden="true">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title" id="breakTimeModalLabel">休憩時間の編集</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <form id="breakTimeForm" novalidate>
+                                <div class="mb-3">
+                                    <label for="breakTimeInput" class="form-label">休憩時間 (HH:MM)</label>
+                                    <input type="text" class="form-control" id="breakTimeInput" placeholder="例: 1:00" pattern="^[0-9]{1,2}:[0-5][0-9]$" required>
+                                    <div class="form-text">
+                                        実働6時間未満は0分、6時間以上は45分、8時間以上は60分が自動計算されます。
+                                    </div>
+                                </div>
+                            </form>
+                            <div id="breakTimeError" class="text-danger small d-none"></div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                            <button type="button" class="btn btn-primary" id="saveBreakTimeBtn">保存</button>
                         </div>
                     </div>
                 </div>
@@ -437,15 +477,19 @@
                                             <td id="adjustmentDetailDate">-</td>
                                         </tr>
                                         <tr>
-                                            <td><strong>修正後出勤:</strong></td>
+                                            <td><strong>出勤:</strong></td>
                                             <td id="adjustmentDetailClockIn">-</td>
                                         </tr>
                                         <tr>
-                                            <td><strong>修正後退勤:</strong></td>
+                                            <td><strong>退勤:</strong></td>
                                             <td id="adjustmentDetailClockOut">-</td>
                                         </tr>
                                         <tr>
-                                            <td><strong>修正後勤務時間:</strong></td>
+                                            <td><strong>休憩:</strong></td>
+                                            <td id="adjustmentDetailBreak">-</td>
+                                        </tr>
+                                        <tr>
+                                            <td><strong>実働:</strong></td>
                                             <td id="adjustmentDetailWorkingTime">-</td>
                                         </tr>
                                         <tr>
@@ -668,6 +712,19 @@
                                     <input type="time" class="form-control" id="adjustmentClockOutTime" required>
                                 </div>
                             </div>
+                            <div class="row g-3 mt-0 mt-md-1">
+                                <div class="col-md-6">
+                                    <label for="adjustmentBreakTime" class="form-label">休憩時間 (HH:MM): <span class="text-danger">*</span></label>
+                                    <input type="text" class="form-control" id="adjustmentBreakTime" required pattern="^[0-9]{1,2}:[0-5][0-9]$" placeholder="例: 1:00">
+                                    <div class="form-text">
+                                        実働6時間未満は0分、6時間以上は45分、8時間以上は60分が自動計算されます。
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="adjustmentWorkingPreview" class="form-label">実働</label>
+                                    <input type="text" class="form-control" id="adjustmentWorkingPreview" readonly value="0:00">
+                                </div>
+                            </div>
                             <div class="mb-3">
                                 <label for="adjustmentReason" class="form-label">理由: <span class="text-danger">*</span></label>
                                 <textarea class="form-control" id="adjustmentReason" rows="3" required></textarea>
@@ -760,8 +817,8 @@
                                     <tr>
                                         <th>社員名</th>
                                         <th>対象日</th>
-                                        <th>理由</th>
                                         <th>申請内容</th>
+                                        <th>理由</th>
                                         <th>状態</th>
                                         <th>操作</th>
                                     </tr>
@@ -1043,14 +1100,15 @@
         }
         
         .calendar-day.selected {
-            background-color: #007bff !important;
-            color: white !important;
-            border: 2px solid #0056b3 !important;
+            background-color: #ffe58f !important;
+            color: #333 !important;
+            border: 2px solid #d48806 !important;
             font-weight: bold;
         }
         
         .calendar-day.selected:hover {
-            background-color: #0056b3 !important;
+            background-color: #fadb14 !important;
+            color: #333 !important;
         }
         
         .day-number {
@@ -1064,23 +1122,13 @@
             flex-shrink: 0;
         }
         
-        .day-status {
-            position: absolute;
-            bottom: 4px;
-            right: 4px;
-            font-size: 1.0rem; /* 祝日・休日の表示をさらに大きく */
-            font-weight: 600;
-            color: #6c757d;
+        .calendar-day.sunday .day-number,
+        .calendar-day.holiday .day-number {
+            color: #dc3545;
         }
         
-        .calendar-day.weekend .day-status,
-        .calendar-day.holiday .day-status {
-            color: #dc3545; /* 祝日・休日は赤字 */
-            font-size: 1.1rem; /* 祝日・休日はさらに大きく */
-        }
-        
-        .calendar-day:hover .day-status {
-            color: white;
+        .calendar-day.saturday .day-number {
+            color: #0d6efd;
         }
         
         .clickable {

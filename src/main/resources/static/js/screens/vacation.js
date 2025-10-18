@@ -556,20 +556,50 @@ class VacationScreen {
         } else {
             summaryLabel = unitLabel ? `${leaveLabel}（${unitLabel}）` : leaveLabel;
         }
-        const confirmMessage = `休暇種別: ${summaryLabel}\n対象日: ${rangeText}\n休暇申請を送信します。よろしいですか？`;
+        const reasonDisplay = reason ? reason : '記載なし';
+        const escapeHtml = (value) => String(value ?? '').replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+        const summaryLabelHtml = escapeHtml(summaryLabel);
+        const rangeTextHtml = escapeHtml(rangeText);
+        const reasonDisplayHtml = escapeHtml(reasonDisplay);
+        const modalMessageText = [
+            '休暇申請の内容を確認してください。',
+            `休暇種別 ${summaryLabel}`,
+            `対象日 ${rangeText}`,
+            `理由 ${reasonDisplay}`,
+            '申請してよろしいですか？'
+        ].join('\n');
+
+        const modalMessageHtml = `
+            <div class="text-start small">
+                <p class="mb-2">休暇申請の内容を確認してください。</p>
+                <dl class="row g-1 mb-3 align-items-center">
+                    <dt class="col-4 text-muted text-nowrap mb-0">休暇種別</dt>
+                    <dd class="col-8 text-end mb-0 fw-semibold">${summaryLabelHtml}</dd>
+                    <dt class="col-4 text-muted text-nowrap mb-0">対象日</dt>
+                    <dd class="col-8 text-end mb-0 fw-semibold">${rangeTextHtml}</dd>
+                    <dt class="col-4 text-muted text-nowrap mb-0">理由</dt>
+                    <dd class="col-8 text-end mb-0">${reasonDisplayHtml}</dd>
+                </dl>
+                <p class="mb-0">申請してよろしいですか？</p>
+            </div>
+        `.trim();
 
         const confirmHandler = window.employeeDialog?.confirm;
         if (confirmHandler) {
             const { confirmed } = await confirmHandler({
                 title: '休暇申請',
-                message: confirmMessage.replace(/\n/g, '\n'),
+                message: modalMessageHtml,
                 confirmLabel: '申請する',
                 cancelLabel: 'キャンセル'
             });
             if (!confirmed) {
                 return;
             }
-        } else if (!window.confirm(confirmMessage)) {
+        } else if (!window.confirm(modalMessageText)) {
             return;
         }
 

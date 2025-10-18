@@ -31,4 +31,6 @@ public class AttendanceException extends RuntimeException {
     public static final String REQUEST_NOT_FOUND = "REQUEST_NOT_FOUND";
     public static final String REQUEST_NOT_CANCELLABLE = "REQUEST_NOT_CANCELLABLE";
     public static final String INVALID_TIME_PAIR = "INVALID_TIME_PAIR";
+    public static final String INVALID_BREAK_VALUE = "INVALID_BREAK_VALUE";
+    public static final String BREAK_NOT_EDITABLE = "BREAK_NOT_EDITABLE";
 }

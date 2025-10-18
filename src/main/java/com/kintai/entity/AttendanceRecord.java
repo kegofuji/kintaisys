@@ -39,6 +39,9 @@ public class AttendanceRecord {
     
     @Column(name = "night_shift_minutes", nullable = false, columnDefinition = "INT DEFAULT 0")
     private Integer nightShiftMinutes = 0;
+
+    @Column(name = "break_minutes", nullable = false, columnDefinition = "INT DEFAULT 0")
+    private Integer breakMinutes = 0;
     
     @Enumerated(EnumType.STRING)
     @Column(name = "attendance_status", nullable = false)
@@ -160,6 +163,14 @@ public class AttendanceRecord {
         this.nightShiftMinutes = nightShiftMinutes == null ? 0 : nightShiftMinutes;
     }
 
+    public Integer getBreakMinutes() {
+        return breakMinutes;
+    }
+
+    public void setBreakMinutes(Integer breakMinutes) {
+        this.breakMinutes = breakMinutes == null ? 0 : breakMinutes;
+    }
+
     private void normalizeMetrics() {
         if (lateMinutes == null) {
             lateMinutes = 0;
@@ -172,6 +183,9 @@ public class AttendanceRecord {
         }
         if (nightShiftMinutes == null) {
             nightShiftMinutes = 0;
+        }
+        if (breakMinutes == null) {
+            breakMinutes = 0;
         }
     }
     

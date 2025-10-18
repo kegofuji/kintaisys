@@ -69,15 +69,30 @@ public class TimeCalculator {
      * @return 実働分数（休憩時間控除後）
      */
     public int calculateWorkingMinutes(LocalDateTime clockInTime, LocalDateTime clockOutTime) {
+        return calculateWorkingMinutes(clockInTime, clockOutTime, null);
+    }
+
+    /**
+     * 実働時間を計算する（分）
+     * @param clockInTime 出勤時刻
+     * @param clockOutTime 退勤時刻
+     * @param breakMinutes 休憩時間（分）。null の場合は法定休憩時間を適用
+     * @return 実働分数（休憩時間控除後）
+     */
+    public int calculateWorkingMinutes(LocalDateTime clockInTime, LocalDateTime clockOutTime, Integer breakMinutes) {
+        if (clockInTime == null || clockOutTime == null) {
+            return 0;
+        }
         clockInTime = truncateToMinutes(clockInTime);
         clockOutTime = truncateToMinutes(clockOutTime);
-        // 総勤務時間を計算
+        if (!clockOutTime.isAfter(clockInTime)) {
+            return 0;
+        }
+
         long totalMinutes = ChronoUnit.MINUTES.between(clockInTime, clockOutTime);
-        
-        // 労働基準法第34条に基づく休憩時間を控除
-        int breakMinutes = calculateRequiredBreakMinutes((int) totalMinutes);
-        totalMinutes -= breakMinutes;
-        
+        int effectiveBreakMinutes = resolveBreakMinutes(clockInTime, clockOutTime, breakMinutes);
+        totalMinutes -= effectiveBreakMinutes;
+
         return (int) Math.max(0, totalMinutes);
     }
     
@@ -87,16 +102,46 @@ public class TimeCalculator {
      * @return 必要休憩時間（分）
      */
     private int calculateRequiredBreakMinutes(int totalWorkMinutes) {
-        if (totalWorkMinutes <= WORK_HOURS_6_HOURS) {
-            // 6時間以下の場合：休憩時間なし
+        if (totalWorkMinutes < WORK_HOURS_6_HOURS) {
+            // 6時間未満の場合：休憩時間なし
             return 0;
-        } else if (totalWorkMinutes <= WORK_HOURS_8_HOURS) {
-            // 6時間超8時間以下の場合：45分の休憩
+        } else if (totalWorkMinutes < WORK_HOURS_8_HOURS) {
+            // 6時間以上8時間未満の場合：45分の休憩
             return MIN_BREAK_6_TO_8_HOURS;
         } else {
-            // 8時間超の場合：60分の休憩
+            // 8時間以上の場合：60分の休憩
             return MIN_BREAK_OVER_8_HOURS;
         }
+    }
+
+    /**
+     * 休憩時間を解決（null の場合は法定休憩時間を適用）し、総勤務時間の範囲に収める
+     * @param clockInTime 出勤時刻
+     * @param clockOutTime 退勤時刻
+     * @param requestedBreakMinutes 希望する休憩時間（分）
+     * @return 有効な休憩時間（分）
+     */
+    public int resolveBreakMinutes(LocalDateTime clockInTime, LocalDateTime clockOutTime, Integer requestedBreakMinutes) {
+        if (clockInTime == null || clockOutTime == null) {
+            return requestedBreakMinutes == null ? 0 : Math.max(0, requestedBreakMinutes);
+        }
+        clockInTime = truncateToMinutes(clockInTime);
+        clockOutTime = truncateToMinutes(clockOutTime);
+        if (!clockOutTime.isAfter(clockInTime)) {
+            return 0;
+        }
+
+        int totalMinutes = (int) ChronoUnit.MINUTES.between(clockInTime, clockOutTime);
+        int breakMinutes = requestedBreakMinutes != null ? requestedBreakMinutes : calculateRequiredBreakMinutes(totalMinutes);
+
+        if (breakMinutes < 0) {
+            breakMinutes = 0;
+        }
+        if (breakMinutes > totalMinutes) {
+            breakMinutes = totalMinutes;
+        }
+
+        return breakMinutes;
     }
     
     /**
@@ -171,20 +216,33 @@ public class TimeCalculator {
             return;
         }
         
+        int breakMinutes = resolveBreakMinutes(attendanceRecord.getClockInTime(), attendanceRecord.getClockOutTime(), attendanceRecord.getBreakMinutes());
+        attendanceRecord.setBreakMinutes(breakMinutes);
+
         // 遅刻時間を計算・設定
-        int lateMinutes = calculateLateMinutes(attendanceRecord.getClockInTime());
+        int lateMinutes = Math.max(0, calculateLateMinutes(attendanceRecord.getClockInTime()));
         attendanceRecord.setLateMinutes(lateMinutes);
         
         // 早退時間を計算・設定
-        int earlyLeaveMinutes = calculateEarlyLeaveMinutes(attendanceRecord.getClockOutTime());
+        int earlyLeaveMinutes = Math.max(0, calculateEarlyLeaveMinutes(attendanceRecord.getClockOutTime()));
         attendanceRecord.setEarlyLeaveMinutes(earlyLeaveMinutes);
         
         // 実働時間を計算
-        int workingMinutes = calculateWorkingMinutes(attendanceRecord.getClockInTime(), attendanceRecord.getClockOutTime());
+        int workingMinutes = calculateWorkingMinutes(attendanceRecord.getClockInTime(), attendanceRecord.getClockOutTime(), breakMinutes);
 
         if (workingMinutes >= STANDARD_WORKING_MINUTES) {
             attendanceRecord.setLateMinutes(0);
             attendanceRecord.setEarlyLeaveMinutes(0);
+        } else {
+            int totalShortMinutes = STANDARD_WORKING_MINUTES - Math.max(0, workingMinutes);
+            int adjustedLateMinutes = Math.min(attendanceRecord.getLateMinutes(), totalShortMinutes);
+            int adjustedEarlyMinutes = Math.max(0, attendanceRecord.getEarlyLeaveMinutes());
+            int coveredByLateAndEarly = adjustedLateMinutes + adjustedEarlyMinutes;
+            if (coveredByLateAndEarly < totalShortMinutes) {
+                adjustedEarlyMinutes += (totalShortMinutes - coveredByLateAndEarly);
+            }
+            attendanceRecord.setLateMinutes(adjustedLateMinutes);
+            attendanceRecord.setEarlyLeaveMinutes(adjustedEarlyMinutes);
         }
         
         // 残業時間を計算・設定
@@ -216,6 +274,9 @@ public class TimeCalculator {
         }
         if (attendanceRecord.getNightShiftMinutes() == null) {
             attendanceRecord.setNightShiftMinutes(0);
+        }
+        if (attendanceRecord.getBreakMinutes() == null) {
+            attendanceRecord.setBreakMinutes(0);
         }
     }
 

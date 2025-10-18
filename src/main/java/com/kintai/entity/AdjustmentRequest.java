@@ -28,11 +28,17 @@ public class AdjustmentRequest {
     @Column(name = "new_clock_out")
     private LocalDateTime newClockOut;
 
+    @Column(name = "new_break_minutes", nullable = false, columnDefinition = "INT DEFAULT 0")
+    private Integer newBreakMinutes = 0;
+
     @Column(name = "original_clock_in")
     private LocalDateTime originalClockIn;
 
     @Column(name = "original_clock_out")
     private LocalDateTime originalClockOut;
+
+    @Column(name = "original_break_minutes")
+    private Integer originalBreakMinutes;
 
     @Column(name = "reason", nullable = false, length = 500)
     private String reason;
@@ -69,8 +75,8 @@ public class AdjustmentRequest {
     }
     
     // コンストラクタ
-    public AdjustmentRequest(Long employeeId, LocalDate targetDate, LocalDateTime newClockIn, 
-                           LocalDateTime newClockOut, String reason) {
+    public AdjustmentRequest(Long employeeId, LocalDate targetDate, LocalDateTime newClockIn,
+                             LocalDateTime newClockOut, String reason) {
         this.employeeId = employeeId;
         this.targetDate = targetDate;
         this.newClockIn = newClockIn;
@@ -147,6 +153,22 @@ public class AdjustmentRequest {
 
     public void setOriginalClockOut(LocalDateTime originalClockOut) {
         this.originalClockOut = originalClockOut;
+    }
+
+    public Integer getNewBreakMinutes() {
+        return newBreakMinutes;
+    }
+
+    public void setNewBreakMinutes(Integer newBreakMinutes) {
+        this.newBreakMinutes = newBreakMinutes == null ? 0 : Math.max(newBreakMinutes, 0);
+    }
+
+    public Integer getOriginalBreakMinutes() {
+        return originalBreakMinutes;
+    }
+
+    public void setOriginalBreakMinutes(Integer originalBreakMinutes) {
+        this.originalBreakMinutes = originalBreakMinutes;
     }
     
     public String getReason() {

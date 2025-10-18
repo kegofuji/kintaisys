@@ -8,13 +8,17 @@ class AdjustmentScreen {
         this.clockInTimeInput = null;
         this.clockOutDateInput = null;
         this.clockOutTimeInput = null;
+        this.breakTimeInput = null;
+        this.workingPreviewInput = null;
         this.adjustmentReason = null;
         this.formTitle = null;
         this.cancelPrefillButton = null;
         this.listenersBound = false;
+        this.breakManuallyEdited = false;
+        this.autoCalculatedBreakMinutes = 0;
     }
 
-    prefillForm({ clockInDate, clockInTime, clockOutDate, clockOutTime, clockIn, clockOut, date, reason }) {
+    prefillForm({ clockInDate, clockInTime, clockOutDate, clockOutTime, clockIn, clockOut, date, reason, breakMinutes }) {
         if (!this.adjustmentForm) {
             this.init();
         }
@@ -79,6 +83,17 @@ class AdjustmentScreen {
             this.adjustmentReason.value = reason || '';
         }
 
+        this.breakManuallyEdited = false;
+        if (this.breakTimeInput) {
+            if (typeof breakMinutes === 'number' && !Number.isNaN(breakMinutes)) {
+                this.breakTimeInput.value = TimeUtils.formatMinutesToTime(Math.max(breakMinutes, 0));
+            } else {
+                this.autoCalculateBreak();
+            }
+        }
+
+        this.updateWorkingPreview();
+
         if (this.formTitle) {
             this.formTitle.textContent = '打刻修正の再申請';
         }
@@ -111,6 +126,8 @@ class AdjustmentScreen {
         this.clockInTimeInput = document.getElementById('adjustmentClockInTime');
         this.clockOutDateInput = document.getElementById('adjustmentClockOutDate');
         this.clockOutTimeInput = document.getElementById('adjustmentClockOutTime');
+        this.breakTimeInput = document.getElementById('adjustmentBreakTime');
+        this.workingPreviewInput = document.getElementById('adjustmentWorkingPreview');
         this.adjustmentReason = document.getElementById('adjustmentReason');
         this.formTitle = document.getElementById('adjustmentFormTitle');
         this.cancelPrefillButton = document.getElementById('adjustmentFormCancel');
@@ -126,16 +143,36 @@ class AdjustmentScreen {
         }
 
         if (this.clockInDateInput) {
-            this.clockInDateInput.addEventListener('change', () => this.validateDateFields());
+            this.clockInDateInput.addEventListener('change', () => {
+                this.validateDateFields();
+                this.onTimeFieldUpdated();
+            });
         }
         if (this.clockOutDateInput) {
-            this.clockOutDateInput.addEventListener('change', () => this.validateTimeRange());
+            this.clockOutDateInput.addEventListener('change', () => {
+                this.validateTimeRange();
+                this.onTimeFieldUpdated();
+            });
         }
         if (this.clockInTimeInput) {
-            this.clockInTimeInput.addEventListener('change', () => this.validateTimeRange());
+            this.clockInTimeInput.addEventListener('change', () => {
+                this.validateTimeRange();
+                this.onTimeFieldUpdated();
+            });
         }
         if (this.clockOutTimeInput) {
-            this.clockOutTimeInput.addEventListener('change', () => this.validateTimeRange());
+            this.clockOutTimeInput.addEventListener('change', () => {
+                this.validateTimeRange();
+                this.onTimeFieldUpdated();
+            });
+        }
+        if (this.breakTimeInput) {
+            this.breakTimeInput.addEventListener('input', () => {
+                this.breakManuallyEdited = true;
+                this.breakTimeInput.classList.remove('is-invalid');
+                this.breakTimeInput.removeAttribute('aria-invalid');
+                this.updateWorkingPreview();
+            });
         }
 
         this.listenersBound = true;
@@ -163,6 +200,14 @@ class AdjustmentScreen {
         if (this.clockOutTimeInput) {
             this.clockOutTimeInput.value = '';
         }
+        if (this.breakTimeInput) {
+            this.breakTimeInput.value = '';
+            this.breakTimeInput.classList.remove('is-invalid');
+            this.breakTimeInput.removeAttribute('aria-invalid');
+        }
+        this.breakManuallyEdited = false;
+        this.autoCalculatedBreakMinutes = 0;
+        this.updateWorkingPreview();
     }
 
     clearPrefillState() {
@@ -173,6 +218,8 @@ class AdjustmentScreen {
             this.cancelPrefillButton.style.display = 'none';
             this.cancelPrefillButton.onclick = null;
         }
+        this.breakManuallyEdited = false;
+        this.autoCalculatedBreakMinutes = 0;
     }
 
     /**
@@ -187,6 +234,7 @@ class AdjustmentScreen {
         const clockOutDate = this.clockOutDateInput?.value || '';
         const clockOutTime = this.clockOutTimeInput?.value || '';
         const reason = this.adjustmentReason?.value || '';
+        const breakTimeValue = this.breakTimeInput?.value || '';
 
         if (!clockInDate || !clockOutDate || !reason) {
             this.showAlert('出勤日・退勤日・理由は必須です', 'warning');
@@ -205,6 +253,40 @@ class AdjustmentScreen {
         if (!this.validateTimeRange()) {
             return;
         }
+
+        if (!breakTimeValue) {
+            this.showAlert('休憩時間を入力してください', 'warning');
+            this.breakTimeInput?.focus();
+            return;
+        }
+
+        const breakPattern = /^\d{1,2}:[0-5]\d$/;
+        if (!breakPattern.test(breakTimeValue)) {
+            this.showAlert('休憩時間はHH:MM形式で入力してください', 'warning');
+            this.breakTimeInput?.classList.add('is-invalid');
+            this.breakTimeInput?.setAttribute('aria-invalid', 'true');
+            this.breakTimeInput?.focus();
+            return;
+        }
+
+        const breakMinutes = TimeUtils.timeStringToMinutes(breakTimeValue);
+        if (this.breakTimeInput) {
+            this.breakTimeInput.classList.remove('is-invalid');
+            this.breakTimeInput.removeAttribute('aria-invalid');
+        }
+        const totalMinutes = this.calculateTotalMinutes(clockInDate, clockInTime, clockOutDate, clockOutTime);
+        if (totalMinutes === null) {
+            this.showAlert('有効な勤務時間を入力してください', 'warning');
+            return;
+        }
+
+        if (breakMinutes > totalMinutes) {
+            this.showAlert('休憩時間が勤務時間を超えています', 'warning');
+            this.breakTimeInput?.focus();
+            return;
+        }
+
+        const workingMinutes = Math.max(totalMinutes - breakMinutes, 0);
 
         if (!window.currentEmployeeId) {
             this.showAlert('従業員IDが取得できません', 'danger');
@@ -234,12 +316,36 @@ class AdjustmentScreen {
             return value.replace(/-/g, '/');
         };
 
-        const modalMessage = `打刻修正申請を送信します。\n出勤: ${formatDateForDialog(clockInDate)} ${clockInTime}\n退勤: ${formatDateForDialog(clockOutDate)} ${clockOutTime}`;
-        const confirmMessage = `${modalMessage}\nよろしいですか？`;
+        const readableBreak = TimeUtils.formatMinutesToTime(breakMinutes);
+        const readableWork = TimeUtils.formatMinutesToTime(workingMinutes);
+        const modalMessageText = [
+            '打刻修正申請の内容を確認してください。',
+            `出勤 ${formatDateForDialog(clockInDate)} ${clockInTime}`,
+            `退勤 ${formatDateForDialog(clockOutDate)} ${clockOutTime}`,
+            `休憩 ${readableBreak}`,
+            `勤務 ${readableWork}`,
+            '申請してよろしいですか？'
+        ].join('\n');
+        const modalMessageHtml = `
+            <div class="text-start small">
+                <p class="mb-2">打刻修正申請の内容を確認してください。</p>
+                <dl class="row g-1 mb-3 align-items-center">
+                    <dt class="col-4 text-muted text-nowrap mb-0">出勤</dt>
+                    <dd class="col-8 text-end mb-0 fw-semibold">${formatDateForDialog(clockInDate)} ${clockInTime}</dd>
+                    <dt class="col-4 text-muted text-nowrap mb-0">退勤</dt>
+                    <dd class="col-8 text-end mb-0 fw-semibold">${formatDateForDialog(clockOutDate)} ${clockOutTime}</dd>
+                    <dt class="col-4 text-muted text-nowrap mb-0">休憩</dt>
+                    <dd class="col-8 text-end mb-0 fw-semibold">${readableBreak}</dd>
+                    <dt class="col-4 text-muted text-nowrap mb-0">勤務</dt>
+                    <dd class="col-8 text-end mb-0 fw-semibold">${readableWork}</dd>
+                </dl>
+                <p class="mb-0">申請してよろしいですか？</p>
+            </div>
+        `.trim();
         if (confirmHandler) {
             const { confirmed } = await confirmHandler({
                 title: '打刻修正申請の送信',
-                message: confirmMessage,
+                message: modalMessageHtml,
                 confirmLabel: '申請する',
                 cancelLabel: 'キャンセル'
             });
@@ -247,7 +353,7 @@ class AdjustmentScreen {
                 return;
             }
         } else {
-            const confirmed = window.confirm(confirmMessage);
+            const confirmed = window.confirm(modalMessageText);
             if (!confirmed) {
                 return;
             }
@@ -262,7 +368,9 @@ class AdjustmentScreen {
                     clockInTime: clockInTime,
                     clockOutDate: clockOutDate,
                     clockOutTime: clockOutTime,
-                    reason: reason
+                    reason: reason,
+                    breakMinutes: breakMinutes,
+                    breakTime: breakTimeValue
                 }),
                 '打刻修正申請に失敗しました'
             );
@@ -341,6 +449,92 @@ class AdjustmentScreen {
         }
 
         return true;
+    }
+
+    onTimeFieldUpdated() {
+        this.breakManuallyEdited = false;
+        this.autoCalculateBreak();
+        this.updateWorkingPreview();
+    }
+
+    autoCalculateBreak() {
+        if (!this.breakTimeInput) {
+            return;
+        }
+
+        const totalMinutes = this.calculateTotalMinutes();
+        if (totalMinutes === null) {
+            return;
+        }
+
+        const breakMinutes = Math.min(
+            Math.max(TimeUtils.calculateRequiredBreakMinutes(totalMinutes), 0),
+            totalMinutes
+        );
+
+        this.autoCalculatedBreakMinutes = breakMinutes;
+        this.breakManuallyEdited = false;
+        this.breakTimeInput.value = TimeUtils.formatMinutesToTime(breakMinutes);
+        this.breakTimeInput.classList.remove('is-invalid');
+        this.breakTimeInput.removeAttribute('aria-invalid');
+    }
+
+    calculateTotalMinutes(startDateStr, startTimeStr, endDateStr, endTimeStr) {
+        const clockInDate = startDateStr ?? this.clockInDateInput?.value;
+        const clockInTime = startTimeStr ?? this.clockInTimeInput?.value;
+        const clockOutDate = endDateStr ?? this.clockOutDateInput?.value;
+        const clockOutTime = endTimeStr ?? this.clockOutTimeInput?.value;
+
+        if (!clockInDate || !clockInTime || !clockOutDate || !clockOutTime) {
+            return null;
+        }
+
+        const start = new Date(`${clockInDate}T${clockInTime}:00`);
+        const end = new Date(`${clockOutDate}T${clockOutTime}:00`);
+        if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) {
+            return null;
+        }
+
+        return Math.floor((end - start) / (1000 * 60));
+    }
+
+    parseBreakInputMinutes() {
+        if (!this.breakTimeInput) {
+            return null;
+        }
+        const value = this.breakTimeInput.value ? this.breakTimeInput.value.trim() : '';
+        if (!value) {
+            return null;
+        }
+        const pattern = /^\d{1,2}:[0-5]\d$/;
+        if (!pattern.test(value)) {
+            return null;
+        }
+        return TimeUtils.timeStringToMinutes(value);
+    }
+
+    updateWorkingPreview() {
+        if (!this.workingPreviewInput) {
+            return;
+        }
+
+        const totalMinutes = this.calculateTotalMinutes();
+        if (totalMinutes === null) {
+            this.workingPreviewInput.value = '0:00';
+            return;
+        }
+
+        let breakMinutes = this.parseBreakInputMinutes();
+        if (breakMinutes === null) {
+            breakMinutes = Math.min(
+                Math.max(TimeUtils.calculateRequiredBreakMinutes(totalMinutes), 0),
+                totalMinutes
+            );
+        }
+
+        breakMinutes = Math.min(Math.max(breakMinutes, 0), totalMinutes);
+        const workingMinutes = Math.max(totalMinutes - breakMinutes, 0);
+        this.workingPreviewInput.value = TimeUtils.formatMinutesToTime(workingMinutes);
     }
 
     /**

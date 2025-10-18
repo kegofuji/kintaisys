@@ -8,12 +8,16 @@ class TimeUtils {
      * @returns {string} 時間:分形式の文字列
      */
     static formatMinutesToTime(minutes) {
-        if (minutes === null || minutes === undefined || isNaN(minutes)) {
+        const normalized = this.normalizeMinutesValue(minutes);
+        if (normalized === null || Number.isNaN(normalized)) {
             return '0:00';
         }
-        const hours = Math.floor(Math.abs(minutes) / 60);
-        const mins = Math.abs(minutes) % 60;
-        return `${hours}:${mins.toString().padStart(2, '0')}`;
+        const rounded = Math.round(normalized);
+        const sign = rounded < 0 ? '-' : '';
+        const absolute = Math.abs(rounded);
+        const hours = Math.floor(absolute / 60);
+        const mins = absolute % 60;
+        return `${sign}${hours}:${mins.toString().padStart(2, '0')}`;
     }
 
     /**
@@ -41,7 +45,7 @@ class TimeUtils {
      * @param {string} clockOutTime - 退勤時刻
      * @returns {string} 勤務時間（時間:分形式）
      */
-    static calculateWorkingTime(clockInTime, clockOutTime) {
+    static calculateWorkingTime(clockInTime, clockOutTime, customBreakMinutes = null) {
         if (!clockInTime || !clockOutTime) {
             return '0:00';
         }
@@ -58,8 +62,12 @@ class TimeUtils {
             // 総勤務分（丸目処理なし、正確な分数を計算）
             let totalMinutes = Math.floor((clockOut - clockIn) / (1000 * 60));
 
-            // 労働基準法第34条に基づく休憩時間を控除
-            const breakMinutes = this.calculateRequiredBreakMinutes(totalMinutes);
+            let breakMinutes = this.normalizeMinutesValue(customBreakMinutes);
+            if (breakMinutes === null || Number.isNaN(breakMinutes) || breakMinutes < 0) {
+                breakMinutes = this.calculateRequiredBreakMinutes(totalMinutes);
+            }
+            breakMinutes = Math.floor(Math.max(Math.min(breakMinutes, totalMinutes), 0));
+
             totalMinutes -= breakMinutes;
 
             if (totalMinutes < 0) totalMinutes = 0;
@@ -81,14 +89,14 @@ class TimeUtils {
         const MIN_BREAK_6_TO_8_HOURS = 45;  // 6時間超8時間以下：45分
         const MIN_BREAK_OVER_8_HOURS = 60;  // 8時間超：60分
 
-        if (totalWorkMinutes <= WORK_HOURS_6_HOURS) {
-            // 6時間以下の場合：休憩時間なし
+        if (totalWorkMinutes < WORK_HOURS_6_HOURS) {
+            // 6時間未満の場合：休憩時間なし
             return 0;
-        } else if (totalWorkMinutes <= WORK_HOURS_8_HOURS) {
-            // 6時間超8時間以下の場合：45分の休憩
+        } else if (totalWorkMinutes < WORK_HOURS_8_HOURS) {
+            // 6時間以上8時間未満の場合：45分の休憩
             return MIN_BREAK_6_TO_8_HOURS;
         } else {
-            // 8時間超の場合：60分の休憩
+            // 8時間以上の場合：60分の休憩
             return MIN_BREAK_OVER_8_HOURS;
         }
     }
@@ -119,6 +127,49 @@ class TimeUtils {
             return '0:00';
         }
     }
+
+    /**
+     * 休憩・分数フィールドを数値の分に正規化
+     * @param {number|string|null|undefined} value
+     * @returns {number|null}
+     */
+    static normalizeMinutesValue(value) {
+        if (value === null || value === undefined) {
+            return null;
+        }
+
+        if (typeof value === 'number') {
+            return Number.isNaN(value) ? null : value;
+        }
+
+        if (typeof value === 'string') {
+            const trimmed = value.trim();
+            if (!trimmed) {
+                return null;
+            }
+            if (/^\d{1,2}:[0-5]\d$/.test(trimmed)) {
+                return this.timeStringToMinutes(trimmed);
+            }
+            const hhmmssMatch = trimmed.match(/^(\d{1,2}):([0-5]\d):([0-5]\d)$/);
+            if (hhmmssMatch) {
+                const hours = parseInt(hhmmssMatch[1], 10) || 0;
+                const minutes = parseInt(hhmmssMatch[2], 10) || 0;
+                const seconds = parseInt(hhmmssMatch[3], 10) || 0;
+                return hours * 60 + minutes + Math.round(seconds / 60);
+            }
+            const isoDurationMatch = trimmed.match(/^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$/i);
+            if (isoDurationMatch) {
+                const hours = parseInt(isoDurationMatch[1] || '0', 10);
+                const minutes = parseInt(isoDurationMatch[2] || '0', 10);
+                const seconds = parseInt(isoDurationMatch[3] || '0', 10);
+                return hours * 60 + minutes + Math.round(seconds / 60);
+            }
+            const numeric = Number(trimmed);
+            return Number.isNaN(numeric) ? null : numeric;
+        }
+
+        return null;
+    }
 }
 
 // グローバル関数としても利用可能にする
@@ -126,3 +177,4 @@ window.formatMinutesToTime = TimeUtils.formatMinutesToTime.bind(TimeUtils);
 window.timeStringToMinutes = TimeUtils.timeStringToMinutes.bind(TimeUtils);
 window.calculateWorkingTime = TimeUtils.calculateWorkingTime.bind(TimeUtils);
 window.calculateElapsedTime = TimeUtils.calculateElapsedTime.bind(TimeUtils);
+window.calculateRequiredBreakMinutes = TimeUtils.calculateRequiredBreakMinutes.bind(TimeUtils);
