@@ -35,8 +35,8 @@ public class AttendanceReportDto {
         this.clockOutTime = formatTime(record.getClockOutTime());
         this.attendanceStatus = getStatusDisplayName(record.getAttendanceStatus());
         this.overtimeHours = formatOvertime(record.getOvertimeMinutes());
-        this.lateMinutes = record.getLateMinutes() != null ? record.getLateMinutes().toString() : "0";
-        this.earlyLeaveMinutes = record.getEarlyLeaveMinutes() != null ? record.getEarlyLeaveMinutes().toString() : "0";
+        this.lateMinutes = "";
+        this.earlyLeaveMinutes = "";
     }
     
     // データなし用のコンストラクタ
@@ -61,7 +61,7 @@ public class AttendanceReportDto {
     }
     
     private String formatOvertime(Integer overtimeMinutes) {
-        if (overtimeMinutes == null || overtimeMinutes == 0) {
+        if (overtimeMinutes == null || overtimeMinutes <= 0) {
             return "";
         }
         int hours = overtimeMinutes / 60;

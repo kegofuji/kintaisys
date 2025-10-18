@@ -58,6 +58,12 @@ public interface AdjustmentRequestRepository extends JpaRepository<AdjustmentReq
     boolean existsActiveRequestForDate(@Param("employeeId") Long employeeId, @Param("targetDate") LocalDate targetDate);
     
     /**
+     * 同日同社員の承認済み申請の存在確認
+     */
+    @Query("SELECT COUNT(ar) > 0 FROM AdjustmentRequest ar WHERE ar.employeeId = :employeeId AND ar.targetDate = :targetDate AND ar.status = 'APPROVED'")
+    boolean existsApprovedRequestForDate(@Param("employeeId") Long employeeId, @Param("targetDate") LocalDate targetDate);
+    
+    /**
      * 指定期間内の未承認打刻修正申請を取得
      * @param employeeId 従業員ID
      * @param startDate 期間開始日

@@ -10,7 +10,7 @@ import java.time.temporal.ChronoUnit;
 
 /**
  * 勤怠時間計算ユーティリティクラス
- * 遅刻、早退、残業、深夜勤務時間を計算する
+ * 休憩時間や深夜勤務時間などの基本的な集計を担う
  */
 @Component
 public class TimeCalculator {
@@ -32,34 +32,6 @@ public class TimeCalculator {
     public static final int WORK_HOURS_8_HOURS = 480;     // 8時間（分）
     
     private static final ZoneId TOKYO_ZONE = ZoneId.of("Asia/Tokyo");
-    
-    /**
-     * 遅刻時間を計算する（分）
-     * @param clockInTime 出勤時刻
-     * @return 遅刻分数（遅刻していない場合は0）
-     */
-    public int calculateLateMinutes(LocalDateTime clockInTime) {
-        LocalTime clockInTimeOnly = truncateToMinutes(clockInTime).toLocalTime();
-        
-        if (clockInTimeOnly.isAfter(STANDARD_START_TIME)) {
-            return (int) ChronoUnit.MINUTES.between(STANDARD_START_TIME, clockInTimeOnly);
-        }
-        return 0;
-    }
-    
-    /**
-     * 早退時間を計算する（分）
-     * @param clockOutTime 退勤時刻
-     * @return 早退分数（早退していない場合は0）
-     */
-    public int calculateEarlyLeaveMinutes(LocalDateTime clockOutTime) {
-        LocalTime clockOutTimeOnly = truncateToMinutes(clockOutTime).toLocalTime();
-        
-        if (clockOutTimeOnly.isBefore(STANDARD_END_TIME)) {
-            return (int) ChronoUnit.MINUTES.between(clockOutTimeOnly, STANDARD_END_TIME);
-        }
-        return 0;
-    }
     
     /**
      * 実働時間を計算する（分）
@@ -145,16 +117,6 @@ public class TimeCalculator {
     }
     
     /**
-     * 残業時間を計算する（分）
-     * @param workingMinutes 実働時間（分）
-     * @return 残業分数（残業していない場合は0）
-     */
-    public int calculateOvertimeMinutes(int workingMinutes) {
-        int overtime = workingMinutes - STANDARD_WORKING_MINUTES;
-        return Math.max(0, overtime);
-    }
-    
-    /**
      * 深夜勤務時間を計算する（分）
      * 22:00-翌05:00の勤務分を計算
      * @param clockInTime 出勤時刻
@@ -192,6 +154,58 @@ public class TimeCalculator {
 
         return Math.max(nightShiftMinutes, 0);
     }
+
+    /**
+     * 深夜勤務時間を計算し、休憩が深夜帯に重なる分のみ控除する
+     * 休憩は勤務時間の中央付近で取得されると仮定して重なりを推定する
+     * @param clockInTime 出勤時刻
+     * @param clockOutTime 退勤時刻
+     * @param breakMinutes 休憩時間（分）
+     * @return 深夜勤務分数（休憩控除後）
+     */
+    public int calculateNightShiftMinutesWithBreak(LocalDateTime clockInTime,
+                                                   LocalDateTime clockOutTime,
+                                                   Integer breakMinutes) {
+        if (clockInTime == null || clockOutTime == null || !clockOutTime.isAfter(clockInTime)) {
+            return 0;
+        }
+
+        int baseNightMinutes = calculateNightShiftMinutes(clockInTime, clockOutTime);
+        if (baseNightMinutes <= 0) {
+            return 0;
+        }
+
+        int sanitizedBreak = breakMinutes == null ? 0 : Math.max(0, breakMinutes);
+        if (sanitizedBreak == 0) {
+            return baseNightMinutes;
+        }
+
+        long totalMinutes = ChronoUnit.MINUTES.between(clockInTime, clockOutTime);
+        if (totalMinutes <= 0) {
+            return 0;
+        }
+
+        if (sanitizedBreak >= totalMinutes) {
+            return 0;
+        }
+
+        long startOffset = (totalMinutes - sanitizedBreak) / 2;
+        LocalDateTime breakStart = clockInTime.plusMinutes(startOffset);
+        LocalDateTime breakEnd = breakStart.plusMinutes(sanitizedBreak);
+
+        if (breakStart.isBefore(clockInTime)) {
+            breakStart = clockInTime;
+            breakEnd = breakStart.plusMinutes(sanitizedBreak);
+        }
+        if (breakEnd.isAfter(clockOutTime)) {
+            breakEnd = clockOutTime;
+            breakStart = breakEnd.minusMinutes(sanitizedBreak);
+        }
+
+        int nightOverlap = calculateNightShiftMinutes(breakStart, breakEnd);
+        nightOverlap = Math.min(nightOverlap, sanitizedBreak);
+        return Math.max(0, baseNightMinutes - nightOverlap);
+    }
     
     /**
      * 現在の東京時刻を取得
@@ -202,7 +216,20 @@ public class TimeCalculator {
     }
 
     /**
-     * 勤怠記録の遅刻・早退・残業・深夜勤務時間を再計算して設定
+     * 残業時間を計算する（分）
+     * @param workingMinutes 実働時間（分）
+     * @return 残業分数
+     */
+    public int calculateOvertimeMinutes(int workingMinutes) {
+        if (workingMinutes <= 0) {
+            return 0;
+        }
+        int overtime = workingMinutes - STANDARD_WORKING_MINUTES;
+        return Math.max(0, overtime);
+    }
+
+    /**
+     * 勤怠記録の休憩・深夜勤務時間を再計算し、遅刻・早退・残業は0で保持する
      * @param attendanceRecord 勤怠記録
      */
     public void calculateAttendanceMetrics(AttendanceRecord attendanceRecord) {
@@ -218,40 +245,30 @@ public class TimeCalculator {
         
         int breakMinutes = resolveBreakMinutes(attendanceRecord.getClockInTime(), attendanceRecord.getClockOutTime(), attendanceRecord.getBreakMinutes());
         attendanceRecord.setBreakMinutes(breakMinutes);
+        
+        // 遅刻・早退・残業は算出しない（空欄表示用に0で保持）
+        attendanceRecord.setLateMinutes(0);
+        attendanceRecord.setEarlyLeaveMinutes(0);
+        attendanceRecord.setOvertimeMinutes(0);
+        
+        // 実働時間を算出して残業判断に利用
+        int workingMinutes = calculateWorkingMinutes(
+                attendanceRecord.getClockInTime(),
+                attendanceRecord.getClockOutTime(),
+                breakMinutes
+        );
 
-        // 遅刻時間を計算・設定
-        int lateMinutes = Math.max(0, calculateLateMinutes(attendanceRecord.getClockInTime()));
-        attendanceRecord.setLateMinutes(lateMinutes);
-        
-        // 早退時間を計算・設定
-        int earlyLeaveMinutes = Math.max(0, calculateEarlyLeaveMinutes(attendanceRecord.getClockOutTime()));
-        attendanceRecord.setEarlyLeaveMinutes(earlyLeaveMinutes);
-        
-        // 実働時間を計算
-        int workingMinutes = calculateWorkingMinutes(attendanceRecord.getClockInTime(), attendanceRecord.getClockOutTime(), breakMinutes);
+        // 深夜勤務時間を計算・設定
+        int nightShiftMinutes = calculateNightShiftMinutesWithBreak(
+                attendanceRecord.getClockInTime(),
+                attendanceRecord.getClockOutTime(),
+                breakMinutes
+        );
+        attendanceRecord.setNightShiftMinutes(nightShiftMinutes);
 
-        if (workingMinutes >= STANDARD_WORKING_MINUTES) {
-            attendanceRecord.setLateMinutes(0);
-            attendanceRecord.setEarlyLeaveMinutes(0);
-        } else {
-            int totalShortMinutes = STANDARD_WORKING_MINUTES - Math.max(0, workingMinutes);
-            int adjustedLateMinutes = Math.min(attendanceRecord.getLateMinutes(), totalShortMinutes);
-            int adjustedEarlyMinutes = Math.max(0, attendanceRecord.getEarlyLeaveMinutes());
-            int coveredByLateAndEarly = adjustedLateMinutes + adjustedEarlyMinutes;
-            if (coveredByLateAndEarly < totalShortMinutes) {
-                adjustedEarlyMinutes += (totalShortMinutes - coveredByLateAndEarly);
-            }
-            attendanceRecord.setLateMinutes(adjustedLateMinutes);
-            attendanceRecord.setEarlyLeaveMinutes(adjustedEarlyMinutes);
-        }
-        
         // 残業時間を計算・設定
         int overtimeMinutes = calculateOvertimeMinutes(workingMinutes);
         attendanceRecord.setOvertimeMinutes(overtimeMinutes);
-        
-        // 深夜勤務時間を計算・設定
-        int nightShiftMinutes = calculateNightShiftMinutes(attendanceRecord.getClockInTime(), attendanceRecord.getClockOutTime());
-        attendanceRecord.setNightShiftMinutes(nightShiftMinutes);
     }
 
     /**

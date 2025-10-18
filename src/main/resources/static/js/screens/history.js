@@ -183,6 +183,35 @@ class HistoryScreen {
     }
 
     /**
+     * 深夜勤務分を推定（サーバー値が欠落している場合はフロントで再計算）
+     * @param {Object} record
+     * @returns {number}
+     */
+    resolveNightMinutes(record) {
+        if (!record) {
+            return 0;
+        }
+        const directValue = record.nightWorkMinutes ?? record.nightShiftMinutes;
+        let normalized = TimeUtils.normalizeMinutesValue(directValue);
+        if (normalized !== null && !Number.isNaN(normalized) && normalized > 0) {
+            return normalized;
+        }
+
+        if (record.clockInTime && record.clockOutTime) {
+            const computed = TimeUtils.calculateNightShiftMinutes(
+                record.clockInTime,
+                record.clockOutTime,
+                record.breakMinutes
+            );
+            if (computed > 0) {
+                normalized = computed;
+            }
+        }
+
+        return normalized && !Number.isNaN(normalized) ? normalized : 0;
+    }
+
+    /**
      * 勤怠履歴読み込み
      */
     async loadAttendanceHistory() {
@@ -273,14 +302,12 @@ class HistoryScreen {
             const clockOut = new Date(date);
             clockOut.setHours(18, Math.floor(Math.random() * 60), 0, 0);
 
-            // 遅刻・早退・残業・深夜の計算
+            // 残業と深夜勤務のみ計算（遅刻・早退は廃止）
             const clockInMinutes = clockIn.getHours() * 60 + clockIn.getMinutes();
             const clockOutMinutes = clockOut.getHours() * 60 + clockOut.getMinutes();
-            
-            const lateMinutes = Math.max(0, clockInMinutes - (9 * 60)); // 9:00以降は遅刻
-            const earlyLeaveMinutes = Math.max(0, (18 * 60) - clockOutMinutes); // 18:00より早い退勤
-            const overtimeMinutes = Math.max(0, clockOutMinutes - (18 * 60)); // 18:00以降の残業
+            const workedMinutes = Math.max(0, clockOutMinutes - clockInMinutes);
             const nightWorkMinutes = Math.max(0, clockOutMinutes - (22 * 60)); // 22:00以降の深夜
+            const overtimeMinutes = Math.max(0, workedMinutes - (8 * 60));
 
             // 日本時間での日付文字列を生成（UTC変換を避ける）
             const year = date.getFullYear();
@@ -292,8 +319,8 @@ class HistoryScreen {
                 attendanceDate: dateStr,
                 clockInTime: clockIn.toISOString(),
                 clockOutTime: clockOut.toISOString(),
-                lateMinutes: lateMinutes,
-                earlyLeaveMinutes: earlyLeaveMinutes,
+                lateMinutes: null,
+                earlyLeaveMinutes: null,
                 overtimeMinutes: overtimeMinutes,
                 nightWorkMinutes: nightWorkMinutes
             });
@@ -330,15 +357,15 @@ class HistoryScreen {
                 (record.workingMinutes !== undefined && record.workingMinutes !== null ? 
                     TimeUtils.formatMinutesToTime(record.workingMinutes) : 
                     TimeUtils.calculateWorkingTime(record.clockInTime, record.clockOutTime, record.breakMinutes)) : '';
-            const safeFormat = (value) => formatMinutesToTime(value ?? 0);
             const breakDisplay = isConfirmed && record.breakMinutes !== undefined && record.breakMinutes !== null
                 ? TimeUtils.formatMinutesToTime(record.breakMinutes)
                 : '';
-            const lateDisplay = isConfirmed ? safeFormat(record.lateMinutes) : '';
-            const earlyLeaveDisplay = isConfirmed ? safeFormat(record.earlyLeaveMinutes) : '';
-            const overtimeDisplay = isConfirmed ? safeFormat(record.overtimeMinutes) : '';
-            const nightValue = record.nightWorkMinutes ?? record.nightShiftMinutes;
-            const nightWorkDisplay = isConfirmed ? safeFormat(nightValue) : '';
+            const lateDisplay = '';
+            const earlyLeaveDisplay = '';
+            const overtimeValue = record.overtimeMinutes ?? 0;
+            const overtimeDisplay = isConfirmed && overtimeValue > 0 ? formatMinutesToTime(overtimeValue) : '';
+            const nightValue = isConfirmed ? this.resolveNightMinutes(record) : 0;
+            const nightWorkDisplay = isConfirmed && nightValue > 0 ? formatMinutesToTime(nightValue) : '';
             let status = '';
             if (!hasIn) status = '出勤前';
             else if (hasIn && !hasOut) status = '出勤中';
@@ -868,21 +895,19 @@ class HistoryScreen {
         const clockOut = new Date(date);
         clockOut.setHours(18, Math.floor(Math.random() * 60), 0, 0); // 18:00-19:00の間でランダム
 
-        // 遅刻・早退・残業・深夜の計算
+        // 深夜勤務と残業のみ計算（遅刻・早退は廃止）
         const clockInMinutes = clockIn.getHours() * 60 + clockIn.getMinutes();
         const clockOutMinutes = clockOut.getHours() * 60 + clockOut.getMinutes();
-        
-        const lateMinutes = Math.max(0, clockInMinutes - (9 * 60)); // 9:00以降は遅刻
-        const earlyLeaveMinutes = Math.max(0, (18 * 60) - clockOutMinutes); // 18:00より早い退勤
-        const overtimeMinutes = Math.max(0, clockOutMinutes - (18 * 60)); // 18:00以降の残業
+        const workedMinutes = Math.max(0, clockOutMinutes - clockInMinutes);
+        const overtimeMinutes = Math.max(0, workedMinutes - (8 * 60)); // 8時間超過分
         const nightWorkMinutes = Math.max(0, clockOutMinutes - (22 * 60)); // 22:00以降の深夜
 
         return {
             attendanceDate: dateString,
             clockInTime: clockIn.toISOString(),
             clockOutTime: clockOut.toISOString(),
-            lateMinutes: lateMinutes,
-            earlyLeaveMinutes: earlyLeaveMinutes,
+            lateMinutes: null,
+            earlyLeaveMinutes: null,
             overtimeMinutes: overtimeMinutes,
             nightWorkMinutes: nightWorkMinutes
         };
@@ -1212,13 +1237,13 @@ class HistoryScreen {
                 ? TimeUtils.formatMinutesToTime(attendance.breakMinutes)
                 : '';
 
-            // 遅刻・早退・残業・深夜の表示（0:00形式に統一）
-            const safeFormat = (value) => formatMinutesToTime(value ?? 0);
-            const lateDisplay = isConfirmedAttendance ? safeFormat(attendance.lateMinutes) : '';
-            const earlyLeaveDisplay = isConfirmedAttendance ? safeFormat(attendance.earlyLeaveMinutes) : '';
-            const overtimeDisplay = isConfirmedAttendance ? safeFormat(attendance.overtimeMinutes) : '';
-            const nightWorkValue = attendance.nightWorkMinutes ?? attendance.nightShiftMinutes;
-            const nightWorkDisplay = isConfirmedAttendance ? safeFormat(nightWorkValue) : '';
+            // 遅刻・早退は空表示にし残業・深夜のみ表示
+            const lateDisplay = '';
+            const earlyLeaveDisplay = '';
+            const overtimeValue = attendance.overtimeMinutes ?? 0;
+            const overtimeDisplay = isConfirmedAttendance && overtimeValue > 0 ? formatMinutesToTime(overtimeValue) : '';
+            const nightWorkValue = isConfirmedAttendance ? this.resolveNightMinutes(attendance) : 0;
+            const nightWorkDisplay = isConfirmedAttendance && nightWorkValue > 0 ? formatMinutesToTime(nightWorkValue) : '';
 
             // ステータス表示
             let status = '出勤前';

@@ -95,15 +95,22 @@ public class AttendanceService {
                 );
             }
             
+            int overtimeMinutes = timeCalculator.calculateOvertimeMinutes(workingMinutes);
+            int nightShiftMinutes = timeCalculator.calculateNightShiftMinutesWithBreak(
+                    existingRecord.getClockInTime(),
+                    existingRecord.getClockOutTime(),
+                    breakMinutes
+            );
+
             ClockResponse.ClockData data = new ClockResponse.ClockData(
                     existingRecord.getAttendanceId(),
                     existingRecord.getAttendanceDate(),
                     existingRecord.getClockInTime(),
                     existingRecord.getClockOutTime(),
-                    existingRecord.getLateMinutes(),
-                    existingRecord.getEarlyLeaveMinutes(),
-                    existingRecord.getOvertimeMinutes(),
-                    existingRecord.getNightShiftMinutes(),
+                    null,
+                    null,
+                    overtimeMinutes,
+                    nightShiftMinutes,
                     breakMinutes,
                     workingMinutes,
                     existingRecord.getAttendanceStatus() != null ? existingRecord.getAttendanceStatus().name() : null,
@@ -123,28 +130,19 @@ public class AttendanceService {
         AttendanceRecord attendanceRecord = new AttendanceRecord(employeeId, today);
         attendanceRecord.setClockInTime(now);
         
-        // 5. 遅刻時間計算
-        int lateMinutes = timeCalculator.calculateLateMinutes(now);
-        attendanceRecord.setLateMinutes(lateMinutes);
-        
-        // 6. 勤怠ステータス設定
-        if (lateMinutes > 0) {
-            attendanceRecord.setAttendanceStatus(AttendanceStatus.LATE);
-        }
-        
-        // 7. データベース保存
+        // 5. データベース保存
         AttendanceRecord savedRecord = attendanceRecordRepository.save(attendanceRecord);
         
-        // 8. レスポンス作成
+        // 6. レスポンス作成
         ClockResponse.ClockData data = new ClockResponse.ClockData(
                 savedRecord.getAttendanceId(),
                 savedRecord.getAttendanceDate(),
                 savedRecord.getClockInTime(),
                 null,
-                savedRecord.getLateMinutes(),
                 null,
                 null,
                 null,
+                savedRecord.getNightShiftMinutes(),
                 null,
                 null,
                 savedRecord.getAttendanceStatus() != null ? savedRecord.getAttendanceStatus().name() : null,
@@ -229,9 +227,9 @@ public class AttendanceService {
                             attendanceRecord.getAttendanceDate(),
                             attendanceRecord.getClockInTime(),
                             attendanceRecord.getClockOutTime(),
-                            attendanceRecord.getLateMinutes(),
-                            attendanceRecord.getEarlyLeaveMinutes(),
-                            attendanceRecord.getOvertimeMinutes(),
+                            null,
+                            null,
+                            null,
                             attendanceRecord.getNightShiftMinutes(),
                             breakMinutes,
                             workingMinutes,
@@ -253,33 +251,22 @@ public class AttendanceService {
                 
                 // 7. 時間計算
                 LocalDateTime clockInTime = attendanceRecord.getClockInTime();
-                
-                // 早退時間計算
-                int earlyLeaveMinutes = timeCalculator.calculateEarlyLeaveMinutes(now);
-                attendanceRecord.setEarlyLeaveMinutes(earlyLeaveMinutes);
-                
+
                 int breakMinutes = timeCalculator.resolveBreakMinutes(clockInTime, now, attendanceRecord.getBreakMinutes());
                 attendanceRecord.setBreakMinutes(breakMinutes);
-                
-                // 実働時間計算
-                int workingMinutes = timeCalculator.calculateWorkingMinutes(clockInTime, now, breakMinutes);
+                attendanceRecord.setLateMinutes(0);
+                attendanceRecord.setEarlyLeaveMinutes(0);
 
-                if (workingMinutes >= TimeCalculator.STANDARD_WORKING_MINUTES) {
-                    attendanceRecord.setLateMinutes(0);
-                    attendanceRecord.setEarlyLeaveMinutes(0);
-                    earlyLeaveMinutes = 0;
-                }
-                
-                // 残業時間計算
+                int workingMinutes = timeCalculator.calculateWorkingMinutes(clockInTime, now, breakMinutes);
                 int overtimeMinutes = timeCalculator.calculateOvertimeMinutes(workingMinutes);
                 attendanceRecord.setOvertimeMinutes(overtimeMinutes);
                 
                 // 深夜勤務時間計算
-                int nightShiftMinutes = timeCalculator.calculateNightShiftMinutes(clockInTime, now);
+                int nightShiftMinutes = timeCalculator.calculateNightShiftMinutesWithBreak(clockInTime, now, breakMinutes);
                 attendanceRecord.setNightShiftMinutes(nightShiftMinutes);
                 
                 // 8. 勤怠ステータス更新
-                updateAttendanceStatus(attendanceRecord, earlyLeaveMinutes, overtimeMinutes, nightShiftMinutes);
+                updateAttendanceStatus(attendanceRecord, overtimeMinutes, nightShiftMinutes);
                 
                 // 9. メトリクス正規化
                 timeCalculator.normalizeMetrics(attendanceRecord);
@@ -373,10 +360,9 @@ public class AttendanceService {
         record.setBreakMinutes(sanitizedBreak);
 
         timeCalculator.calculateAttendanceMetrics(record);
-        int earlyLeaveMinutes = safeInt(record.getEarlyLeaveMinutes());
         int overtimeMinutes = safeInt(record.getOvertimeMinutes());
         int nightShiftMinutes = safeInt(record.getNightShiftMinutes());
-        updateAttendanceStatus(record, earlyLeaveMinutes, overtimeMinutes, nightShiftMinutes);
+        updateAttendanceStatus(record, overtimeMinutes, nightShiftMinutes);
         timeCalculator.normalizeMetrics(record);
 
         AttendanceRecord saved = attendanceRecordRepository.save(record);
@@ -389,26 +375,17 @@ public class AttendanceService {
     /**
      * 勤怠ステータスを更新
      * @param record 勤怠記録
-     * @param earlyLeaveMinutes 早退分数
      * @param overtimeMinutes 残業分数
      * @param nightShiftMinutes 深夜勤務分数
      */
-    private void updateAttendanceStatus(AttendanceRecord record, int earlyLeaveMinutes, 
-                                      int overtimeMinutes, int nightShiftMinutes) {
-        boolean isLate = record.getLateMinutes() > 0;
-        boolean isEarlyLeave = earlyLeaveMinutes > 0;
-        boolean isOvertime = overtimeMinutes > 0;
-        boolean isNightShift = nightShiftMinutes > 0;
-        
-        if (isLate && isEarlyLeave) {
-            record.setAttendanceStatus(AttendanceStatus.LATE_AND_EARLY_LEAVE);
-        } else if (isLate) {
-            record.setAttendanceStatus(AttendanceStatus.LATE);
-        } else if (isEarlyLeave) {
-            record.setAttendanceStatus(AttendanceStatus.EARLY_LEAVE);
-        } else if (isNightShift) {
+    private void updateAttendanceStatus(AttendanceRecord record, int overtimeMinutes, int nightShiftMinutes) {
+        if (record == null) {
+            return;
+        }
+
+        if (nightShiftMinutes > 0) {
             record.setAttendanceStatus(AttendanceStatus.NIGHT_SHIFT);
-        } else if (isOvertime) {
+        } else if (overtimeMinutes > 0) {
             record.setAttendanceStatus(AttendanceStatus.OVERTIME);
         } else {
             record.setAttendanceStatus(AttendanceStatus.NORMAL);
@@ -605,38 +582,26 @@ public class AttendanceService {
 
         Integer breakMinutes = null;
         Integer workingMinutes = null;
-        int lateMinutes = safeInt(record.getLateMinutes());
-        int earlyLeaveMinutes = safeInt(record.getEarlyLeaveMinutes());
-        int overtimeMinutes = safeInt(record.getOvertimeMinutes());
-        int nightShiftMinutes = resolveNightShiftMinutes(record);
+        Integer lateMinutes = null;
+        Integer earlyLeaveMinutes = null;
+        Integer overtimeMinutes = null;
+        Integer nightShiftMinutes = null;
 
         if (clockInTime != null && clockOutTime != null) {
             int resolvedBreak = timeCalculator.resolveBreakMinutes(clockInTime, clockOutTime, record.getBreakMinutes());
             breakMinutes = resolvedBreak;
             workingMinutes = timeCalculator.calculateWorkingMinutes(clockInTime, clockOutTime, resolvedBreak);
-
-            int recalculatedLate = Math.max(0, timeCalculator.calculateLateMinutes(clockInTime));
-            int recalculatedEarly = Math.max(0, timeCalculator.calculateEarlyLeaveMinutes(clockOutTime));
-
-            if (workingMinutes >= TimeCalculator.STANDARD_WORKING_MINUTES) {
-                recalculatedLate = 0;
-                recalculatedEarly = 0;
-            } else {
-                int shortfall = TimeCalculator.STANDARD_WORKING_MINUTES - Math.max(0, workingMinutes);
-                int adjustedLate = Math.min(recalculatedLate, shortfall);
-                int adjustedEarly = Math.max(recalculatedEarly, 0);
-                int covered = adjustedLate + adjustedEarly;
-                if (covered < shortfall) {
-                    adjustedEarly += shortfall - covered;
-                }
-                recalculatedLate = adjustedLate;
-                recalculatedEarly = adjustedEarly;
-            }
-
-            lateMinutes = recalculatedLate;
-            earlyLeaveMinutes = recalculatedEarly;
             overtimeMinutes = timeCalculator.calculateOvertimeMinutes(workingMinutes);
-            nightShiftMinutes = timeCalculator.calculateNightShiftMinutes(clockInTime, clockOutTime);
+            nightShiftMinutes = timeCalculator.calculateNightShiftMinutesWithBreak(clockInTime, clockOutTime, resolvedBreak);
+        } else {
+            int storedOvertime = safeInt(record.getOvertimeMinutes());
+            if (storedOvertime > 0) {
+                overtimeMinutes = storedOvertime;
+            }
+            int storedNight = safeInt(record.getNightShiftMinutes());
+            if (storedNight > 0) {
+                nightShiftMinutes = storedNight;
+            }
         }
 
         ClockResponse.ClockData clockData = new ClockResponse.ClockData(
@@ -677,8 +642,8 @@ public class AttendanceService {
         if (employeeId == null || attendanceDate == null) {
             return false;
         }
-        // PENDING/APPROVED いずれかの修正申請が存在する場合は休憩編集を抑止したい
-        return adjustmentRequestRepository.existsActiveRequestForDate(
+        // 承認済みの修正申請が存在する場合は休憩編集を抑止
+        return adjustmentRequestRepository.existsApprovedRequestForDate(
                 employeeId,
                 attendanceDate
         );
@@ -696,30 +661,6 @@ public class AttendanceService {
             // セッション情報の取得に失敗した場合は無視
             // ログ出力は行わない（認証エラーではないため）
         }
-    }
-
-    /**
-     * 深夜勤務時間を再計算してレコードに反映
-     * @param record 勤怠記録
-     * @return 再計算後の深夜勤務分数（計算不可の場合はnull）
-     */
-    private int resolveNightShiftMinutes(AttendanceRecord record) {
-        if (record == null) {
-            return 0;
-        }
-        if (record.getClockInTime() == null || record.getClockOutTime() == null) {
-            return safeInt(record.getNightShiftMinutes());
-        }
-        int recalculated = timeCalculator.calculateNightShiftMinutes(
-                record.getClockInTime(),
-                record.getClockOutTime()
-        );
-
-        int current = safeInt(record.getNightShiftMinutes());
-        if (current > 0 && recalculated == 0) {
-            return current;
-        }
-        return recalculated;
     }
 
     private int safeInt(Integer value) {

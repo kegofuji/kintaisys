@@ -44,6 +44,28 @@ class AttendanceServiceTest {
     }
 
     @Test
+    void toClockData_includesNightShiftAfterAdjustment() {
+        AttendanceRecord record = new AttendanceRecord();
+        record.setAttendanceId(2L);
+        record.setEmployeeId(77L);
+        record.setAttendanceDate(LocalDate.of(2025, 10, 18));
+        record.setClockInTime(LocalDateTime.of(2025, 10, 18, 9, 0));
+        record.setClockOutTime(LocalDateTime.of(2025, 10, 18, 23, 0));
+        record.setBreakMinutes(60);
+
+        when(adjustmentRequestRepository.existsApprovedRequestForDate(77L, LocalDate.of(2025, 10, 18)))
+                .thenReturn(false);
+
+        ClockResponse.ClockData data =
+                ReflectionTestUtils.invokeMethod(attendanceService, "toClockData", record);
+
+        assertNotNull(data);
+        assertEquals(60, data.getNightShiftMinutes());
+        assertEquals(300, data.getOvertimeMinutes());
+        assertEquals(TimeCalculator.STANDARD_WORKING_MINUTES + 300, data.getWorkingMinutes());
+    }
+
+    @Test
     void toClockData_recalculatesShortageAndPreventsBreakEdit() {
         AttendanceRecord record = new AttendanceRecord();
         record.setAttendanceId(1L);
@@ -53,15 +75,15 @@ class AttendanceServiceTest {
         record.setClockOutTime(LocalDateTime.of(2025, 10, 18, 18, 1));
         record.setBreakMinutes(65);
 
-        when(adjustmentRequestRepository.existsActiveRequestForDate(99L, LocalDate.of(2025, 10, 18)))
+        when(adjustmentRequestRepository.existsApprovedRequestForDate(99L, LocalDate.of(2025, 10, 18)))
                 .thenReturn(true);
 
         ClockResponse.ClockData data =
                 ReflectionTestUtils.invokeMethod(attendanceService, "toClockData", record);
 
         assertNotNull(data);
-        assertEquals(0, data.getLateMinutes());
-        assertEquals(4, data.getEarlyLeaveMinutes());
+        assertEquals(null, data.getLateMinutes());
+        assertEquals(null, data.getEarlyLeaveMinutes());
         assertEquals(476, data.getWorkingMinutes());
         assertEquals(65, data.getBreakMinutes());
         assertEquals(Boolean.TRUE, data.getHasApprovedAdjustment());

@@ -129,6 +129,85 @@ class TimeUtils {
     }
 
     /**
+     * 深夜勤務時間を計算する（22:00〜翌05:00）
+     * 休憩時間が指定されている場合は深夜帯と重なる分のみ控除する
+     * @param {string|Date} clockInTime
+     * @param {string|Date} clockOutTime
+     * @param {number|null|undefined} breakMinutes
+     * @returns {number}
+     */
+    static calculateNightShiftMinutes(clockInTime, clockOutTime, breakMinutes = null) {
+        if (!clockInTime || !clockOutTime) {
+            return 0;
+        }
+
+        const start = new Date(clockInTime);
+        const end = new Date(clockOutTime);
+        if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) {
+            return 0;
+        }
+
+        const rawNight = this.calculateNightOverlapMinutes(start, end);
+        if (rawNight <= 0) {
+            return 0;
+        }
+
+        let effectiveBreak = this.normalizeMinutesValue(breakMinutes);
+        if (effectiveBreak === null || Number.isNaN(effectiveBreak) || effectiveBreak < 0) {
+            const totalMinutes = Math.floor((end - start) / (1000 * 60));
+            effectiveBreak = this.calculateRequiredBreakMinutes(totalMinutes);
+        }
+
+        effectiveBreak = Math.min(Math.max(effectiveBreak, 0), Math.floor((end - start) / (1000 * 60)));
+        if (effectiveBreak === 0) {
+            return rawNight;
+        }
+
+        const totalMinutes = Math.floor((end - start) / (1000 * 60));
+        if (effectiveBreak >= totalMinutes) {
+            return 0;
+        }
+
+        const startOffset = Math.floor((totalMinutes - effectiveBreak) / 2);
+        const breakStart = new Date(start.getTime() + startOffset * 60 * 1000);
+        const breakEnd = new Date(breakStart.getTime() + effectiveBreak * 60 * 1000);
+
+        const nightOverlap = this.calculateNightOverlapMinutes(breakStart, breakEnd);
+        return Math.max(0, rawNight - Math.min(nightOverlap, effectiveBreak));
+    }
+
+    /**
+     * 深夜帯（22:00〜翌05:00）との重複分を計算
+     * @private
+     */
+    static calculateNightOverlapMinutes(start, end) {
+        const NIGHT_START_HOUR = 22;
+        const NIGHT_DURATION_MINUTES = 7 * 60;
+
+        let nightMinutes = 0;
+
+        const current = new Date(start.getFullYear(), start.getMonth(), start.getDate() - 1);
+        const last = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+
+        while (current <= last) {
+            const nightStart = new Date(current);
+            nightStart.setHours(NIGHT_START_HOUR, 0, 0, 0);
+            const nightEnd = new Date(nightStart.getTime() + NIGHT_DURATION_MINUTES * 60 * 1000);
+
+            const overlapStart = start > nightStart ? start : nightStart;
+            const overlapEnd = end < nightEnd ? end : nightEnd;
+
+            if (overlapEnd > overlapStart) {
+                nightMinutes += Math.floor((overlapEnd - overlapStart) / (1000 * 60));
+            }
+
+            current.setDate(current.getDate() + 1);
+        }
+
+        return nightMinutes;
+    }
+
+    /**
      * 休憩・分数フィールドを数値の分に正規化
      * @param {number|string|null|undefined} value
      * @returns {number|null}
@@ -178,3 +257,4 @@ window.timeStringToMinutes = TimeUtils.timeStringToMinutes.bind(TimeUtils);
 window.calculateWorkingTime = TimeUtils.calculateWorkingTime.bind(TimeUtils);
 window.calculateElapsedTime = TimeUtils.calculateElapsedTime.bind(TimeUtils);
 window.calculateRequiredBreakMinutes = TimeUtils.calculateRequiredBreakMinutes.bind(TimeUtils);
+window.calculateNightShiftMinutes = TimeUtils.calculateNightShiftMinutes.bind(TimeUtils);

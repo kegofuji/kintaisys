@@ -499,11 +499,19 @@ function displayAttendanceHistory(data) {
             breakDisplay = TimeUtils.formatMinutesToTime(record.breakMinutes);
         }
         
-        // 遅刻・早退・残業・深夜（未確定は空白）。深夜は nightWorkMinutes に統一
-        const lateMinutes = record.clockInTime && record.clockOutTime ? (record.lateMinutes || 0) : 0;
-        const earlyLeaveMinutes = record.clockInTime && record.clockOutTime ? (record.earlyLeaveMinutes || 0) : 0;
-        const overtimeMinutes = record.clockInTime && record.clockOutTime ? (record.overtimeMinutes || 0) : 0;
-        const nightWorkMinutes = record.clockInTime && record.clockOutTime ? ((record.nightWorkMinutes ?? record.nightShiftMinutes) || 0) : 0;
+        // 遅刻・早退は空欄とし、残業と深夜のみ値を表示する
+        const nightWorkMinutes = record.clockInTime && record.clockOutTime
+            ? ((record.nightWorkMinutes ?? record.nightShiftMinutes) || 0)
+            : 0;
+        const overtimeMinutes = record.clockInTime && record.clockOutTime
+            ? ((record.overtimeMinutes ?? 0))
+            : null;
+        const lateDisplay = '';
+        const earlyLeaveDisplay = '';
+        const overtimeDisplay = record.clockInTime && record.clockOutTime && overtimeMinutes && overtimeMinutes > 0
+            ? formatMinutesToTime(overtimeMinutes)
+            : '';
+        const nightWorkDisplay = nightWorkMinutes > 0 ? formatMinutesToTime(nightWorkMinutes) : '';
         
         // ステータス表示
         let statusText = '出勤前';
@@ -520,10 +528,10 @@ function displayAttendanceHistory(data) {
             <td>${clockOutTime}</td>
             <td>${breakDisplay}</td>
             <td>${workingHours}</td>
-            <td>${formatMinutesToTime(lateMinutes)}</td>
-            <td>${formatMinutesToTime(earlyLeaveMinutes)}</td>
-            <td>${formatMinutesToTime(overtimeMinutes)}</td>
-            <td>${nightWorkMinutes > 0 ? formatMinutesToTime(nightWorkMinutes) : ''}</td>
+            <td>${lateDisplay}</td>
+            <td>${earlyLeaveDisplay}</td>
+            <td>${overtimeDisplay}</td>
+            <td>${nightWorkDisplay}</td>
             <td>${statusText}</td>
         `;
         tbody.appendChild(row);
@@ -1169,11 +1177,15 @@ function filterAttendanceTableByDate(dateString) {
             }
         }
 
-        // 遅刻・早退・残業・深夜の表示（0:00形式に統一）
-        const lateDisplay = attendance.lateMinutes > 0 ? TimeUtils.formatMinutesToTime(attendance.lateMinutes) : '0:00';
-        const earlyLeaveDisplay = attendance.earlyLeaveMinutes > 0 ? TimeUtils.formatMinutesToTime(attendance.earlyLeaveMinutes) : '0:00';
-        const overtimeDisplay = attendance.overtimeMinutes > 0 ? TimeUtils.formatMinutesToTime(attendance.overtimeMinutes) : '0:00';
-        const nightWorkDisplay = attendance.nightWorkMinutes > 0 ? TimeUtils.formatMinutesToTime(attendance.nightWorkMinutes) : '0:00';
+        // 遅刻・早退は空欄にし、残業と深夜のみ表示
+        const lateDisplay = '';
+        const earlyLeaveDisplay = '';
+        const overtimeMinutes = attendance.overtimeMinutes ?? 0;
+        const overtimeDisplay = overtimeMinutes > 0
+            ? TimeUtils.formatMinutesToTime(overtimeMinutes)
+            : '';
+        const nightWorkValue = attendance.nightWorkMinutes ?? attendance.nightShiftMinutes ?? 0;
+        const nightWorkDisplay = nightWorkValue > 0 ? TimeUtils.formatMinutesToTime(nightWorkValue) : '';
 
         // ステータス表示
         let status = '未出勤';

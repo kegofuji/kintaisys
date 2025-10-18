@@ -91,20 +91,21 @@ class TimeCalculatorTest {
     }
 
     @Test
-    void calculateAttendanceMetrics_accountsForShortageCausedByBreakExtension() {
+    void calculateAttendanceMetrics_leavesLateAndEarlyBlank() {
         AttendanceRecord record = new AttendanceRecord();
         record.setClockInTime(LocalDateTime.of(2025, 10, 18, 9, 0));
-        record.setClockOutTime(LocalDateTime.of(2025, 10, 18, 18, 1));
-        record.setBreakMinutes(65);
+        record.setClockOutTime(LocalDateTime.of(2025, 10, 18, 17, 0));
+        record.setBreakMinutes(30);
 
         calculator.calculateAttendanceMetrics(record);
 
         assertEquals(0, record.getLateMinutes());
-        assertEquals(4, record.getEarlyLeaveMinutes());
+        assertEquals(0, record.getEarlyLeaveMinutes());
+        assertEquals(0, record.getOvertimeMinutes());
     }
 
     @Test
-    void calculateAttendanceMetrics_retainsLateWhenShortageAlreadyCovered() {
+    void calculateAttendanceMetrics_doesNotSetLateForTardyClockIn() {
         AttendanceRecord record = new AttendanceRecord();
         record.setClockInTime(LocalDateTime.of(2025, 10, 18, 9, 10));
         record.setClockOutTime(LocalDateTime.of(2025, 10, 18, 18, 0));
@@ -112,20 +113,51 @@ class TimeCalculatorTest {
 
         calculator.calculateAttendanceMetrics(record);
 
-        assertEquals(10, record.getLateMinutes());
+        assertEquals(0, record.getLateMinutes());
         assertEquals(0, record.getEarlyLeaveMinutes());
+        assertEquals(0, record.getOvertimeMinutes());
     }
 
     @Test
-    void calculateAttendanceMetrics_distributesShortageAcrossLateAndEarly() {
+    void calculateAttendanceMetrics_setsOvertimeWhenExceedingStandard() {
         AttendanceRecord record = new AttendanceRecord();
-        record.setClockInTime(LocalDateTime.of(2025, 10, 18, 9, 10));
-        record.setClockOutTime(LocalDateTime.of(2025, 10, 18, 17, 50));
+        record.setClockInTime(LocalDateTime.of(2025, 10, 18, 8, 0));
+        record.setClockOutTime(LocalDateTime.of(2025, 10, 18, 20, 0));
         record.setBreakMinutes(60);
 
         calculator.calculateAttendanceMetrics(record);
 
-        assertEquals(10, record.getLateMinutes());
-        assertEquals(10, record.getEarlyLeaveMinutes());
+        assertEquals(0, record.getLateMinutes());
+        assertEquals(0, record.getEarlyLeaveMinutes());
+        assertEquals(180, record.getOvertimeMinutes());
+    }
+
+    @Test
+    void calculateAttendanceMetrics_trimsNightShiftByBreak() {
+        AttendanceRecord record = new AttendanceRecord();
+        record.setClockInTime(LocalDateTime.of(2025, 10, 17, 22, 0));
+        record.setClockOutTime(LocalDateTime.of(2025, 10, 18, 6, 0));
+        record.setBreakMinutes(60);
+
+        calculator.calculateAttendanceMetrics(record);
+
+        assertEquals(360, record.getNightShiftMinutes());
+        assertEquals(0, record.getOvertimeMinutes());
+    }
+
+    @Test
+    void calculateNightShiftMinutesWithBreak_keepsDaytimeBreakOutOfNight() {
+        LocalDateTime start = LocalDateTime.of(2025, 10, 18, 9, 0);
+        LocalDateTime end = LocalDateTime.of(2025, 10, 18, 23, 0);
+
+        assertEquals(60, calculator.calculateNightShiftMinutesWithBreak(start, end, 60));
+    }
+
+    @Test
+    void calculateNightShiftMinutesWithBreak_subtractsNightOverlap() {
+        LocalDateTime start = LocalDateTime.of(2025, 10, 17, 22, 0);
+        LocalDateTime end = LocalDateTime.of(2025, 10, 18, 6, 0);
+
+        assertEquals(360, calculator.calculateNightShiftMinutesWithBreak(start, end, 60));
     }
 }

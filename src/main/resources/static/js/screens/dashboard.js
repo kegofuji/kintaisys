@@ -252,6 +252,11 @@ class DashboardScreen {
             return;
         }
 
+        if (this.normalizeBoolean(this.currentAttendance.hasApprovedAdjustment)) {
+            this.showAlert('承認済みの打刻修正が適用されているため編集できません', 'warning');
+            return;
+        }
+
         if (this.currentAttendance.attendanceFixed) {
             this.showAlert('確定済みの勤怠は編集できません', 'warning');
             return;
@@ -285,6 +290,11 @@ class DashboardScreen {
      */
     async saveBreakTime() {
         if (!this.currentAttendance || !this.currentAttendance.attendanceId || !this.breakTimeInput) {
+            return;
+        }
+
+        if (this.normalizeBoolean(this.currentAttendance.hasApprovedAdjustment)) {
+            this.showBreakTimeError('承認済みの打刻修正が適用されているため編集できません');
             return;
         }
 
@@ -448,6 +458,25 @@ class DashboardScreen {
     updateWorkingTime() {}
 
     /**
+     * 値をbooleanに正規化
+     * @param {*} value - 判定対象
+     * @returns {boolean}
+     */
+    normalizeBoolean(value) {
+        if (typeof value === 'boolean') {
+            return value;
+        }
+        if (typeof value === 'string') {
+            const normalized = value.trim().toLowerCase();
+            return normalized === 'true' || normalized === '1' || normalized === 'yes';
+        }
+        if (typeof value === 'number') {
+            return value === 1;
+        }
+        return false;
+    }
+
+    /**
      * 今日の勤怠状況読み込み
      */
     async loadTodayAttendance() {
@@ -535,6 +564,10 @@ class DashboardScreen {
             statusText = '退勤済';
         }
 
+        const hasApprovedAdjustment = this.normalizeBoolean(attendanceForState?.hasApprovedAdjustment);
+        if (attendanceForState) {
+            attendanceForState.hasApprovedAdjustment = hasApprovedAdjustment;
+        }
         console.log('Setting status:', statusText);
         this.clockStatus.innerHTML = statusText;
         this.currentAttendance = attendanceForState;
@@ -552,12 +585,12 @@ class DashboardScreen {
                 && attendanceForState.clockInTime
                 && attendanceForState.clockOutTime
                 && !attendanceForState.attendanceFixed
-                && !attendanceForState.hasApprovedAdjustment);
+                && !hasApprovedAdjustment);
             this.editBreakTimeBtn.disabled = !canEditBreak;
             this.editBreakTimeBtn.classList.toggle('disabled', !canEditBreak);
             if (!canEditBreak) {
                 this.editBreakTimeBtn.setAttribute('aria-disabled', 'true');
-                if (attendanceForState?.hasApprovedAdjustment) {
+                if (hasApprovedAdjustment) {
                     this.editBreakTimeBtn.title = '承認済みの打刻修正が適用されているため編集できません';
                 } else if (!attendanceForState?.clockOutTime) {
                     this.editBreakTimeBtn.title = '退勤打刻後に編集できます';
