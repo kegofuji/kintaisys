@@ -1,6 +1,7 @@
 package com.kintai.service;
 
 import com.kintai.dto.WorkPatternChangeRequestDto;
+import com.kintai.dto.WorkPatternSummaryDto;
 import com.kintai.entity.AttendanceRecord;
 import com.kintai.entity.AttendanceStatus;
 import com.kintai.entity.Employee;
@@ -19,6 +20,7 @@ import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -140,6 +142,58 @@ public class WorkPatternChangeRequestService {
     }
 
     @Transactional(readOnly = true)
+    public WorkPatternSummaryDto getCurrentSummary(Long employeeId, LocalDate date) {
+        if (employeeId == null) {
+            throw new AttendanceException(AttendanceException.INVALID_REQUEST, "従業員IDが指定されていません");
+        }
+
+        LocalDate targetDate = date != null ? date : LocalDate.now();
+        Optional<WorkPatternChangeRequest> patternOpt = findApplicablePattern(employeeId, targetDate);
+
+        WorkPatternSummaryDto summary = new WorkPatternSummaryDto();
+        if (patternOpt.isPresent()) {
+            WorkPatternChangeRequest pattern = patternOpt.get();
+            summary.setStartTime(pattern.getStartTime());
+            summary.setEndTime(pattern.getEndTime());
+            summary.setBreakMinutes(pattern.getBreakMinutes() == null ? 0 : pattern.getBreakMinutes());
+            summary.setWorkingMinutes(pattern.getWorkingMinutes() == null ? 0 : pattern.getWorkingMinutes());
+            summary.setPatternStartDate(pattern.getStartDate());
+            summary.setPatternEndDate(pattern.getEndDate());
+            summary.setWorkingDays(buildDayLabels(pattern, true));
+            summary.setHolidayDays(buildDayLabels(pattern, false));
+            summary.setHasApprovedRequest(true);
+            summary.setUpcoming(false);
+        } else {
+            Optional<WorkPatternChangeRequest> upcomingOpt = findUpcomingApprovedPattern(employeeId, targetDate);
+            if (upcomingOpt.isPresent()) {
+                WorkPatternChangeRequest pattern = upcomingOpt.get();
+                summary.setStartTime(pattern.getStartTime());
+                summary.setEndTime(pattern.getEndTime());
+                summary.setBreakMinutes(pattern.getBreakMinutes() == null ? 0 : pattern.getBreakMinutes());
+                summary.setWorkingMinutes(pattern.getWorkingMinutes() == null ? 0 : pattern.getWorkingMinutes());
+                summary.setPatternStartDate(pattern.getStartDate());
+                summary.setPatternEndDate(pattern.getEndDate());
+                summary.setWorkingDays(buildDayLabels(pattern, true));
+                summary.setHolidayDays(buildDayLabels(pattern, false));
+                summary.setHasApprovedRequest(true);
+                summary.setUpcoming(true);
+            } else {
+                summary.setStartTime(TimeCalculator.STANDARD_START_TIME);
+                summary.setEndTime(TimeCalculator.STANDARD_END_TIME);
+                summary.setBreakMinutes(TimeCalculator.LUNCH_BREAK_MINUTES);
+                summary.setWorkingMinutes(TimeCalculator.STANDARD_WORKING_MINUTES);
+                summary.setPatternStartDate(null);
+                summary.setPatternEndDate(null);
+                summary.setWorkingDays(List.of("月", "火", "水", "木", "金"));
+                summary.setHolidayDays(List.of("土", "日", "祝"));
+                summary.setHasApprovedRequest(false);
+                summary.setUpcoming(false);
+            }
+        }
+        return summary;
+    }
+
+    @Transactional(readOnly = true)
     public Optional<WorkPatternChangeRequest> findApplicablePattern(Long employeeId, LocalDate date) {
         if (employeeId == null || date == null) {
             return Optional.empty();
@@ -147,6 +201,14 @@ public class WorkPatternChangeRequestService {
         return repository.findApprovedRequestsForDate(employeeId, date)
                 .stream()
                 .findFirst();
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<WorkPatternChangeRequest> findUpcomingApprovedPattern(Long employeeId, LocalDate date) {
+        if (employeeId == null || date == null) {
+            return Optional.empty();
+        }
+        return repository.findUpcomingApprovedRequests(employeeId, date).stream().findFirst();
     }
 
     public void applyPatternMetrics(AttendanceRecord record) {
@@ -169,7 +231,14 @@ public class WorkPatternChangeRequestService {
         LocalDate date = record.getAttendanceDate();
         boolean calendarHoliday = businessDayCalculator != null && businessDayCalculator.isJapaneseHoliday(date);
 
-        if (pattern.appliesTo(date, calendarHoliday)) {
+        boolean hasAttendance = record.getClockInTime() != null || record.getClockOutTime() != null;
+        boolean appliesToCalendar = pattern.appliesTo(date, calendarHoliday);
+
+        if (!appliesToCalendar && hasAttendance) {
+            appliesToCalendar = true;
+        }
+
+        if (appliesToCalendar) {
             applyWorkingDayPattern(record, pattern);
         } else {
             markAsHoliday(record);
@@ -329,5 +398,27 @@ public class WorkPatternChangeRequestService {
 
     private int safeInt(Integer value) {
         return value == null ? 0 : value;
+    }
+
+    private List<String> buildDayLabels(WorkPatternChangeRequest pattern, boolean working) {
+        List<String> labels = new ArrayList<>();
+        if (pattern == null) {
+            return labels;
+        }
+        appendIfMatch(labels, pattern.isApplyMonday(), working, "月");
+        appendIfMatch(labels, pattern.isApplyTuesday(), working, "火");
+        appendIfMatch(labels, pattern.isApplyWednesday(), working, "水");
+        appendIfMatch(labels, pattern.isApplyThursday(), working, "木");
+        appendIfMatch(labels, pattern.isApplyFriday(), working, "金");
+        appendIfMatch(labels, pattern.isApplySaturday(), working, "土");
+        appendIfMatch(labels, pattern.isApplySunday(), working, "日");
+        appendIfMatch(labels, pattern.isApplyHoliday(), working, "祝");
+        return labels;
+    }
+
+    private void appendIfMatch(List<String> labels, boolean applies, boolean working, String label) {
+        if ((applies && working) || (!applies && !working)) {
+            labels.add(label);
+        }
     }
 }

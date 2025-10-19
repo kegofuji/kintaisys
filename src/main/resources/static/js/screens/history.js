@@ -21,6 +21,7 @@ class HistoryScreen {
         this.attendanceData = [];
         this.vacationRequests = [];
         this.adjustmentRequests = [];
+        this.workPatternRequests = [];
         this.vacationRequestRawMap = new Map();
         this.activeVacationDates = new Set();
         this.adjustmentCancelButton = null;
@@ -160,6 +161,9 @@ class HistoryScreen {
             // 打刻修正申請データも読み込み（履歴カレンダー用）
             await this.loadAdjustmentRequests();
             
+            // 勤務時間変更申請データも読み込み（履歴カレンダー用）
+            await this.loadWorkPatternRequests();
+            
             // カレンダーを再生成（shouldRegenerateがtrueの場合のみ）
             if (shouldRegenerate) {
                 this.generateCalendar();
@@ -174,10 +178,12 @@ class HistoryScreen {
             try {
                 await this.loadVacationRequests();
                 await this.loadAdjustmentRequests();
+                await this.loadWorkPatternRequests();
             } catch (appError) {
                 console.error('申請データ読み込みエラー:', appError);
                 this.vacationRequests = [];
                 this.adjustmentRequests = [];
+                this.workPatternRequests = [];
             }
         }
     }
@@ -368,13 +374,6 @@ class HistoryScreen {
             const overtimeDisplay = isConfirmed && overtimeValue > 0 ? TimeUtils.formatMinutesToTime(overtimeValue) : '';
             const nightValue = isConfirmed ? this.resolveNightMinutes(record) : 0;
             const nightWorkDisplay = isConfirmed && nightValue > 0 ? TimeUtils.formatMinutesToTime(nightValue) : '';
-            let status = translateAttendanceStatus ? translateAttendanceStatus(record.attendanceStatus) : '';
-            if (!status) {
-                if (!hasIn) status = '出勤前';
-                else if (hasIn && !hasOut) status = '出勤中';
-                else if (isConfirmed) status = '退勤済';
-            }
-
             // 日付をyyyy/mm/dd形式に変換
             const formatDate = (dateStr) => {
                 if (!dateStr) return '';
@@ -395,7 +394,6 @@ class HistoryScreen {
                 <td>${earlyLeaveDisplay}</td>
                 <td>${overtimeDisplay}</td>
                 <td>${nightWorkDisplay}</td>
-                <td>${status}</td>
             `;
 
             this.historyTableBody.appendChild(row);
@@ -521,9 +519,13 @@ class HistoryScreen {
 
         // 曜日ヘッダー
         const weekdays = ['月', '火', '水', '木', '金', '土', '日'];
-        const headerHtml = weekdays.map(day => 
-            `<div class="calendar-header">${day}</div>`
-        ).join('');
+        const headerHtml = weekdays.map((day, index) => {
+            // 土日（index 5, 6）で、勤務時間変更申請の対象期間内の場合は赤字
+            const isWeekend = index === 5 || index === 6; // 土=5, 日=6
+            const isInWorkPatternPeriod = this.isWeekendInWorkPatternPeriod(index);
+            const className = isWeekend && isInWorkPatternPeriod ? 'calendar-header text-danger' : 'calendar-header';
+            return `<div class="${className}">${day}</div>`;
+        }).join('');
 
         // 月の最初の日と最後の日
         const firstDay = new Date(this.currentYear, this.currentMonth, 1);
@@ -549,22 +551,50 @@ class HistoryScreen {
             const attendance = this.getAttendanceForDate(dateString);
             const vacationRequest = this.getVacationRequestForDate(dateString);
             const adjustmentRequest = this.getAdjustmentRequestForDate(dateString);
+            const workPatternRequest = this.getWorkPatternRequestForDate(dateString);
+            
+            // デバッグ用：勤務時間変更申請のデータを確認
+            if (workPatternRequest) {
+                console.log(`${dateString}: 勤務時間変更申請データ:`, workPatternRequest);
+            }
             
             // デバッグ用：打刻修正申請のデータを確認
             if (adjustmentRequest) {
                 console.log(`日付 ${dateString} の打刻修正申請:`, adjustmentRequest);
             }
 
+            // 勤務時間変更申請で承認済の期間があるかチェック
+            let hasApprovedWorkPattern = false;
+            let isWorkPatternHoliday = false;
+            
+            if (workPatternRequest && workPatternRequest.status === 'APPROVED' && workPatternRequest.request) {
+                hasApprovedWorkPattern = true;
+                // 実際の勤務パターンに基づいて判定
+                const isInWorkPattern = this.isDateInWorkPattern(currentDate, workPatternRequest.request, isWeekend, isHoliday);
+                // 勤務パターンに含まれていない場合のみ休日として扱う
+                isWorkPatternHoliday = !isInWorkPattern;
+                console.log(`${dateString}: 勤務時間変更申請あり - isInWorkPattern: ${isInWorkPattern}, isWorkPatternHoliday: ${isWorkPatternHoliday}`);
+            }
+            
             let dayClasses = ['calendar-day'];
             if (isToday) dayClasses.push('today');
             if (isWeekend) dayClasses.push('weekend');
             if (isHoliday) dayClasses.push('holiday');
             if (weekday === 0) dayClasses.push('sunday');
             if (weekday === 6) dayClasses.push('saturday');
-            const isNonWorkingDay = isWeekend || isHoliday;
+            
+            // 従来の土日祝日 + 勤務時間変更申請で承認済の場合の休日判定
+            // 勤務時間変更申請がある場合は、その申請の勤務パターンに基づいて判定
+            let isNonWorkingDay;
+            if (hasApprovedWorkPattern) {
+                isNonWorkingDay = isWorkPatternHoliday;
+            } else {
+                isNonWorkingDay = isWeekend || isHoliday;
+            }
             if (attendance) dayClasses.push('has-attendance');
             if (attendance && attendance.clockOutTime) dayClasses.push('clocked-out');
             if (attendance && attendance.clockInTime && !attendance.clockOutTime) dayClasses.push('clocked-in');
+            // 勤務時間変更申請で承認済の休日の場合は特別なクラスは追加しない（赤字表示のため）
 
             let badges = '';
             
@@ -667,8 +697,15 @@ class HistoryScreen {
 
             const holidayLabel = isNonWorkingDay ? '<div class="holiday-label text-danger fw-semibold">休日</div>' : '';
 
+            // 勤務時間変更申請で承認済の場合は緑背景を避ける
+            let styleAttr = 'cursor: pointer;';
+            if (hasApprovedWorkPattern) {
+                // 承認済の勤務時間変更申請がある場合、背景色を通常の白に設定
+                styleAttr += ' background-color: white !important;';
+            }
+
             calendarHtml += `
-                <div class="${dayClasses.join(' ')}" data-date="${dateString}" style="cursor: pointer;" title="クリックして詳細を表示">
+                <div class="${dayClasses.join(' ')}" data-date="${dateString}" style="${styleAttr}" title="クリックして詳細を表示">
                     <div class="day-number">${d}</div>
                     ${holidayLabel}
                     <div class="day-badges">${badges}</div>
@@ -1107,6 +1144,164 @@ class HistoryScreen {
     }
 
     /**
+     * 勤務時間変更申請データ読み込み（当月分に整形）
+     */
+    async loadWorkPatternRequests() {
+        if (!window.currentEmployeeId) {
+            this.workPatternRequests = [];
+            return;
+        }
+
+        try {
+            const response = await fetchWithAuth.handleApiCall(
+                () => fetchWithAuth.get(`/api/work-pattern-change/requests/${window.currentEmployeeId}`),
+                '勤務時間変更申請の取得に失敗しました'
+            );
+
+            console.log('勤務時間変更申請APIレスポンス:', response);
+
+            let list = [];
+            if (response && response.success && Array.isArray(response.data)) {
+                list = response.data;
+            } else if (Array.isArray(response)) {
+                list = response;
+            }
+
+            console.log('勤務時間変更申請リスト:', list);
+
+            // 当月のみ抽出し、カレンダー用に整形（承認済のみ）
+            const filtered = [];
+            list.forEach(req => {
+                if (!req.startDate || !req.endDate) {
+                    return;
+                }
+
+                const status = (req.status || '').toUpperCase();
+                if (status !== 'APPROVED') {
+                    return; // 承認済みのみ対象
+                }
+
+                try {
+                    const start = this.parseDateString(req.startDate);
+                    const end = this.parseDateString(req.endDate);
+                    if (!start || !end) {
+                        console.warn('勤務時間変更申請の日付を解析できませんでした:', req);
+                        return;
+                    }
+
+                    // 当月に含まれる日付を展開（全ての日付を対象期間として記録）
+                    for (let d = new Date(start); d.getTime() <= end.getTime(); d.setDate(d.getDate() + 1)) {
+                        const current = new Date(d);
+                        const y = current.getFullYear();
+                        const m = current.getMonth();
+                        if (y === this.currentYear && m === this.currentMonth) {
+                            const dateKey = this.formatDateString(current);
+                            
+                            // 既に同じ日付のデータがある場合は更新、なければ追加
+                            const existingIndex = filtered.findIndex(item => item.date === dateKey);
+                            if (existingIndex >= 0) {
+                                filtered[existingIndex] = {
+                                    date: dateKey,
+                                    request: req,
+                                    status: status,
+                                    requestId: req.requestId || req.id
+                                };
+                            } else {
+                                filtered.push({
+                                    date: dateKey,
+                                    request: req,
+                                    status: status,
+                                    requestId: req.requestId || req.id
+                                });
+                            }
+                        }
+                    }
+                } catch (dateError) {
+                    console.warn('勤務時間変更申請の日付解析エラー:', dateError, req);
+                }
+            });
+
+            console.log('フィルタリング後の勤務時間変更申請:', filtered);
+            this.workPatternRequests = filtered;
+        } catch (error) {
+            console.error('勤務時間変更申請データ読み込みエラー:', error);
+            this.workPatternRequests = [];
+        }
+    }
+
+    /**
+     * 指定日が勤務時間変更申請の対象日（勤務日）かどうかを判定
+     */
+    isDateInWorkPattern(date, request, isWeekend, isHoliday) {
+        if (!request) {
+            console.log('isDateInWorkPattern: request is null');
+            return false;
+        }
+        
+        const weekday = date.getDay();
+        let shouldApply = false;
+        
+        // 曜日別の適用判定
+        switch (weekday) {
+            case 1: shouldApply = request.applyMonday; break;
+            case 2: shouldApply = request.applyTuesday; break;
+            case 3: shouldApply = request.applyWednesday; break;
+            case 4: shouldApply = request.applyThursday; break;
+            case 5: shouldApply = request.applyFriday; break;
+            case 6: shouldApply = request.applySaturday; break;
+            case 0: shouldApply = request.applySunday; break;
+        }
+        
+        // 祝日の場合は applyHoliday フラグを確認
+        if (isHoliday && request.applyHoliday) {
+            shouldApply = true;
+        }
+        
+        const weekdayNames = ['日', '月', '火', '水', '木', '金', '土'];
+        console.log(`isDateInWorkPattern: ${weekdayNames[weekday]}曜日(${weekday}), shouldApply: ${shouldApply}`, {
+            applyMonday: request.applyMonday,
+            applyTuesday: request.applyTuesday,
+            applyWednesday: request.applyWednesday,
+            applyThursday: request.applyThursday,
+            applyFriday: request.applyFriday,
+            applySaturday: request.applySaturday,
+            applySunday: request.applySunday,
+            applyHoliday: request.applyHoliday,
+            isHoliday: isHoliday
+        });
+        
+        return shouldApply;
+    }
+
+    /**
+     * 指定日の勤務時間変更申請取得（承認済の休日用）
+     */
+    getWorkPatternRequestForDate(dateString) {
+        return this.workPatternRequests.find(request => request.date === dateString);
+    }
+
+    /**
+     * 指定された曜日（0=日, 1=月, ..., 6=土）が勤務時間変更申請の対象期間内の土日かどうかを判定
+     */
+    isWeekendInWorkPatternPeriod(weekdayIndex) {
+        if (!this.workPatternRequests || this.workPatternRequests.length === 0) {
+            return false;
+        }
+
+        // 土日だけでない場合は対象外
+        if (weekdayIndex !== 5 && weekdayIndex !== 6) { // 土=5, 日=6
+            return false;
+        }
+
+        // 承認済みの勤務時間変更申請があるかチェック
+        const hasApprovedRequest = this.workPatternRequests.some(request => 
+            request.status === 'APPROVED' && request.request
+        );
+
+        return hasApprovedRequest;
+    }
+
+    /**
      * 却下理由表示モーダル
      */
     showRejectionCommentModal(comment) {
@@ -1254,18 +1449,6 @@ class HistoryScreen {
             const nightWorkValue = isConfirmedAttendance ? this.resolveNightMinutes(attendance) : 0;
             const nightWorkDisplay = isConfirmedAttendance && nightWorkValue > 0 ? TimeUtils.formatMinutesToTime(nightWorkValue) : '';
 
-            // ステータス表示
-            let status = translateAttendanceStatus ? translateAttendanceStatus(attendance.attendanceStatus) : '';
-            if (!status) {
-                if (attendance.clockInTime && !attendance.clockOutTime) {
-                    status = '出勤中';
-                } else if (attendance.clockInTime && attendance.clockOutTime) {
-                    status = '退勤済';
-                } else {
-                    status = '出勤前';
-                }
-            }
-
             // 日付をyyyy/mm/dd形式に変換
             const formatDate = (dateStr) => {
                 if (!dateStr) return '';
@@ -1286,21 +1469,12 @@ class HistoryScreen {
                 <td>${earlyLeaveDisplay}</td>
                 <td>${overtimeDisplay}</td>
                 <td>${nightWorkDisplay}</td>
-                <td>${status}</td>
             `;
 
             this.historyTableBody.appendChild(row);
         } else {
             // 勤怠データがない場合
             const row = document.createElement('tr');
-            
-            // ステータスを日付の種類に応じて設定
-            let status = '';
-            if (isHoliday) {
-                status = '';
-            } else if (isWeekend) {
-                status = '';
-            }
 
             row.innerHTML = `
                 <td></td>
@@ -1312,7 +1486,6 @@ class HistoryScreen {
                 <td></td>
                 <td></td>
                 <td></td>
-                <td>${status}</td>
             `;
             this.historyTableBody.appendChild(row);
         }
@@ -2049,7 +2222,7 @@ class HistoryScreen {
             .sort()
             .join(',');
 
-        return `${serialize(this.vacationRequests, 'vacationId')}::${serialize(this.adjustmentRequests, 'adjustmentRequestId')}`;
+        return `${serialize(this.vacationRequests, 'vacationId')}::${serialize(this.adjustmentRequests, 'adjustmentRequestId')}::${serialize(this.workPatternRequests, 'requestId')}`;
     }
 
     startRealtimePolling(runImmediately = false) {

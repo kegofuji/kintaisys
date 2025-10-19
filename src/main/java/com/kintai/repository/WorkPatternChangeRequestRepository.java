@@ -30,6 +30,16 @@ public interface WorkPatternChangeRequestRepository extends JpaRepository<WorkPa
                                                                @Param("date") LocalDate date);
 
     @Query("""
+            SELECT r FROM WorkPatternChangeRequest r
+            WHERE r.employeeId = :employeeId
+              AND r.status = com.kintai.entity.WorkPatternChangeRequest$Status.APPROVED
+              AND r.startDate > :date
+            ORDER BY r.startDate ASC, r.requestId ASC
+            """)
+    List<WorkPatternChangeRequest> findUpcomingApprovedRequests(@Param("employeeId") Long employeeId,
+                                                                @Param("date") LocalDate date);
+
+    @Query("""
             SELECT COUNT(r) > 0
             FROM WorkPatternChangeRequest r
             WHERE r.employeeId = :employeeId

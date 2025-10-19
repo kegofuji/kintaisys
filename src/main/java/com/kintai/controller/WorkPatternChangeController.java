@@ -1,6 +1,7 @@
 package com.kintai.controller;
 
 import com.kintai.dto.WorkPatternChangeRequestDto;
+import com.kintai.dto.WorkPatternSummaryDto;
 import com.kintai.entity.WorkPatternChangeRequest;
 import com.kintai.exception.AttendanceException;
 import com.kintai.service.WorkPatternChangeRequestService;
@@ -8,9 +9,11 @@ import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -56,6 +59,18 @@ public class WorkPatternChangeController {
         body.put("success", true);
         body.put("data", requests);
         body.put("count", requests.size());
+        return ResponseEntity.ok(body);
+    }
+
+    @GetMapping("/current/{employeeId}")
+    public ResponseEntity<Map<String, Object>> getCurrentSummary(
+            @PathVariable Long employeeId,
+            @RequestParam(value = "date", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date
+    ) {
+        WorkPatternSummaryDto summary = service.getCurrentSummary(employeeId, date);
+        Map<String, Object> body = new HashMap<>();
+        body.put("success", true);
+        body.put("data", summary);
         return ResponseEntity.ok(body);
     }
 }

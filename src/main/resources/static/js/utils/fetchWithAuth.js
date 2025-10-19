@@ -283,22 +283,18 @@ class FetchWithAuth {
                     errorData = null;
                 }
                 
-                // エラーデータが取得できた場合はそのメッセージを使用
-                if (errorData && errorData.message) {
-                    throw new Error(errorData.message);
-                } else {
-                    // エラーデータが取得できない場合は、HTTPステータスコードを使用
-                    throw new Error(`${errorMessage} (HTTP ${response.status})`);
-                }
+                const details = {
+                    status: response.status,
+                    message: errorData && errorData.message ? errorData.message : null,
+                    raw: errorData
+                };
+                const error = new Error(details.message || `${errorMessage} (HTTP ${response.status})`);
+                error.details = details;
+                throw error;
             }
         } catch (error) {
             console.error('API呼び出しエラー:', error);
-            // エラーメッセージが既に適切な場合はそのまま、そうでなければデフォルトメッセージを使用
-            if (error.message && !error.message.includes('API呼び出しに失敗しました')) {
-                throw error;
-            } else {
-                throw new Error(errorMessage);
-            }
+            throw error;
         }
     }
 }

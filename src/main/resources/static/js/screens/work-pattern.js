@@ -17,6 +17,7 @@ const DEFAULT_WORK_PATTERN_DAYS = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY',
 class WorkPatternScreen {
     constructor() {
         this.form = null;
+        this.currentSummaryContainer = null;
         this.startDateInput = null;
         this.endDateInput = null;
         this.startTimeInput = null;
@@ -35,6 +36,17 @@ class WorkPatternScreen {
         this.isSubmitting = false;
         this.initialized = false;
         this.listenersBound = false;
+        this.summaryLoaded = false;
+        this.lastSummarySignature = '';
+        this.lastSummaryData = null;
+        this.summaryPollIntervalMs = 10000;
+        this.summaryPollTimer = null;
+        this.summaryPollFn = null;
+        this.summaryVisibilityHandler = null;
+        this.summaryPollingInProgress = false;
+        this.latestRequestCache = [];
+        this.lastRequestsSignature = '';
+        this.requestsLoading = false;
     }
 
     init() {
@@ -43,6 +55,7 @@ class WorkPatternScreen {
             this.updateHolidayButtons();
             this.updateWorkingPreview();
             this.refreshRequests();
+            this.startSummaryPolling(true);
             return;
         }
 
@@ -50,11 +63,16 @@ class WorkPatternScreen {
         this.setupEventListeners();
         this.setDefaultValues();
         this.refreshRequests();
+        this.startSummaryPolling();
         this.initialized = true;
     }
 
     initializeElements() {
         this.form = document.getElementById('workPatternForm');
+        this.currentSummaryContainer = document.getElementById('workPatternCurrentSummary');
+        if (this.currentSummaryContainer) {
+            this.renderDefaultSummary();
+        }
         this.startDateInput = document.getElementById('workPatternStartDate');
         this.endDateInput = document.getElementById('workPatternEndDate');
         this.startTimeInput = document.getElementById('workPatternStartTime');
@@ -79,6 +97,19 @@ class WorkPatternScreen {
             this.form.addEventListener('submit', (event) => {
                 event.preventDefault();
                 this.handleFormSubmit();
+            });
+            this.form.addEventListener('keydown', (event) => {
+                if (event.key !== 'Enter') {
+                    return;
+                }
+                if (event.isComposing) {
+                    return;
+                }
+                const target = event.target;
+                if (target && target.tagName === 'TEXTAREA') {
+                    return;
+                }
+                event.preventDefault();
             });
         }
         if (this.resetButton) {
@@ -255,6 +286,274 @@ class WorkPatternScreen {
             this.isSubmitting = false;
             this.toggleFormDisabled(false);
         }
+    }
+
+    resolveEffectiveSummary(summary) {
+        const fallback = this.buildSummaryFromEntries(this.latestRequestCache);
+        if (fallback) {
+            if (
+                !summary ||
+                !summary.hasApprovedRequest ||
+                (summary.upcoming === true && fallback.upcoming === false)
+            ) {
+                return { summary: fallback, usedFallback: true };
+            }
+        }
+        if (summary) {
+            return { summary, usedFallback: false };
+        }
+        if (fallback) {
+            return { summary: fallback, usedFallback: true };
+        }
+        return { summary: null, usedFallback: false };
+    }
+
+    buildSummaryFromEntries(entries) {
+        if (!Array.isArray(entries) || entries.length === 0) {
+            return null;
+        }
+        const approved = entries.filter((entry) => {
+            const status = (entry.status || '').toString().toUpperCase();
+            return status === 'APPROVED';
+        });
+        if (approved.length === 0) {
+            return null;
+        }
+        const today = this.parseDate(this.getToday());
+        if (!today) {
+            return null;
+        }
+
+        const current = approved.find((entry) => this.isDateWithin(today, entry.startDate, entry.endDate));
+        if (current) {
+            return this.transformEntryToSummary(current, false);
+        }
+
+        const upcoming = approved
+            .map((entry) => ({ entry, startDate: this.parseDate(entry.startDate) }))
+            .filter(({ startDate }) => startDate && startDate > today)
+            .sort((a, b) => a.startDate - b.startDate)
+            .map(({ entry }) => entry)
+            .shift();
+
+        if (upcoming) {
+            return this.transformEntryToSummary(upcoming, true);
+        }
+        return null;
+    }
+
+    transformEntryToSummary(entry, upcoming) {
+        if (!entry) {
+            return null;
+        }
+        const breakMinutes = this.normalizeMinutesField(entry.breakMinutes);
+        const workingMinutes = this.normalizeMinutesField(entry.workingMinutes);
+        return {
+            startTime: entry.startTime,
+            endTime: entry.endTime,
+            breakMinutes: Number.isFinite(breakMinutes) ? breakMinutes : 0,
+            workingMinutes: Number.isFinite(workingMinutes) ? workingMinutes : 0,
+            patternStartDate: entry.startDate,
+            patternEndDate: entry.endDate,
+            workingDays: this.extractDayLabelsFromEntry(entry, true),
+            holidayDays: this.extractDayLabelsFromEntry(entry, false),
+            hasApprovedRequest: true,
+            upcoming: Boolean(upcoming)
+        };
+    }
+
+    extractDayLabelsFromEntry(entry, working) {
+        const mapping = [
+            { key: 'applyMonday', label: '月' },
+            { key: 'applyTuesday', label: '火' },
+            { key: 'applyWednesday', label: '水' },
+            { key: 'applyThursday', label: '木' },
+            { key: 'applyFriday', label: '金' },
+            { key: 'applySaturday', label: '土' },
+            { key: 'applySunday', label: '日' },
+            { key: 'applyHoliday', label: '祝' }
+        ];
+        const labels = [];
+        mapping.forEach(({ key, label }) => {
+            const applied = this.isTruthy(entry[key]);
+            if ((applied && working) || (!applied && !working)) {
+                labels.push(label);
+            }
+        });
+        return labels;
+    }
+
+    isTruthy(value) {
+        if (value === true || value === 1 || value === '1') {
+            return true;
+        }
+        if (typeof value === 'string') {
+            const normalized = value.trim().toLowerCase();
+            return normalized === 'true' || normalized === '1' || normalized === 'yes';
+        }
+        return Boolean(value);
+    }
+
+    parseDate(value) {
+        if (!value) {
+            return null;
+        }
+        if (value instanceof Date) {
+            return Number.isNaN(value.getTime()) ? null : value;
+        }
+        if (typeof value === 'string') {
+            const normalized = value.includes('T') ? value : `${value}T00:00:00`;
+            const parsed = new Date(normalized);
+            return Number.isNaN(parsed.getTime()) ? null : parsed;
+        }
+        try {
+            const parsed = new Date(value);
+            return Number.isNaN(parsed.getTime()) ? null : parsed;
+        } catch (error) {
+            return null;
+        }
+    }
+
+    isDateWithin(target, start, end) {
+        const targetDate = target instanceof Date ? target : this.parseDate(target);
+        const startDate = this.parseDate(start);
+        const endDate = this.parseDate(end);
+        if (!targetDate || !startDate || !endDate) {
+            return false;
+        }
+        return targetDate >= startDate && targetDate <= endDate;
+    }
+
+    normalizeMinutesField(value) {
+        if (typeof value === 'number' && Number.isFinite(value)) {
+            return value;
+        }
+        if (typeof value === 'string') {
+            const trimmed = value.trim();
+            if (/^-?\d+(\.\d+)?$/.test(trimmed)) {
+                const numeric = Number(trimmed);
+                if (Number.isFinite(numeric)) {
+                    return numeric;
+                }
+            }
+            if (/^-?\d{1,2}:[0-5]\d$/.test(trimmed)) {
+                return TimeUtils.timeStringToMinutes(trimmed);
+            }
+        }
+        return Number.NaN;
+    }
+
+    buildRequestsSignature(entries) {
+        if (!Array.isArray(entries) || entries.length === 0) {
+            return '[]';
+        }
+        const sorted = entries
+            .slice()
+            .sort((a, b) => {
+                const timeA = new Date(a.createdAt || a.created_at || 0).getTime();
+                const timeB = new Date(b.createdAt || b.created_at || 0).getTime();
+                return timeB - timeA;
+            });
+        const normalized = sorted.map((entry) => {
+            const breakMinutes = this.normalizeMinutesField(entry.breakMinutes);
+            const workingMinutes = this.normalizeMinutesField(entry.workingMinutes);
+            return {
+                id: entry.requestId ?? entry.id ?? null,
+                startDate: entry.startDate ?? '',
+                endDate: entry.endDate ?? '',
+                startTime: entry.startTime ?? '',
+                endTime: entry.endTime ?? '',
+                breakMinutes: Number.isFinite(breakMinutes) ? breakMinutes : null,
+                workingMinutes: Number.isFinite(workingMinutes) ? workingMinutes : null,
+                status: (entry.status || '').toString().toUpperCase(),
+                reason: entry.reason ?? '',
+                rejectionComment: entry.rejectionComment ?? '',
+                applyMonday: this.isTruthy(entry.applyMonday),
+                applyTuesday: this.isTruthy(entry.applyTuesday),
+                applyWednesday: this.isTruthy(entry.applyWednesday),
+                applyThursday: this.isTruthy(entry.applyThursday),
+                applyFriday: this.isTruthy(entry.applyFriday),
+                applySaturday: this.isTruthy(entry.applySaturday),
+                applySunday: this.isTruthy(entry.applySunday),
+                applyHoliday: this.isTruthy(entry.applyHoliday),
+                createdAt: entry.createdAt ?? entry.created_at ?? '',
+                updatedAt: entry.updatedAt ?? entry.updated_at ?? ''
+            };
+        });
+        try {
+            return JSON.stringify(normalized);
+        } catch (error) {
+            console.warn('勤務時間変更申請シグネチャ生成失敗:', error);
+            return String(Date.now());
+        }
+    }
+
+    startSummaryPolling(immediate = false) {
+        if (typeof window === 'undefined') {
+            return;
+        }
+        if (!this.summaryPollFn) {
+            this.summaryPollFn = async (force = false) => {
+                if (this.summaryPollingInProgress) {
+                    return;
+                }
+                if (!force && typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+                    return;
+                }
+                if (!window.currentEmployeeId) {
+                    return;
+                }
+                this.summaryPollingInProgress = true;
+                try {
+                    const silentMode = !force;
+                    await this.refreshRequests({
+                        silent: silentMode,
+                        updateSummary: false,
+                        forceRender: force
+                    });
+                    await this.loadCurrentSummary({
+                        silent: silentMode,
+                        force
+                    });
+                } catch (error) {
+                    console.error('勤務パターン自動更新エラー:', error);
+                } finally {
+                    this.summaryPollingInProgress = false;
+                }
+            };
+        }
+        if (this.summaryPollTimer === null) {
+            const interval = Math.max(Number(this.summaryPollIntervalMs) || 0, 5000);
+            this.summaryPollTimer = window.setInterval(() => {
+                if (this.summaryPollFn) {
+                    this.summaryPollFn(false);
+                }
+            }, interval);
+            if (typeof document !== 'undefined' && !this.summaryVisibilityHandler) {
+                this.summaryVisibilityHandler = () => {
+                    if (document.visibilityState === 'visible' && this.summaryPollFn) {
+                        this.summaryPollFn(true);
+                    }
+                };
+                document.addEventListener('visibilitychange', this.summaryVisibilityHandler);
+            }
+        }
+        if (immediate && this.summaryPollFn) {
+            this.summaryPollFn(true);
+        }
+    }
+
+    stopSummaryPolling() {
+        if (this.summaryPollTimer !== null) {
+            clearInterval(this.summaryPollTimer);
+            this.summaryPollTimer = null;
+        }
+        if (typeof document !== 'undefined' && this.summaryVisibilityHandler) {
+            document.removeEventListener('visibilitychange', this.summaryVisibilityHandler);
+            this.summaryVisibilityHandler = null;
+        }
+        this.summaryPollFn = null;
+        this.summaryPollingInProgress = false;
     }
 
     buildSelectedDaysEntry() {
@@ -573,22 +872,62 @@ class WorkPatternScreen {
         this.workingPreviewInput.value = TimeUtils.formatMinutesToTime(workingMinutes);
     }
 
-    async refreshRequests() {
+    async refreshRequests(options = {}) {
+        const {
+            silent = false,
+            updateSummary = true,
+            forceRender = false
+        } = typeof options === 'object' && options !== null ? options : {};
+
         if (!window.currentEmployeeId || !this.tableBody) {
-            return;
+            let summary = null;
+            if (updateSummary) {
+                summary = await this.loadCurrentSummary({ silent });
+            }
+            return { updated: false, summary };
         }
-        this.setTableState('データを読み込み中...', 'text-muted');
+
+        if (silent && this.requestsLoading) {
+            return { updated: false, summary: null };
+        }
+
+        if (!silent) {
+            this.setTableState('データを読み込み中...', 'text-muted');
+        }
+
+        let updated = false;
+        let summary = null;
         try {
+            this.requestsLoading = true;
             const response = await fetchWithAuth.handleApiCall(
                 () => fetchWithAuth.get(`/api/work-pattern-change/requests/${window.currentEmployeeId}`),
                 '勤務時間変更申請の取得に失敗しました'
             );
             const list = Array.isArray(response?.data) ? response.data : Array.isArray(response) ? response : [];
-            this.renderRequests(list);
+            this.latestRequestCache = Array.isArray(list) ? list.slice() : [];
+            const signature = this.buildRequestsSignature(this.latestRequestCache);
+            const shouldRender = forceRender || !silent || signature !== this.lastRequestsSignature;
+            if (shouldRender) {
+                this.renderRequests(this.latestRequestCache);
+                this.lastRequestsSignature = signature;
+                updated = true;
+            }
         } catch (error) {
             console.error('勤務時間変更申請取得エラー:', error);
-            this.setTableState('勤務時間変更申請の取得に失敗しました', 'text-danger');
+            if (!silent) {
+                this.setTableState('勤務時間変更申請の取得に失敗しました', 'text-danger');
+            }
+            this.latestRequestCache = [];
+            this.lastRequestsSignature = '';
+        } finally {
+            this.requestsLoading = false;
         }
+
+        if (updateSummary) {
+            summary = await this.loadCurrentSummary({ silent });
+        }
+
+        return { updated, summary };
     }
 
     renderRequests(entries) {
@@ -652,6 +991,196 @@ class WorkPatternScreen {
         this.tableBody.appendChild(row);
     }
 
+    async loadCurrentSummary(options = {}) {
+        const { silent = false, force = false } = typeof options === 'object' && options !== null ? options : {};
+        if (!this.currentSummaryContainer) {
+            return null;
+        }
+        if (!window.currentEmployeeId) {
+            this.renderDefaultSummary();
+            this.setSummaryMessage('');
+            return this.lastSummaryData;
+        }
+        if (!silent) {
+            this.setSummaryMessage('現在の勤務パターンを読み込み中です...', false);
+        }
+        try {
+            const response = await fetchWithAuth.handleApiCall(
+                () => fetchWithAuth.get(`/api/work-pattern-change/current/${window.currentEmployeeId}`),
+                '現在の勤務パターンの取得に失敗しました'
+            );
+            const apiSummary = response?.data ?? (response?.success === undefined ? response : null);
+            const { summary: effectiveSummary } = this.resolveEffectiveSummary(apiSummary);
+
+            if (!effectiveSummary) {
+                if (!silent) {
+                    this.renderDefaultSummary();
+                    this.setSummaryMessage('', false);
+                }
+                return null;
+            }
+
+            const signature = this.generateSummarySignature(effectiveSummary);
+            if (force || this.lastSummarySignature !== signature) {
+                const upcoming = this.renderCurrentSummary(effectiveSummary, { isFetched: true });
+                if (upcoming) {
+                    this.setSummaryMessage('承認済みの勤務パターンは適用開始前です。', false);
+                } else {
+                    this.setSummaryMessage('', false);
+                }
+            } else if (!silent) {
+                if (effectiveSummary.upcoming) {
+                    this.setSummaryMessage('承認済みの勤務パターンは適用開始前です。', false);
+                } else {
+                    this.setSummaryMessage('', false);
+                }
+            }
+            this.lastSummaryData = effectiveSummary;
+            return effectiveSummary;
+        } catch (error) {
+            console.error('勤務パターン概要取得エラー:', error);
+            const fallback = this.buildSummaryFromEntries(this.latestRequestCache);
+            if (fallback) {
+                const signature = this.generateSummarySignature(fallback);
+                if (force || this.lastSummarySignature !== signature) {
+                    const upcoming = this.renderCurrentSummary(fallback, { isFetched: true });
+                    if (upcoming) {
+                        this.setSummaryMessage('承認済みの勤務パターンは適用開始前です。', false);
+                    } else {
+                        this.setSummaryMessage('', false);
+                    }
+                } else if (!silent) {
+                    if (fallback.upcoming) {
+                        this.setSummaryMessage('承認済みの勤務パターンは適用開始前です。', false);
+                    } else {
+                        this.setSummaryMessage('', false);
+                    }
+                }
+                this.lastSummaryData = fallback;
+                return fallback;
+            }
+            if (!silent && !this.summaryLoaded) {
+                this.renderDefaultSummary();
+            }
+            if (!silent) {
+                this.setSummaryMessage('現在の勤務パターンを取得できませんでした。', true);
+            }
+            return null;
+        }
+    }
+
+    setSummaryMessage(message, isError = false) {
+        if (!this.currentSummaryContainer) {
+            return;
+        }
+        let statusElement = this.currentSummaryContainer.querySelector('[data-summary-status]');
+        if (!statusElement) {
+            statusElement = document.createElement('div');
+            statusElement.dataset.summaryStatus = 'true';
+            statusElement.className = 'mt-2 small';
+            this.currentSummaryContainer.appendChild(statusElement);
+        }
+        const text = typeof message === 'string' ? message.trim() : '';
+        statusElement.textContent = text;
+        statusElement.hidden = text.length === 0;
+        statusElement.classList.toggle('text-danger', Boolean(isError) && text.length > 0);
+        statusElement.classList.toggle('text-muted', !Boolean(isError) && text.length > 0);
+        if (text.length === 0) {
+            statusElement.classList.remove('text-danger');
+            statusElement.classList.add('text-muted');
+        }
+    }
+
+    renderCurrentSummary(summary, options = {}) {
+        if (!this.currentSummaryContainer) {
+            return false;
+        }
+        const startTimeText = this.formatTime(summary.startTime);
+        const endTimeText = this.formatTime(summary.endTime);
+        const breakText = TimeUtils.formatMinutesToTime(summary.breakMinutes ?? 0);
+        const workingText = TimeUtils.formatMinutesToTime(summary.workingMinutes ?? 0);
+        const workingDaysText = this.joinDayLabels(summary.workingDays);
+        const holidayDaysText = this.joinDayLabels(summary.holidayDays);
+        const periodText = summary.hasApprovedRequest
+            ? this.formatDateRange(summary.patternStartDate, summary.patternEndDate)
+            : '指定なし（標準勤務）';
+        const headline = summary.upcoming ? '承認済みの次回勤務パターン' : '現在の勤務時間';
+
+        this.currentSummaryContainer.innerHTML = `
+            <div class="fw-semibold text-body">${this.escapeHtml(headline)}</div>
+            <div class="mt-1">定時: <span class="fw-semibold text-body">${this.escapeHtml(startTimeText)} 〜 ${this.escapeHtml(endTimeText)}</span></div>
+            <div>休憩: <span class="fw-semibold text-body">${this.escapeHtml(breakText)}</span> / 実働: <span class="fw-semibold text-body">${this.escapeHtml(workingText)}</span></div>
+            <div>勤務日: <span class="text-body">${this.escapeHtml(workingDaysText)}</span></div>
+            <div>休日: <span class="text-body">${this.escapeHtml(holidayDaysText)}</span></div>
+            <div class="mt-1">適用期間: <span class="text-body">${this.escapeHtml(periodText)}</span></div>
+            <div class="mt-2 small text-muted" data-summary-status hidden></div>
+        `.trim();
+        this.summaryLoaded = Boolean(options && options.isFetched);
+        this.lastSummarySignature = this.generateSummarySignature(summary);
+        this.lastSummaryData = summary;
+        if (!options || !options.preserveStatus) {
+            this.setSummaryMessage('');
+        }
+        return Boolean(summary.upcoming);
+    }
+
+    renderDefaultSummary() {
+        const defaultSummary = this.buildDefaultSummary();
+        this.renderCurrentSummary(defaultSummary, { preserveStatus: true, isFetched: false });
+    }
+
+    buildDefaultSummary() {
+        return {
+            startTime: '09:00',
+            endTime: '18:00',
+            breakMinutes: 60,
+            workingMinutes: 480,
+            workingDays: ['月', '火', '水', '木', '金'],
+            holidayDays: ['土', '日', '祝'],
+            hasApprovedRequest: false,
+            upcoming: false,
+            patternStartDate: null,
+            patternEndDate: null
+        };
+    }
+
+    generateSummarySignature(summary) {
+        if (!summary) {
+            return '';
+        }
+        const normalizeArray = (value) => {
+            if (!Array.isArray(value) || value.length === 0) {
+                return '';
+            }
+            return value.join('|');
+        };
+        const normalized = {
+            startTime: this.formatTime(summary.startTime),
+            endTime: this.formatTime(summary.endTime),
+            breakDisplay: TimeUtils.formatMinutesToTime(summary.breakMinutes ?? 0),
+            workingDisplay: TimeUtils.formatMinutesToTime(summary.workingMinutes ?? 0),
+            workingDays: normalizeArray(summary.workingDays),
+            holidayDays: normalizeArray(summary.holidayDays),
+            periodStart: this.formatDate(summary.patternStartDate),
+            periodEnd: this.formatDate(summary.patternEndDate),
+            hasApprovedRequest: Boolean(summary.hasApprovedRequest),
+            upcoming: Boolean(summary.upcoming)
+        };
+        try {
+            return JSON.stringify(normalized);
+        } catch (error) {
+            console.warn('勤務パターンシグネチャ生成失敗:', error);
+            return '';
+        }
+    }
+
+    joinDayLabels(list) {
+        if (!Array.isArray(list) || list.length === 0) {
+            return 'なし';
+        }
+        return list.join('・');
+    }
+
     translateStatus(status) {
         switch (status) {
             case 'PENDING':
@@ -701,10 +1230,45 @@ class WorkPatternScreen {
         return `${startText} 〜 ${endText}`;
     }
 
+    isPeriodLessThanWeek(startDate, endDate) {
+        if (!startDate || !endDate) {
+            return false;
+        }
+        
+        try {
+            const start = new Date(startDate);
+            const end = new Date(endDate);
+            
+            if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+                return false;
+            }
+            
+            // 終了日が開始日より前の場合は無効
+            if (end < start) {
+                return false;
+            }
+            
+            // 日数の差を計算（終了日も含めるため+1）
+            const diffTime = end.getTime() - start.getTime();
+            const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
+            
+            return diffDays < 7;
+        } catch (error) {
+            console.warn('期間の計算に失敗:', error);
+            return false;
+        }
+    }
+
     formatSelectedDays(entry) {
         if (!entry) {
             return '-';
         }
+        
+        // 1週間未満の申請の場合は曜日を空白で表示
+        if (this.isPeriodLessThanWeek(entry.startDate, entry.endDate)) {
+            return '';
+        }
+        
         const mapping = [
             { key: 'applyMonday', label: '月' },
             { key: 'applyTuesday', label: '火' },
@@ -750,10 +1314,11 @@ class WorkPatternScreen {
     }
 
     formatMinutes(minutes) {
-        if (typeof minutes !== 'number' || Number.isNaN(minutes)) {
+        const normalized = this.normalizeMinutesField(minutes);
+        if (!Number.isFinite(normalized)) {
             return '-';
         }
-        return TimeUtils.formatMinutesToTime(minutes);
+        return TimeUtils.formatMinutesToTime(normalized);
     }
 
     formatDateTime(value) {

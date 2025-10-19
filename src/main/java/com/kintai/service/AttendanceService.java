@@ -632,13 +632,20 @@ public class AttendanceService {
         if (record == null) {
             return null;
         }
+
+        if (workPatternChangeRequestService != null) {
+            try {
+                workPatternChangeRequestService.applyPatternMetrics(record);
+            } catch (Exception ex) {
+                // ignore pattern refresh errors for read responses
+            }
+        }
+
         LocalDateTime clockInTime = record.getClockInTime();
         LocalDateTime clockOutTime = record.getClockOutTime();
 
         Integer breakMinutes = null;
         Integer workingMinutes = null;
-        Integer lateMinutes = record.getLateMinutes();
-        Integer earlyLeaveMinutes = record.getEarlyLeaveMinutes();
         Integer overtimeMinutes = null;
         Integer nightShiftMinutes = null;
 
@@ -659,18 +666,42 @@ public class AttendanceService {
             }
         }
 
+        int lateMinutesValue = safeInt(record.getLateMinutes());
+        int earlyLeaveMinutesValue = safeInt(record.getEarlyLeaveMinutes());
+        int overtimeForStatus = overtimeMinutes != null ? overtimeMinutes : safeInt(record.getOvertimeMinutes());
+        int nightForStatus = nightShiftMinutes != null ? nightShiftMinutes : safeInt(record.getNightShiftMinutes());
+
+        AttendanceStatus attendanceStatus = record.getAttendanceStatus();
+        if (workPatternChangeRequestService != null) {
+            attendanceStatus = workPatternChangeRequestService.resolveAttendanceStatus(
+                    lateMinutesValue,
+                    earlyLeaveMinutesValue,
+                    overtimeForStatus,
+                    nightForStatus
+            );
+        }
+        if (attendanceStatus == null) {
+            attendanceStatus = resolveStatusFallback(
+                    lateMinutesValue,
+                    earlyLeaveMinutesValue,
+                    overtimeForStatus,
+                    nightForStatus
+            );
+        }
+        record.setAttendanceStatus(attendanceStatus);
+
         ClockResponse.ClockData clockData = new ClockResponse.ClockData(
                 record.getAttendanceId(),
                 record.getAttendanceDate(),
                 record.getClockInTime(),
                 record.getClockOutTime(),
-                lateMinutes,
-                earlyLeaveMinutes,
+                lateMinutesValue,
+                earlyLeaveMinutesValue,
                 overtimeMinutes,
                 nightShiftMinutes,
                 breakMinutes,
                 workingMinutes,
-                record.getAttendanceStatus() != null ? record.getAttendanceStatus().name() : null,
+                attendanceStatus != null ? attendanceStatus.name() : null,
                 record.getAttendanceFixedFlag()
         );
         clockData.setHasApprovedAdjustment(hasApprovedAdjustment(record));

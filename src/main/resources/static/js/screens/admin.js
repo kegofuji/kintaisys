@@ -150,6 +150,12 @@ class AdminScreen {
         if (!entry) {
             return '-';
         }
+        
+        // 期間が1週間未満の場合は空白を返す
+        if (this.isPeriodLessThanWeek(entry.startDate, entry.endDate)) {
+            return '';
+        }
+        
         const mapping = [
             { key: 'applyMonday', label: '月' },
             { key: 'applyTuesday', label: '火' },
@@ -171,6 +177,38 @@ class AdminScreen {
             selected.push('祝');
         }
         return selected.length > 0 ? selected.join('・') : '-';
+    }
+    
+    /**
+     * 期間が1週間未満かどうかを判定
+     */
+    isPeriodLessThanWeek(startDate, endDate) {
+        if (!startDate || !endDate) {
+            return false;
+        }
+        
+        try {
+            const start = new Date(startDate);
+            const end = new Date(endDate);
+            
+            if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+                return false;
+            }
+            
+            // 終了日が開始日より前の場合は無効
+            if (end < start) {
+                return false;
+            }
+            
+            // 日数の差を計算（終了日も含めるため+1）
+            const diffTime = end.getTime() - start.getTime();
+            const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
+            
+            return diffDays < 7;
+        } catch (error) {
+            console.warn('期間の計算に失敗:', error);
+            return false;
+        }
     }
 
     /**
