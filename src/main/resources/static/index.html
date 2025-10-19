@@ -173,6 +173,18 @@
         .work-pattern-holiday-btn {
             min-width: 46px;
         }
+
+        .work-pattern-holiday-btn {
+            pointer-events: none;
+            cursor: default;
+        }
+
+        .work-pattern-holiday-btn.active,
+        .work-pattern-holiday-btn[aria-pressed="true"] {
+            color: #dc3545;
+            border-color: #dc3545;
+            background-color: #fff;
+        }
         
         .badge-sm {
             font-size: 0.7em;
@@ -789,18 +801,36 @@
                                 </div>
                             </div>
                             <div class="mb-3">
-                                    <label class="form-label">勤務日 <span class="text-danger">*</span></label>
-                                <div id="workPatternDayGroup" class="btn-group flex-wrap gap-2" role="group" aria-label="勤務日">
-                                    <button type="button" class="btn btn-outline-secondary work-pattern-day-btn" data-day="MONDAY" aria-pressed="false">月</button>
-                                    <button type="button" class="btn btn-outline-secondary work-pattern-day-btn" data-day="TUESDAY" aria-pressed="false">火</button>
-                                    <button type="button" class="btn btn-outline-secondary work-pattern-day-btn" data-day="WEDNESDAY" aria-pressed="false">水</button>
-                                    <button type="button" class="btn btn-outline-secondary work-pattern-day-btn" data-day="THURSDAY" aria-pressed="false">木</button>
-                                    <button type="button" class="btn btn-outline-secondary work-pattern-day-btn" data-day="FRIDAY" aria-pressed="false">金</button>
-                                    <button type="button" class="btn btn-outline-secondary work-pattern-day-btn" data-day="SATURDAY" aria-pressed="false">土</button>
-                                    <button type="button" class="btn btn-outline-secondary work-pattern-day-btn" data-day="SUNDAY" aria-pressed="false">日</button>
-                                    <button type="button" class="btn btn-outline-secondary work-pattern-day-btn" data-day="HOLIDAY" aria-pressed="false">祝</button>
+                                <div class="row g-3 align-items-start">
+                                    <div class="col-lg-6">
+                                        <label class="form-label d-block">勤務日 <span class="text-danger">*</span></label>
+                                        <div id="workPatternDayGroup" class="btn-group work-pattern-btn-group flex-wrap" role="group" aria-label="勤務日">
+                                            <button type="button" class="btn btn-outline-secondary work-pattern-day-btn" data-day="MONDAY" aria-pressed="false">月</button>
+                                            <button type="button" class="btn btn-outline-secondary work-pattern-day-btn" data-day="TUESDAY" aria-pressed="false">火</button>
+                                            <button type="button" class="btn btn-outline-secondary work-pattern-day-btn" data-day="WEDNESDAY" aria-pressed="false">水</button>
+                                            <button type="button" class="btn btn-outline-secondary work-pattern-day-btn" data-day="THURSDAY" aria-pressed="false">木</button>
+                                            <button type="button" class="btn btn-outline-secondary work-pattern-day-btn" data-day="FRIDAY" aria-pressed="false">金</button>
+                                            <button type="button" class="btn btn-outline-secondary work-pattern-day-btn" data-day="SATURDAY" aria-pressed="false">土</button>
+                                            <button type="button" class="btn btn-outline-secondary work-pattern-day-btn" data-day="SUNDAY" aria-pressed="false">日</button>
+                                            <button type="button" class="btn btn-outline-secondary work-pattern-day-btn" data-day="HOLIDAY" aria-pressed="false">祝</button>
+                                        </div>
+                                        <div class="form-text" id="workPatternDayHelp">勤務日は5日選択してください。</div>
+                                    </div>
+                                    <div class="col-lg-6">
+                                        <label class="form-label d-block">休日</label>
+                                        <div id="workPatternHolidayGroup" class="btn-group work-pattern-btn-group flex-wrap" role="group" aria-label="休日">
+                                            <button type="button" class="btn btn-outline-secondary work-pattern-holiday-btn" data-day="MONDAY" aria-pressed="false" aria-disabled="true" tabindex="-1">月</button>
+                                            <button type="button" class="btn btn-outline-secondary work-pattern-holiday-btn" data-day="TUESDAY" aria-pressed="false" aria-disabled="true" tabindex="-1">火</button>
+                                            <button type="button" class="btn btn-outline-secondary work-pattern-holiday-btn" data-day="WEDNESDAY" aria-pressed="false" aria-disabled="true" tabindex="-1">水</button>
+                                            <button type="button" class="btn btn-outline-secondary work-pattern-holiday-btn" data-day="THURSDAY" aria-pressed="false" aria-disabled="true" tabindex="-1">木</button>
+                                            <button type="button" class="btn btn-outline-secondary work-pattern-holiday-btn" data-day="FRIDAY" aria-pressed="false" aria-disabled="true" tabindex="-1">金</button>
+                                            <button type="button" class="btn btn-outline-secondary work-pattern-holiday-btn" data-day="SATURDAY" aria-pressed="false" aria-disabled="true" tabindex="-1">土</button>
+                                            <button type="button" class="btn btn-outline-secondary work-pattern-holiday-btn" data-day="SUNDAY" aria-pressed="false" aria-disabled="true" tabindex="-1">日</button>
+                                            <button type="button" class="btn btn-outline-secondary work-pattern-holiday-btn" data-day="HOLIDAY" aria-pressed="false" aria-disabled="true" tabindex="-1">祝</button>
+                                        </div>
+                                        <div class="form-text">勤務日に含まれない曜日が自動で休日に設定されます。</div>
+                                    </div>
                                 </div>
-                                <div class="form-text">複数選択できます。祝日も勤務する場合は「祝」を選択してください。</div>
                             </div>
                             <div class="row g-3 mt-0 mt-md-1">
                                 <div class="col-md-6">

@@ -2,6 +2,18 @@
  * 勤務時間変更申請画面モジュール
  */
 (function (global) {
+const WORK_PATTERN_DAY_KEYS = [
+    'MONDAY',
+    'TUESDAY',
+    'WEDNESDAY',
+    'THURSDAY',
+    'FRIDAY',
+    'SATURDAY',
+    'SUNDAY',
+    'HOLIDAY'
+];
+const DEFAULT_WORK_PATTERN_DAYS = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY'];
+
 class WorkPatternScreen {
     constructor() {
         this.form = null;
@@ -17,6 +29,8 @@ class WorkPatternScreen {
         this.refreshButton = null;
         this.tableBody = null;
         this.dayButtons = [];
+        this.holidayButtons = [];
+        this.dayHelpText = null;
         this.selectedDays = new Set();
         this.isSubmitting = false;
         this.initialized = false;
@@ -25,6 +39,8 @@ class WorkPatternScreen {
 
     init() {
         if (this.initialized) {
+            this.updateDaySelectionAvailability();
+            this.updateHolidayButtons();
             this.updateWorkingPreview();
             this.refreshRequests();
             return;
@@ -51,6 +67,8 @@ class WorkPatternScreen {
         this.refreshButton = document.getElementById('workPatternRefreshBtn');
         this.tableBody = document.getElementById('workPatternRequestTableBody');
         this.dayButtons = Array.from(document.querySelectorAll('.work-pattern-day-btn'));
+        this.holidayButtons = Array.from(document.querySelectorAll('.work-pattern-holiday-btn'));
+        this.dayHelpText = document.getElementById('workPatternDayHelp');
     }
 
     setupEventListeners() {
@@ -126,8 +144,9 @@ class WorkPatternScreen {
         if (this.reasonInput) {
             this.reasonInput.value = '';
         }
-        this.setDaySelection(['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY']);
+        this.setDaySelection(DEFAULT_WORK_PATTERN_DAYS);
         this.updateWorkingPreview();
+        this.updateDaySelectionAvailability();
     }
 
     async handleFormSubmit() {
@@ -157,6 +176,10 @@ class WorkPatternScreen {
 
         if (!this.selectedDays || this.selectedDays.size === 0) {
             this.showAlert('勤務日を少なくとも1つ選択してください。', 'warning');
+            return;
+        }
+        if (this.selectedDays.size !== 5) {
+            this.showAlert('勤務日は5日選択してください。', 'warning');
             return;
         }
 
@@ -319,17 +342,25 @@ class WorkPatternScreen {
         if (!button) {
             return;
         }
+        if (button.disabled) {
+            return;
+        }
         const dayKey = (button.dataset.day || '').toUpperCase();
-        if (!dayKey) {
+        if (!dayKey || !WORK_PATTERN_DAY_KEYS.includes(dayKey)) {
             return;
         }
         if (this.selectedDays.has(dayKey)) {
             this.selectedDays.delete(dayKey);
             this.updateDayButtonState(button, false);
         } else {
+            if (this.selectedDays.size >= 5) {
+                this.showAlert('勤務日は5日まで選択できます。', 'warning');
+                return;
+            }
             this.selectedDays.add(dayKey);
             this.updateDayButtonState(button, true);
         }
+        this.updateHolidayButtons();
     }
 
     updateDayButtonState(button, selected) {
@@ -347,7 +378,13 @@ class WorkPatternScreen {
         if (Array.isArray(days)) {
             days.forEach((day) => {
                 if (typeof day === 'string' && day.trim()) {
-                    this.selectedDays.add(day.trim().toUpperCase());
+                    if (this.selectedDays.size >= 5) {
+                        return;
+                    }
+                    const key = day.trim().toUpperCase();
+                    if (WORK_PATTERN_DAY_KEYS.includes(key)) {
+                        this.selectedDays.add(key);
+                    }
                 }
             });
         }
@@ -358,6 +395,84 @@ class WorkPatternScreen {
                 this.updateDayButtonState(button, this.selectedDays.has(key));
             });
         }
+        this.updateHolidayButtons();
+    }
+
+    updateHolidayButtons() {
+        if (!Array.isArray(this.holidayButtons)) {
+            return;
+        }
+        this.holidayButtons.forEach((button) => {
+            if (!button) {
+                return;
+            }
+            const key = (button.dataset.day || '').toUpperCase();
+            if (!key || !WORK_PATTERN_DAY_KEYS.includes(key)) {
+                return;
+            }
+            const isHoliday = !this.selectedDays.has(key);
+            button.classList.toggle('active', isHoliday);
+            button.classList.toggle('btn-outline-danger', isHoliday);
+            button.classList.toggle('btn-outline-secondary', !isHoliday);
+            button.setAttribute('aria-pressed', isHoliday ? 'true' : 'false');
+        });
+    }
+
+    updateDaySelectionAvailability() {
+        if (this.selectedDays.size > 5) {
+            const trimmed = Array.from(this.selectedDays).slice(0, 5);
+            this.setDaySelection(trimmed);
+        }
+        const selectable = this.getRequestedPeriodLength() >= 7;
+        if (Array.isArray(this.dayButtons)) {
+            this.dayButtons.forEach((button) => {
+                if (!button) {
+                    return;
+                }
+                button.disabled = !selectable;
+                button.classList.toggle('disabled', !selectable);
+                button.setAttribute('aria-disabled', selectable ? 'false' : 'true');
+                button.tabIndex = selectable ? 0 : -1;
+            });
+        }
+        if (!selectable) {
+            this.setDaySelection(DEFAULT_WORK_PATTERN_DAYS);
+        } else {
+            this.updateHolidayButtons();
+        }
+        this.updateDaySelectionMessage(selectable);
+    }
+
+    updateDaySelectionMessage(selectable) {
+        if (!this.dayHelpText) {
+            return;
+        }
+        if (selectable) {
+            this.dayHelpText.textContent = '勤務日は5日選択してください。';
+        } else {
+            this.dayHelpText.textContent = '勤務日は5日選択してください。（申請期間が7日未満のため変更できません）';
+        }
+    }
+
+    getRequestedPeriodLength() {
+        if (!this.startDateInput || !this.endDateInput) {
+            return 0;
+        }
+        const startValue = this.startDateInput.value;
+        const endValue = this.endDateInput.value;
+        if (!startValue || !endValue) {
+            return 0;
+        }
+        const start = new Date(startValue);
+        const end = new Date(endValue);
+        if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+            return 0;
+        }
+        if (end < start) {
+            return 0;
+        }
+        const diff = end.getTime() - start.getTime();
+        return Math.floor(diff / (1000 * 60 * 60 * 24)) + 1;
     }
 
     toggleFormDisabled(disabled) {
@@ -379,6 +494,7 @@ class WorkPatternScreen {
         if (this.endDateInput.value && this.startDateInput.value && this.endDateInput.value < this.startDateInput.value) {
             this.endDateInput.value = this.startDateInput.value;
         }
+        this.updateDaySelectionAvailability();
         this.updateWorkingPreview();
     }
 

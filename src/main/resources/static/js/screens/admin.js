@@ -1728,9 +1728,6 @@ class AdminScreen {
         const actionText = isApprove ? '承認' : '却下';
 
         const buttons = this.getRowActionButtons(triggerButton);
-
-        let confirmOptions;
-
         if (requestType === 'work-pattern') {
             const entry = this.workPatternRequestMap?.get(String(requestId));
             if (!entry) {
