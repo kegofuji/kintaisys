@@ -630,6 +630,7 @@ class AdminScreen {
         this.workPatternModalWorkingEl = document.getElementById('workPatternModalWorking');
         this.workPatternModalDaysEl = document.getElementById('workPatternModalDays');
         this.workPatternModalReasonTextEl = document.getElementById('workPatternModalReasonText');
+        this.workPatternModalConfirmMessageEl = document.getElementById('workPatternModalConfirmMessage');
     }
 
     /**
@@ -1984,6 +1985,10 @@ class AdminScreen {
 
         if (this.workPatternModalTitle) {
             this.workPatternModalTitle.textContent = `勤務時間変更申請の${isApprove ? '承認' : '却下'}`;
+        }
+
+        if (this.workPatternModalConfirmMessageEl) {
+            this.workPatternModalConfirmMessageEl.textContent = `${isApprove ? '承認' : '却下'}してよろしいですか？`;
         }
 
         this.populateWorkPatternModal(entry);
