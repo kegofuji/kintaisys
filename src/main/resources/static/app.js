@@ -316,7 +316,7 @@ async function handleClockIn() {
     } finally {
         // ボタンの状態を復元
         if (clockInBtn) {
-            clockInBtn.textContent = '出勤打刻';
+            clockInBtn.textContent = '出勤';
             // updateTodayAttendance()で適切な状態に更新される
         }
     }
@@ -382,7 +382,7 @@ async function handleClockOut() {
     } finally {
         // ボタンの状態を復元
         if (clockOutBtn) {
-            clockOutBtn.textContent = '退勤打刻';
+            clockOutBtn.textContent = '退勤';
             // updateTodayAttendance()で適切な状態に更新される
         }
     }
@@ -1821,7 +1821,7 @@ function updateButtonStates(record, clockInBtn, clockOutBtn) {
         clockInBtn.disabled = false;
         clockInBtn.classList.remove('btn-secondary');
         clockInBtn.classList.add('btn-success');
-        clockInBtn.textContent = '出勤打刻';
+        clockInBtn.textContent = '出勤';
     } else {
         clockInBtn.disabled = true;
         clockInBtn.classList.remove('btn-success');
@@ -1834,12 +1834,12 @@ function updateButtonStates(record, clockInBtn, clockOutBtn) {
         clockOutBtn.disabled = true;
         clockOutBtn.classList.remove('btn-danger');
         clockOutBtn.classList.add('btn-secondary');
-        clockOutBtn.textContent = record && record.clockOutTime ? '退勤済' : '退勤打刻';
+        clockOutBtn.textContent = record && record.clockOutTime ? '退勤済' : '退勤';
     } else {
         clockOutBtn.disabled = false;
         clockOutBtn.classList.remove('btn-secondary');
         clockOutBtn.classList.add('btn-danger');
-        clockOutBtn.textContent = '退勤打刻';
+        clockOutBtn.textContent = '退勤';
     }
 }
 

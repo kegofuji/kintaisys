@@ -33,9 +33,16 @@
             color: white;
         }
         .clock-btn {
-            font-size: 1.2rem;
+            font-size: 20pt !important;
             padding: 15px 30px;
             margin: 10px;
+        }
+        #currentDate, #currentTime {
+            font-size: 1.8rem !important;
+            color: #000 !important;
+        }
+        .card.bg-light .card-title {
+            font-size: 1.3rem !important;
         }
         .status-badge {
             font-size: 0.9rem;
@@ -331,7 +338,7 @@
                                         <div class="card bg-light">
                                             <div class="card-body">
                                                 <h6 class="card-title">今日の日付</h6>
-                                                <div id="currentDate" class="h4 text-primary mb-0">2025/9/19(金)</div>
+                                                <div id="currentDate" class="h4 mb-0">2025/9/19(金)</div>
                                             </div>
                                         </div>
                                     </div>
@@ -339,7 +346,7 @@
                                         <div class="card bg-light">
                                             <div class="card-body">
                                                 <h6 class="card-title">現在時刻</h6>
-                                                <div id="currentTime" class="h4 text-success mb-0">14:30:25</div>
+                                                <div id="currentTime" class="h4 mb-0">14:30:25</div>
                                             </div>
                                         </div>
                                     </div>
@@ -348,10 +355,10 @@
                                 <!-- 打刻ボタン -->
                                 <div class="mb-4">
                                     <button id="clockInBtn" class="btn btn-success btn-lg me-3 clock-btn">
-                                        出勤打刻
+                                        出勤
                                     </button>
                                     <button id="clockOutBtn" class="btn btn-danger btn-lg clock-btn">
-                                        退勤打刻
+                                        退勤
                                     </button>
                                 </div>
                                 

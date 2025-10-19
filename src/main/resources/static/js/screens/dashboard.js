@@ -682,7 +682,7 @@ class DashboardScreen {
             this.clockInBtn.className = 'btn btn-secondary btn-lg me-3 clock-btn';
             
             this.clockOutBtn.disabled = false;
-            this.clockOutBtn.innerHTML = '退勤打刻';
+            this.clockOutBtn.innerHTML = '退勤';
             this.clockOutBtn.className = 'btn btn-danger btn-lg clock-btn';
         } else if (data && data.clockInTime && data.clockOutTime) {
             // 出勤済・退勤済の場合
@@ -696,11 +696,11 @@ class DashboardScreen {
         } else {
             // 未出勤の場合
             this.clockInBtn.disabled = false;
-            this.clockInBtn.innerHTML = '出勤打刻';
+            this.clockInBtn.innerHTML = '出勤';
             this.clockInBtn.className = 'btn btn-success btn-lg me-3 clock-btn';
             
             this.clockOutBtn.disabled = true;
-            this.clockOutBtn.innerHTML = '退勤打刻';
+            this.clockOutBtn.innerHTML = '退勤';
             this.clockOutBtn.className = 'btn btn-secondary btn-lg clock-btn';
         }
     }
