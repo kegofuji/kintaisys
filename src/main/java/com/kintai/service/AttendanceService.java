@@ -46,6 +46,9 @@ public class AttendanceService {
     
     @Autowired
     private TimeCalculator timeCalculator;
+
+    @Autowired
+    private WorkPatternChangeRequestService workPatternChangeRequestService;
     
     
     /**
@@ -102,13 +105,27 @@ public class AttendanceService {
                     breakMinutes
             );
 
+            if (workPatternChangeRequestService != null) {
+                workPatternChangeRequestService.applyPatternMetrics(existingRecord);
+                int lateMinutes = safeInt(existingRecord.getLateMinutes());
+                int earlyLeaveMinutes = safeInt(existingRecord.getEarlyLeaveMinutes());
+                existingRecord.setAttendanceStatus(
+                        workPatternChangeRequestService.resolveAttendanceStatus(
+                                lateMinutes,
+                                earlyLeaveMinutes,
+                                overtimeMinutes,
+                                nightShiftMinutes
+                        )
+                );
+            }
+
             ClockResponse.ClockData data = new ClockResponse.ClockData(
                     existingRecord.getAttendanceId(),
                     existingRecord.getAttendanceDate(),
                     existingRecord.getClockInTime(),
                     existingRecord.getClockOutTime(),
-                    null,
-                    null,
+                    existingRecord.getLateMinutes(),
+                    existingRecord.getEarlyLeaveMinutes(),
                     overtimeMinutes,
                     nightShiftMinutes,
                     breakMinutes,
@@ -221,16 +238,39 @@ public class AttendanceService {
                             attendanceRecord.getClockOutTime(),
                             breakMinutes
                     );
+                    int overtimeMinutes = timeCalculator.calculateOvertimeMinutes(workingMinutes);
+                    int nightShiftMinutes = timeCalculator.calculateNightShiftMinutesWithBreak(
+                            attendanceRecord.getClockInTime(),
+                            attendanceRecord.getClockOutTime(),
+                            breakMinutes
+                    );
+
+                    attendanceRecord.setOvertimeMinutes(overtimeMinutes);
+                    attendanceRecord.setNightShiftMinutes(nightShiftMinutes);
+
+                    if (workPatternChangeRequestService != null) {
+                        workPatternChangeRequestService.applyPatternMetrics(attendanceRecord);
+                        int lateMinutes = safeInt(attendanceRecord.getLateMinutes());
+                        int earlyLeaveMinutes = safeInt(attendanceRecord.getEarlyLeaveMinutes());
+                        attendanceRecord.setAttendanceStatus(
+                                workPatternChangeRequestService.resolveAttendanceStatus(
+                                        lateMinutes,
+                                        earlyLeaveMinutes,
+                                        overtimeMinutes,
+                                        nightShiftMinutes
+                                )
+                        );
+                    }
 
                     ClockResponse.ClockData data = new ClockResponse.ClockData(
                             attendanceRecord.getAttendanceId(),
                             attendanceRecord.getAttendanceDate(),
                             attendanceRecord.getClockInTime(),
                             attendanceRecord.getClockOutTime(),
-                            null,
-                            null,
-                            null,
-                            attendanceRecord.getNightShiftMinutes(),
+                            attendanceRecord.getLateMinutes(),
+                            attendanceRecord.getEarlyLeaveMinutes(),
+                            overtimeMinutes,
+                            nightShiftMinutes,
                             breakMinutes,
                             workingMinutes,
                             attendanceRecord.getAttendanceStatus() != null ? attendanceRecord.getAttendanceStatus().name() : null,
@@ -254,8 +294,6 @@ public class AttendanceService {
 
                 int breakMinutes = timeCalculator.resolveBreakMinutes(clockInTime, now, attendanceRecord.getBreakMinutes());
                 attendanceRecord.setBreakMinutes(breakMinutes);
-                attendanceRecord.setLateMinutes(0);
-                attendanceRecord.setEarlyLeaveMinutes(0);
 
                 int workingMinutes = timeCalculator.calculateWorkingMinutes(clockInTime, now, breakMinutes);
                 int overtimeMinutes = timeCalculator.calculateOvertimeMinutes(workingMinutes);
@@ -264,6 +302,10 @@ public class AttendanceService {
                 // 深夜勤務時間計算
                 int nightShiftMinutes = timeCalculator.calculateNightShiftMinutesWithBreak(clockInTime, now, breakMinutes);
                 attendanceRecord.setNightShiftMinutes(nightShiftMinutes);
+
+                if (workPatternChangeRequestService != null) {
+                    workPatternChangeRequestService.applyPatternMetrics(attendanceRecord);
+                }
                 
                 // 8. 勤怠ステータス更新
                 updateAttendanceStatus(attendanceRecord, overtimeMinutes, nightShiftMinutes);
@@ -360,6 +402,9 @@ public class AttendanceService {
         record.setBreakMinutes(sanitizedBreak);
 
         timeCalculator.calculateAttendanceMetrics(record);
+        if (workPatternChangeRequestService != null) {
+            workPatternChangeRequestService.applyPatternMetrics(record);
+        }
         int overtimeMinutes = safeInt(record.getOvertimeMinutes());
         int nightShiftMinutes = safeInt(record.getNightShiftMinutes());
         updateAttendanceStatus(record, overtimeMinutes, nightShiftMinutes);
@@ -382,14 +427,24 @@ public class AttendanceService {
         if (record == null) {
             return;
         }
-
-        if (nightShiftMinutes > 0) {
-            record.setAttendanceStatus(AttendanceStatus.NIGHT_SHIFT);
-        } else if (overtimeMinutes > 0) {
-            record.setAttendanceStatus(AttendanceStatus.OVERTIME);
-        } else {
-            record.setAttendanceStatus(AttendanceStatus.NORMAL);
+        if (record.getAttendanceStatus() == AttendanceStatus.HOLIDAY) {
+            return;
         }
+        int lateMinutes = safeInt(record.getLateMinutes());
+        int earlyLeaveMinutes = safeInt(record.getEarlyLeaveMinutes());
+
+        AttendanceStatus status;
+        if (workPatternChangeRequestService != null) {
+            status = workPatternChangeRequestService.resolveAttendanceStatus(
+                    lateMinutes,
+                    earlyLeaveMinutes,
+                    overtimeMinutes,
+                    nightShiftMinutes
+            );
+        } else {
+            status = resolveStatusFallback(lateMinutes, earlyLeaveMinutes, overtimeMinutes, nightShiftMinutes);
+        }
+        record.setAttendanceStatus(status);
     }
     
     /**
@@ -582,8 +637,8 @@ public class AttendanceService {
 
         Integer breakMinutes = null;
         Integer workingMinutes = null;
-        Integer lateMinutes = null;
-        Integer earlyLeaveMinutes = null;
+        Integer lateMinutes = record.getLateMinutes();
+        Integer earlyLeaveMinutes = record.getEarlyLeaveMinutes();
         Integer overtimeMinutes = null;
         Integer nightShiftMinutes = null;
 
@@ -661,6 +716,25 @@ public class AttendanceService {
             // セッション情報の取得に失敗した場合は無視
             // ログ出力は行わない（認証エラーではないため）
         }
+    }
+
+    private AttendanceStatus resolveStatusFallback(int lateMinutes, int earlyLeaveMinutes, int overtimeMinutes, int nightShiftMinutes) {
+        if (lateMinutes > 0 && earlyLeaveMinutes > 0) {
+            return AttendanceStatus.LATE_AND_EARLY_LEAVE;
+        }
+        if (lateMinutes > 0) {
+            return AttendanceStatus.LATE;
+        }
+        if (earlyLeaveMinutes > 0) {
+            return AttendanceStatus.EARLY_LEAVE;
+        }
+        if (nightShiftMinutes > 0) {
+            return AttendanceStatus.NIGHT_SHIFT;
+        }
+        if (overtimeMinutes > 0) {
+            return AttendanceStatus.OVERTIME;
+        }
+        return AttendanceStatus.NORMAL;
     }
 
     private int safeInt(Integer value) {

@@ -21,6 +21,7 @@ const adminVacationManagementNavItem = document.getElementById('adminVacationMan
 const adminEmployeesNavItem = document.getElementById('adminEmployeesNavItem');
 const adminAttendanceNavItem = document.getElementById('adminAttendanceNavItem');
 const adminApprovalsNavItem = document.getElementById('adminApprovalsNavItem');
+const adminWorkPatternNavItem = document.getElementById('adminWorkPatternNavItem');
 const adminReportsNavItem = document.getElementById('adminReportsNavItem');
 const logoutBtn = document.getElementById('logoutBtn');
 const vacationForm = document.getElementById('vacationForm');
@@ -64,6 +65,24 @@ function formatTimeDisplay(isoString) {
     }
 
     return '--:--';
+}
+
+function translateAttendanceStatus(status) {
+    if (!status) {
+        return '';
+    }
+    const mapping = {
+        NORMAL: '通常',
+        LATE: '遅刻',
+        EARLY_LEAVE: '早退',
+        LATE_AND_EARLY_LEAVE: '遅刻・早退',
+        OVERTIME: '残業',
+        NIGHT_SHIFT: '深夜勤務',
+        HOLIDAY: '休日',
+        ABSENT: '欠勤'
+    };
+    const key = status.toString().toUpperCase();
+    return mapping[key] || '';
 }
 
 // 初期化
@@ -499,27 +518,31 @@ function displayAttendanceHistory(data) {
             breakDisplay = TimeUtils.formatMinutesToTime(record.breakMinutes);
         }
         
-        // 遅刻・早退は空欄とし、残業と深夜のみ値を表示する
+        const lateMinutes = Number(record.lateMinutes ?? 0);
+        const earlyLeaveMinutes = Number(record.earlyLeaveMinutes ?? 0);
         const nightWorkMinutes = record.clockInTime && record.clockOutTime
             ? ((record.nightWorkMinutes ?? record.nightShiftMinutes) || 0)
             : 0;
         const overtimeMinutes = record.clockInTime && record.clockOutTime
             ? ((record.overtimeMinutes ?? 0))
             : null;
-        const lateDisplay = '';
-        const earlyLeaveDisplay = '';
+        const lateDisplay = lateMinutes > 0 ? formatMinutesToTime(lateMinutes) : '';
+        const earlyLeaveDisplay = earlyLeaveMinutes > 0 ? formatMinutesToTime(earlyLeaveMinutes) : '';
         const overtimeDisplay = record.clockInTime && record.clockOutTime && overtimeMinutes && overtimeMinutes > 0
             ? formatMinutesToTime(overtimeMinutes)
             : '';
         const nightWorkDisplay = nightWorkMinutes > 0 ? formatMinutesToTime(nightWorkMinutes) : '';
         
         // ステータス表示
-        let statusText = '出勤前';
-        
-        if (record.clockInTime && !record.clockOutTime) {
-            statusText = '出勤中';
-        } else if (record.clockInTime && record.clockOutTime) {
-            statusText = '退勤済';
+        let statusText = translateAttendanceStatus(record.attendanceStatus);
+        if (!statusText) {
+            if (record.clockInTime && !record.clockOutTime) {
+                statusText = '出勤中';
+            } else if (record.clockInTime && record.clockOutTime) {
+                statusText = '退勤済';
+            } else {
+                statusText = '出勤前';
+            }
         }
         
         row.innerHTML = `
@@ -738,6 +761,7 @@ function setupNavigationListeners() {
     const historyNavLink = document.getElementById('historyNavLink');
     const vacationNavLink = document.getElementById('vacationNavLink');
     const adjustmentNavLink = document.getElementById('adjustmentNavLink');
+    const workPatternNavLink = document.getElementById('workPatternNavLink');
     
     // 管理者メニュー
     const adminMonthlySubmissionsNavLink = document.getElementById('adminMonthlySubmissionsNavLink');
@@ -745,6 +769,7 @@ function setupNavigationListeners() {
     const adminEmployeesNavLink = document.getElementById('adminEmployeesNavLink');
     const adminAttendanceNavLink = document.getElementById('adminAttendanceNavLink');
     const adminApprovalsNavLink = document.getElementById('adminApprovalsNavLink');
+    const adminWorkPatternNavLink = document.getElementById('adminWorkPatternNavLink');
     const adminReportsNavLink = document.getElementById('adminReportsNavLink');
     
     console.log('ナビゲーション要素の取得状況:', {
@@ -752,7 +777,8 @@ function setupNavigationListeners() {
         dashboardNavLink: !!dashboardNavLink,
         historyNavLink: !!historyNavLink,
         vacationNavLink: !!vacationNavLink,
-        adjustmentNavLink: !!adjustmentNavLink
+        adjustmentNavLink: !!adjustmentNavLink,
+        workPatternNavLink: !!workPatternNavLink
     });
     
     // イベントリスナー追加
@@ -826,6 +852,17 @@ function setupNavigationListeners() {
             });
         });
     }
+
+    if (workPatternNavLink) {
+        workPatternNavLink.addEventListener('click', (e) => {
+        console.log('勤務時間変更リンクがクリックされました');
+            handleNavigationClick(e, {
+                path: '/work-pattern',
+                fallbackScreenId: 'workPatternScreen',
+                fallbackActiveLink: workPatternNavLink
+            });
+        });
+    }
     
     // 管理者メニューのイベントリスナー
     if (adminMonthlySubmissionsNavLink) {
@@ -852,6 +889,22 @@ function setupNavigationListeners() {
                 fallbackInit: () => {
                     if (window.adminScreen) {
                         window.adminScreen.initVacationManagement();
+                    }
+                }
+            });
+        });
+    }
+
+    if (adminWorkPatternNavLink) {
+        adminWorkPatternNavLink.addEventListener('click', (e) => {
+        console.log('勤務時間変更（管理者）リンクがクリックされました');
+            handleNavigationClick(e, {
+                path: '/admin/work-pattern-change',
+                fallbackScreenId: 'adminWorkPatternScreen',
+                fallbackActiveLink: adminWorkPatternNavLink,
+                fallbackInit: () => {
+                    if (window.adminScreen) {
+                        window.adminScreen.initWorkPattern();
                     }
                 }
             });
@@ -1177,9 +1230,10 @@ function filterAttendanceTableByDate(dateString) {
             }
         }
 
-        // 遅刻・早退は空欄にし、残業と深夜のみ表示
-        const lateDisplay = '';
-        const earlyLeaveDisplay = '';
+        const lateMinutes = Number(attendance.lateMinutes ?? 0);
+        const earlyLeaveMinutes = Number(attendance.earlyLeaveMinutes ?? 0);
+        const lateDisplay = lateMinutes > 0 ? TimeUtils.formatMinutesToTime(lateMinutes) : '';
+        const earlyLeaveDisplay = earlyLeaveMinutes > 0 ? TimeUtils.formatMinutesToTime(earlyLeaveMinutes) : '';
         const overtimeMinutes = attendance.overtimeMinutes ?? 0;
         const overtimeDisplay = overtimeMinutes > 0
             ? TimeUtils.formatMinutesToTime(overtimeMinutes)
@@ -1188,11 +1242,15 @@ function filterAttendanceTableByDate(dateString) {
         const nightWorkDisplay = nightWorkValue > 0 ? TimeUtils.formatMinutesToTime(nightWorkValue) : '';
 
         // ステータス表示
-        let status = '未出勤';
-        if (attendance.clockInTime && !attendance.clockOutTime) {
-            status = '出勤中';
-        } else if (attendance.clockInTime && attendance.clockOutTime) {
-            status = '退勤済';
+        let status = translateAttendanceStatus(attendance.attendanceStatus);
+        if (!status) {
+            if (attendance.clockInTime && !attendance.clockOutTime) {
+                status = '出勤中';
+            } else if (attendance.clockInTime && attendance.clockOutTime) {
+                status = '退勤済';
+            } else {
+                status = '未出勤';
+            }
         }
 
         let breakDisplay = '';
@@ -1689,20 +1747,24 @@ async function checkAdminPermissions() {
                 const historyNavLink = document.getElementById('historyNavLink');
                 const vacationNavLink = document.getElementById('vacationNavLink');
                 const adjustmentNavLink = document.getElementById('adjustmentNavLink');
+                const workPatternNavLink = document.getElementById('workPatternNavLink');
                 dashboardNavLink?.parentElement && (dashboardNavLink.parentElement.style.display = 'none');
                 historyNavLink?.parentElement && (historyNavLink.parentElement.style.display = 'none');
                 vacationNavLink?.parentElement && (vacationNavLink.parentElement.style.display = 'none');
                 adjustmentNavLink?.parentElement && (adjustmentNavLink.parentElement.style.display = 'none');
+                workPatternNavLink?.parentElement && (workPatternNavLink.parentElement.style.display = 'none');
 
                 // 管理者: 勤怠管理は非表示のまま、申請承認は常時表示
                 if (adminAttendanceNavItem) adminAttendanceNavItem.style.display = 'none';
                 if (adminApprovalsNavItem) adminApprovalsNavItem.style.display = 'block';
+                if (adminWorkPatternNavItem) adminWorkPatternNavItem.style.display = 'block';
 
                 // 残りの管理メニューは表示（必要に応じて）
                 const adminMonthlySubmissionsNavItem = document.getElementById('adminMonthlySubmissionsNavItem');
                 if (adminMonthlySubmissionsNavItem) adminMonthlySubmissionsNavItem.style.display = 'block';
                 if (adminVacationManagementNavItem) adminVacationManagementNavItem.style.display = 'block';
                 if (adminEmployeesNavItem) adminEmployeesNavItem.style.display = 'block';
+                if (adminWorkPatternNavItem) adminWorkPatternNavItem.style.display = 'block';
                 if (adminReportsNavItem) adminReportsNavItem.style.display = 'block';
             } else {
                 isAdmin = false;
@@ -1713,16 +1775,19 @@ async function checkAdminPermissions() {
                 if (adminEmployeesNavItem) adminEmployeesNavItem.style.display = 'none';
                 if (adminAttendanceNavItem) adminAttendanceNavItem.style.display = 'none';
                 if (adminApprovalsNavItem) adminApprovalsNavItem.style.display = 'none';
+                if (adminWorkPatternNavItem) adminWorkPatternNavItem.style.display = 'none';
                 if (adminReportsNavItem) adminReportsNavItem.style.display = 'none';
                 // 一般メニューは表示
                 const dashboardNavLink = document.getElementById('dashboardNavLink');
                 const historyNavLink = document.getElementById('historyNavLink');
                 const vacationNavLink = document.getElementById('vacationNavLink');
                 const adjustmentNavLink = document.getElementById('adjustmentNavLink');
+                const workPatternNavLink = document.getElementById('workPatternNavLink');
                 dashboardNavLink?.parentElement && (dashboardNavLink.parentElement.style.display = 'block');
                 historyNavLink?.parentElement && (historyNavLink.parentElement.style.display = 'block');
                 vacationNavLink?.parentElement && (vacationNavLink.parentElement.style.display = 'block');
                 adjustmentNavLink?.parentElement && (adjustmentNavLink.parentElement.style.display = 'block');
+                workPatternNavLink?.parentElement && (workPatternNavLink.parentElement.style.display = 'block');
             }
         }
     } catch (error) {

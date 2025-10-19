@@ -11,6 +11,8 @@ class AdminScreen {
         this.searchAttendanceBtn = null;
         this.adminAttendanceTableBody = null;
         this.approvalsTableBody = null;
+        this.workPatternTableBody = null;
+        this.workPatternRefreshButton = null;
         this.reportEmployeeSelect = null;
         this.reportMonthSelect = null;
         this.generateReportBtn = null;
@@ -35,6 +37,24 @@ class AdminScreen {
         this.approvalConfirmReasonInput = null;
         this.approvalConfirmButton = null;
         this.approvalCancelButton = null;
+        this.workPatternRequestMap = new Map();
+        this.workPatternApprovalModalElement = null;
+        this.workPatternApprovalModal = null;
+        this.workPatternModalTitle = null;
+        this.workPatternModalReasonGroup = null;
+        this.workPatternModalReasonInput = null;
+        this.workPatternModalReasonFeedback = null;
+        this.workPatternModalConfirmButton = null;
+        this.workPatternModalMode = 'approve';
+        this.workPatternApprovalEntry = null;
+        this.workPatternApprovalButtons = null;
+        this.workPatternModalApplicantEl = null;
+        this.workPatternModalPeriodEl = null;
+        this.workPatternModalTimeEl = null;
+        this.workPatternModalBreakEl = null;
+        this.workPatternModalWorkingEl = null;
+        this.workPatternModalDaysEl = null;
+        this.workPatternModalReasonTextEl = null;
         this.employeeCache = null;
         this.selectedGrantEmployees = [];
         this.vacationManagementLoading = false;
@@ -112,9 +132,57 @@ class AdminScreen {
      */
     formatTime(value) {
         if (!value) return '--:--';
+        if (typeof value === 'string') {
+            const trimmed = value.trim();
+            if (/^\d{1,2}:\d{2}(:\d{2})?$/.test(trimmed)) {
+                const parts = trimmed.split(':');
+                const hours = parts[0].padStart(2, '0');
+                const minutes = parts[1].padStart(2, '0');
+                return `${hours}:${minutes}`;
+            }
+        }
         const date = new Date(value);
         if (Number.isNaN(date.getTime())) return '--:--';
         return date.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
+    }
+
+    formatWorkPatternDays(entry) {
+        if (!entry) {
+            return '-';
+        }
+        const mapping = [
+            { key: 'applyMonday', label: '月' },
+            { key: 'applyTuesday', label: '火' },
+            { key: 'applyWednesday', label: '水' },
+            { key: 'applyThursday', label: '木' },
+            { key: 'applyFriday', label: '金' },
+            { key: 'applySaturday', label: '土' },
+            { key: 'applySunday', label: '日' }
+        ];
+        const selected = [];
+        mapping.forEach(({ key, label }) => {
+            const value = entry[key];
+            if (value === true || value === 'true' || value === 1) {
+                selected.push(label);
+            }
+        });
+        const holidayValue = entry.applyHoliday;
+        if (holidayValue === true || holidayValue === 'true' || holidayValue === 1) {
+            selected.push('祝');
+        }
+        return selected.length > 0 ? selected.join('・') : '-';
+    }
+
+    /**
+     * HTMLエスケープ
+     */
+    escapeHtml(text) {
+        if (text == null) {
+            return '';
+        }
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
     }
 
     /**
@@ -130,6 +198,8 @@ class AdminScreen {
                 return '却下';
             case 'CANCELLED':
                 return '取消';
+            case 'HOLIDAY':
+                return '休日';
             default:
                 return status || '-';
         }
@@ -425,6 +495,17 @@ class AdminScreen {
     }
 
     /**
+     * 勤務時間変更管理画面初期化
+     */
+    initWorkPattern() {
+        this.stopVacationManagementPolling();
+        this.initializeWorkPatternElements();
+        this.setupApprovalEventListeners();
+        this.setupWorkPatternEventListeners();
+        this.loadWorkPatternRequests();
+    }
+
+    /**
      * 月末申請管理画面初期化
      */
     initMonthlySubmissions() {
@@ -485,6 +566,32 @@ class AdminScreen {
         this.approvalConfirmReasonInput = document.getElementById('adminApprovalReason');
         this.approvalConfirmButton = document.getElementById('adminApprovalConfirmButton');
         this.approvalCancelButton = document.getElementById('adminApprovalCancelButton');
+    }
+
+    /**
+     * 勤務時間変更関連要素の初期化
+     */
+    initializeWorkPatternElements() {
+        this.workPatternTableBody = document.getElementById('adminWorkPatternTableBody');
+        this.workPatternRefreshButton = document.getElementById('adminWorkPatternRefreshBtn');
+        this.workPatternApprovalModalElement = document.getElementById('workPatternApprovalModal');
+        if (this.workPatternApprovalModalElement && window.bootstrap?.Modal) {
+            this.workPatternApprovalModal = window.bootstrap.Modal.getOrCreateInstance(this.workPatternApprovalModalElement);
+        } else {
+            this.workPatternApprovalModal = null;
+        }
+        this.workPatternModalTitle = document.getElementById('workPatternApprovalModalTitle');
+        this.workPatternModalReasonGroup = document.getElementById('workPatternApprovalReasonGroup');
+        this.workPatternModalReasonInput = document.getElementById('workPatternApprovalReason');
+        this.workPatternModalReasonFeedback = document.getElementById('workPatternApprovalReasonFeedback');
+        this.workPatternModalConfirmButton = document.getElementById('workPatternApprovalConfirmButton');
+        this.workPatternModalApplicantEl = document.getElementById('workPatternModalApplicant');
+        this.workPatternModalPeriodEl = document.getElementById('workPatternModalPeriod');
+        this.workPatternModalTimeEl = document.getElementById('workPatternModalTime');
+        this.workPatternModalBreakEl = document.getElementById('workPatternModalBreak');
+        this.workPatternModalWorkingEl = document.getElementById('workPatternModalWorking');
+        this.workPatternModalDaysEl = document.getElementById('workPatternModalDays');
+        this.workPatternModalReasonTextEl = document.getElementById('workPatternModalReasonText');
     }
 
     /**
@@ -603,6 +710,24 @@ class AdminScreen {
         };
 
         document.addEventListener('click', this.approvalEventListener);
+    }
+
+    /**
+     * 勤務時間変更イベントリスナー設定
+     */
+    setupWorkPatternEventListeners() {
+        if (this.workPatternRefreshButton && !this.workPatternRefreshButton.dataset.bound) {
+            this.workPatternRefreshButton.addEventListener('click', () => this.loadWorkPatternRequests());
+            this.workPatternRefreshButton.dataset.bound = 'true';
+        }
+        if (this.workPatternModalConfirmButton && !this.workPatternModalConfirmButton.dataset.bound) {
+            this.workPatternModalConfirmButton.addEventListener('click', () => this.handleWorkPatternModalConfirm());
+            this.workPatternModalConfirmButton.dataset.bound = 'true';
+        }
+        if (this.workPatternApprovalModalElement && !this.workPatternApprovalModalElement.dataset.bound) {
+            this.workPatternApprovalModalElement.addEventListener('hidden.bs.modal', () => this.resetWorkPatternModalState());
+            this.workPatternApprovalModalElement.dataset.bound = 'true';
+        }
     }
 
     /**
@@ -946,6 +1071,140 @@ class AdminScreen {
             `;
 
             this.approvalsTableBody.appendChild(row);
+        });
+    }
+
+    async loadWorkPatternRequests() {
+        if (!this.workPatternTableBody) return;
+
+        this.setTableState(this.workPatternTableBody, 9, 'データを読み込み中...', 'text-muted');
+
+        try {
+            this.workPatternRequestMap = new Map();
+            const statuses = ['PENDING', 'APPROVED', 'REJECTED'];
+            const responses = await Promise.all(
+                statuses.map(status =>
+                    fetchWithAuth
+                        .handleApiCall(
+                            () => fetchWithAuth.get(`/api/admin/work-pattern-change/requests/status/${status}`),
+                            `勤務時間変更申請（${status}）の取得に失敗しました`
+                        )
+                        .catch(() => ({ success: false, data: [] }))
+                )
+            );
+
+            const list = [];
+            statuses.forEach((status, index) => {
+                const payload = responses[index];
+                if (!payload?.success || !Array.isArray(payload.data)) return;
+                payload.data.forEach(item => {
+                    list.push({
+                        requestId: item.requestId,
+                        employeeId: item.employeeId,
+                        startDate: item.startDate,
+                        endDate: item.endDate,
+                        startTime: item.startTime,
+                        endTime: item.endTime,
+                        breakMinutes: item.breakMinutes,
+                        workingMinutes: item.workingMinutes,
+                        reason: item.reason,
+                        status: status,
+                        createdAt: item.createdAt,
+                        rejectionComment: item.rejectionComment,
+                        applyMonday: item.applyMonday,
+                        applyTuesday: item.applyTuesday,
+                        applyWednesday: item.applyWednesday,
+                        applyThursday: item.applyThursday,
+                        applyFriday: item.applyFriday,
+                        applySaturday: item.applySaturday,
+                        applySunday: item.applySunday,
+                        applyHoliday: item.applyHoliday
+                    });
+                    const key = String(item.requestId);
+                    this.workPatternRequestMap.set(key, list[list.length - 1]);
+                });
+            });
+
+            this.renderWorkPatternRequests(list);
+        } catch (error) {
+            console.error('勤務時間変更申請読み込みエラー:', error);
+            this.setTableState(this.workPatternTableBody, 9, '勤務時間変更申請の取得に失敗しました', 'text-danger');
+        }
+    }
+
+    renderWorkPatternRequests(entries) {
+        if (!this.workPatternTableBody) return;
+
+        this.workPatternTableBody.innerHTML = '';
+
+        if (!Array.isArray(entries) || entries.length === 0) {
+            this.setTableState(this.workPatternTableBody, 9, '現在処理すべき勤務時間変更申請はありません', 'text-muted');
+            return;
+        }
+
+        const formatMinutes = (typeof TimeUtils !== 'undefined' && typeof TimeUtils.formatMinutesToTime === 'function')
+            ? TimeUtils.formatMinutesToTime.bind(TimeUtils)
+            : ((value) => {
+                if (typeof value !== 'number' || Number.isNaN(value)) {
+                    return '-';
+                }
+                const hours = Math.floor(value / 60);
+                const minutes = value % 60;
+                return `${hours}:${String(minutes).padStart(2, '0')}`;
+            });
+
+        entries.sort((a, b) => {
+            const timeA = new Date(a.createdAt || 0).getTime();
+            const timeB = new Date(b.createdAt || 0).getTime();
+            return timeB - timeA;
+        });
+
+        entries.forEach(entry => {
+            const isPending = (entry.status || '').toUpperCase() === 'PENDING';
+            const row = document.createElement('tr');
+            if (!isPending) {
+                row.classList.add('table-secondary');
+            }
+
+            const actionCell = isPending
+                ? `
+                        <button class="btn btn-sm btn-success me-1 approve-btn" data-request-id="${entry.requestId}" data-type="work-pattern">承認</button>
+                        <button class="btn btn-sm btn-danger reject-btn" data-request-id="${entry.requestId}" data-type="work-pattern">却下</button>
+                    `
+                : '<span class="text-muted">処理済</span>';
+
+            const breakDisplay = typeof entry.breakMinutes === 'number'
+                ? formatMinutes(Math.max(entry.breakMinutes, 0))
+                : '-';
+
+            const workingDisplay = typeof entry.workingMinutes === 'number'
+                ? formatMinutes(Math.max(entry.workingMinutes, 0))
+                : '-';
+
+            const reasonSegments = [];
+            if (entry.reason) {
+                reasonSegments.push(`<div>${this.escapeHtml(entry.reason)}</div>`);
+            }
+            if ((entry.status || '').toUpperCase() === 'REJECTED' && entry.rejectionComment) {
+                reasonSegments.push(`<div class="text-danger small">却下理由: ${this.escapeHtml(entry.rejectionComment)}</div>`);
+            }
+            const reasonContent = reasonSegments.length > 0 ? reasonSegments.join('') : '-';
+
+            const dayDisplay = this.formatWorkPatternDays(entry);
+
+            row.innerHTML = `
+                <td class="text-start">${this.getDisplayEmployeeName(entry)}</td>
+                <td class="text-start">${this.formatDateRange(entry.startDate, entry.endDate)}</td>
+                <td class="text-start">${this.formatTime(entry.startTime)} 〜 ${this.formatTime(entry.endTime)}</td>
+                <td class="text-start">${breakDisplay}</td>
+                <td class="text-start">${workingDisplay}</td>
+                <td class="text-start">${dayDisplay}</td>
+                <td class="text-start">${reasonContent}</td>
+                <td class="text-start">${this.translateStatus(entry.status)}</td>
+                <td class="text-start">${actionCell}</td>
+            `;
+
+            this.workPatternTableBody.appendChild(row);
         });
     }
 
@@ -1463,17 +1722,30 @@ class AdminScreen {
         const isApprove = action === 'approve';
         const typeLabel = requestType === 'adjustment' ? '打刻修正申請'
             : (requestType === 'vacation' || requestType === 'leave') ? '休暇申請'
+            : requestType === 'work-pattern' ? '勤務時間変更申請'
             : '申請';
 
         const actionText = isApprove ? '承認' : '却下';
-        const actionColor = isApprove ? '#28a745' : '#dc3545';
-        
+
+        const buttons = this.getRowActionButtons(triggerButton);
+
+        let confirmOptions;
+
+        if (requestType === 'work-pattern') {
+            const entry = this.workPatternRequestMap?.get(String(requestId));
+            if (!entry) {
+                this.showAlert('勤務時間変更申請の詳細が取得できませんでした', 'danger');
+                return;
+            }
+            this.showWorkPatternApprovalModal(entry, isApprove, buttons);
+            return;
+        }
+
         const message = `
             <div style="font-size: 14px; line-height: 1.6;">
                 <p class="mb-3">${typeLabel}を${actionText}しますか？</p>
             </div>
         `;
-        
         const confirmOptions = {
             title: `${typeLabel}の${actionText}`,
             message: message,
@@ -1487,7 +1759,6 @@ class AdminScreen {
         }
 
         const reason = dialogResult.reason || '';
-        const buttons = this.getRowActionButtons(triggerButton);
 
         try {
             this.setButtonsDisabled(buttons, true);
@@ -1496,6 +1767,8 @@ class AdminScreen {
                 await this.executeAdjustmentAction(isApprove, requestId, reason);
             } else if (requestType === 'vacation' || requestType === 'leave') {
                 await this.executeVacationAction(isApprove, requestId, reason);
+            } else if (requestType === 'work-pattern') {
+                await this.executeWorkPatternAction(isApprove, requestId, reason);
             } else {
                 throw new Error('不明な申請種別です');
             }
@@ -1508,6 +1781,8 @@ class AdminScreen {
                 await this.loadPendingApprovals();
             } else if (requestType === 'vacation' || requestType === 'leave') {
                 await this.loadVacationManagementData(false); // 通常更新
+            } else if (requestType === 'work-pattern') {
+                await this.loadWorkPatternRequests();
             }
 
             await this.refreshEmployeeScreens();
@@ -1571,6 +1846,264 @@ class AdminScreen {
             () => fetchWithAuth.post(`/api/admin/leave/requests/${numericId}/decision`, payload),
             isApprove ? '休暇申請の承認に失敗しました' : '休暇申請の却下に失敗しました'
         );
+    }
+
+    async executeWorkPatternAction(isApprove, requestId, reason) {
+        const numericId = Number(requestId);
+        if (!Number.isFinite(numericId)) {
+            throw new Error('勤務時間変更申請のIDが不正です');
+        }
+
+        if (isApprove) {
+            await fetchWithAuth.handleApiCall(
+                () => fetchWithAuth.post(`/api/admin/work-pattern-change/requests/${numericId}/approve`),
+                '勤務時間変更申請の承認に失敗しました'
+            );
+        } else {
+            const trimmed = reason.trim();
+            if (!trimmed) {
+                throw new Error('却下理由は必須です');
+            }
+            const endpoint = `/api/admin/work-pattern-change/requests/${numericId}/reject?comment=${encodeURIComponent(trimmed)}`;
+            await fetchWithAuth.handleApiCall(
+                () => fetchWithAuth.post(endpoint),
+                '勤務時間変更申請の却下に失敗しました'
+            );
+        }
+    }
+
+    showWorkPatternApprovalModal(entry, isApprove, buttons) {
+        if (!entry) {
+            return;
+        }
+
+        if (!this.workPatternApprovalModal) {
+            const formatMinutes = (typeof TimeUtils !== 'undefined' && typeof TimeUtils.formatMinutesToTime === 'function')
+                ? TimeUtils.formatMinutesToTime.bind(TimeUtils)
+                : ((value) => {
+                    const minutes = Number(value);
+                    if (!Number.isFinite(minutes)) {
+                        return '-';
+                    }
+                    const hours = Math.floor(minutes / 60);
+                    const rest = Math.abs(minutes % 60);
+                    return `${hours}:${String(rest).padStart(2, '0')}`;
+                });
+            const applicant = this.getDisplayEmployeeName(entry);
+            const period = this.formatDateRange(entry.startDate, entry.endDate);
+            const timeRange = `${this.formatTime(entry.startTime)} 〜 ${this.formatTime(entry.endTime)}`;
+            const breakDisplay = typeof entry.breakMinutes === 'number'
+                ? formatMinutes(Math.max(entry.breakMinutes, 0))
+                : '-';
+            const workingDisplay = typeof entry.workingMinutes === 'number'
+                ? formatMinutes(Math.max(entry.workingMinutes, 0))
+                : '-';
+            const daysDisplay = this.formatWorkPatternDays(entry);
+            const reasonText = entry.reason ? entry.reason : '（理由なし）';
+
+            const plainMessage = [
+                `勤務時間変更申請を${isApprove ? '承認' : '却下'}しますか？`,
+                `社員: ${applicant}`,
+                `期間: ${period}`,
+                `勤務時間: ${timeRange}`,
+                `休憩: ${breakDisplay}`,
+                `実働: ${workingDisplay}`,
+                `勤務日: ${daysDisplay}`,
+                `理由: ${reasonText}`
+            ].join('\n');
+
+            const options = {
+                title: `勤務時間変更申請の${isApprove ? '承認' : '却下'}`,
+                message: plainMessage,
+                confirmLabel: isApprove ? '承認する' : '却下する',
+                requireReason: !isApprove
+            };
+
+            this.promptApprovalDialog(options).then((dialogResult) => {
+                if (!dialogResult.confirmed) {
+                    return;
+                }
+                const reason = dialogResult.reason || '';
+                this.executeWorkPatternAction(isApprove, entry.requestId, reason)
+                    .then(async () => {
+                        const alertType = isApprove ? 'success' : 'warning';
+                        this.showAlert(`勤務時間変更申請を${isApprove ? '承認' : '却下'}しました`, alertType);
+                        await this.loadWorkPatternRequests();
+                        await this.refreshEmployeeScreens();
+                    })
+                    .catch((error) => {
+                        console.error('勤務時間変更申請処理エラー:', error);
+                        this.showAlert(error.message || `勤務時間変更申請の処理に失敗しました`, 'danger');
+                    });
+            });
+            return;
+        }
+
+        this.workPatternApprovalEntry = entry;
+        this.workPatternApprovalButtons = buttons;
+        this.workPatternModalMode = isApprove ? 'approve' : 'reject';
+
+        if (Array.isArray(buttons) && buttons.length > 0) {
+            this.setButtonsDisabled(buttons, true);
+        }
+
+        if (this.workPatternModalTitle) {
+            this.workPatternModalTitle.textContent = `勤務時間変更申請の${isApprove ? '承認' : '却下'}`;
+        }
+
+        this.populateWorkPatternModal(entry);
+        this.toggleWorkPatternReason(!isApprove, true);
+
+        if (this.workPatternModalConfirmButton) {
+            this.workPatternModalConfirmButton.textContent = isApprove ? '承認する' : '却下する';
+            this.workPatternModalConfirmButton.classList.toggle('btn-primary', isApprove);
+            this.workPatternModalConfirmButton.classList.toggle('btn-danger', !isApprove);
+        }
+
+        this.workPatternApprovalModal.show();
+    }
+
+    populateWorkPatternModal(entry) {
+        if (!entry) {
+            return;
+        }
+        const formatMinutes = (typeof TimeUtils !== 'undefined' && typeof TimeUtils.formatMinutesToTime === 'function')
+            ? TimeUtils.formatMinutesToTime.bind(TimeUtils)
+            : ((value) => {
+                const minutes = Number(value);
+                if (!Number.isFinite(minutes)) {
+                    return '-';
+                }
+                const hours = Math.floor(minutes / 60);
+                const rest = Math.abs(minutes % 60);
+                return `${hours}:${String(rest).padStart(2, '0')}`;
+            });
+
+        const applicant = this.getDisplayEmployeeName(entry);
+        const period = this.formatDateRange(entry.startDate, entry.endDate);
+        const timeRange = `${this.formatTime(entry.startTime)} 〜 ${this.formatTime(entry.endTime)}`;
+        const breakDisplay = typeof entry.breakMinutes === 'number'
+            ? formatMinutes(Math.max(entry.breakMinutes, 0))
+            : '-';
+        const workingDisplay = typeof entry.workingMinutes === 'number'
+            ? formatMinutes(Math.max(entry.workingMinutes, 0))
+            : '-';
+        const daysDisplay = this.formatWorkPatternDays(entry);
+        const reasonText = entry.reason ? this.escapeHtml(entry.reason) : '（理由なし）';
+
+        if (this.workPatternModalApplicantEl) {
+            this.workPatternModalApplicantEl.innerHTML = this.escapeHtml(applicant);
+        }
+        if (this.workPatternModalPeriodEl) {
+            this.workPatternModalPeriodEl.innerHTML = this.escapeHtml(period);
+        }
+        if (this.workPatternModalTimeEl) {
+            this.workPatternModalTimeEl.innerHTML = this.escapeHtml(timeRange);
+        }
+        if (this.workPatternModalBreakEl) {
+            this.workPatternModalBreakEl.innerHTML = this.escapeHtml(breakDisplay);
+        }
+        if (this.workPatternModalWorkingEl) {
+            this.workPatternModalWorkingEl.innerHTML = this.escapeHtml(workingDisplay);
+        }
+        if (this.workPatternModalDaysEl) {
+            this.workPatternModalDaysEl.innerHTML = this.escapeHtml(daysDisplay);
+        }
+        if (this.workPatternModalReasonTextEl) {
+            this.workPatternModalReasonTextEl.innerHTML = reasonText;
+        }
+    }
+
+    toggleWorkPatternReason(show, reset = false) {
+        if (!this.workPatternModalReasonGroup || !this.workPatternModalReasonInput) {
+            return;
+        }
+        if (reset) {
+            this.workPatternModalReasonInput.value = '';
+            this.workPatternModalReasonInput.classList.remove('is-invalid');
+            if (this.workPatternModalReasonFeedback) {
+                this.workPatternModalReasonFeedback.style.display = 'none';
+            }
+        }
+        if (show) {
+            this.workPatternModalReasonGroup.classList.remove('d-none');
+            this.workPatternModalReasonGroup.style.display = 'block';
+            this.workPatternModalReasonInput.focus();
+        } else {
+            this.workPatternModalReasonGroup.classList.add('d-none');
+            this.workPatternModalReasonGroup.style.display = 'none';
+        }
+    }
+
+    async handleWorkPatternModalConfirm() {
+        if (!this.workPatternApprovalEntry) {
+            return;
+        }
+
+        const isApprove = this.workPatternModalMode === 'approve';
+        let reason = '';
+        if (!isApprove) {
+            reason = (this.workPatternModalReasonInput?.value || '').trim();
+            if (!reason) {
+                if (this.workPatternModalReasonInput) {
+                    this.workPatternModalReasonInput.classList.add('is-invalid');
+                    this.workPatternModalReasonInput.focus();
+                }
+                if (this.workPatternModalReasonFeedback) {
+                    this.workPatternModalReasonFeedback.style.display = 'block';
+                }
+                return;
+            }
+        }
+
+        if (this.workPatternModalReasonInput) {
+            this.workPatternModalReasonInput.classList.remove('is-invalid');
+        }
+        if (this.workPatternModalReasonFeedback) {
+            this.workPatternModalReasonFeedback.style.display = 'none';
+        }
+
+        try {
+            if (this.workPatternModalConfirmButton) {
+                this.workPatternModalConfirmButton.disabled = true;
+            }
+            await this.executeWorkPatternAction(isApprove, this.workPatternApprovalEntry.requestId, reason);
+            const alertType = isApprove ? 'success' : 'warning';
+            this.showAlert(`勤務時間変更申請を${isApprove ? '承認' : '却下'}しました`, alertType);
+            await this.loadWorkPatternRequests();
+            await this.refreshEmployeeScreens();
+            this.workPatternApprovalModal?.hide();
+        } catch (error) {
+            console.error('勤務時間変更申請処理エラー:', error);
+            this.showAlert(error.message || `勤務時間変更申請の処理に失敗しました`, 'danger');
+            if (Array.isArray(this.workPatternApprovalButtons)) {
+                this.setButtonsDisabled(this.workPatternApprovalButtons, false);
+            }
+        } finally {
+            if (this.workPatternModalConfirmButton) {
+                this.workPatternModalConfirmButton.disabled = false;
+            }
+        }
+    }
+
+    resetWorkPatternModalState() {
+        if (this.workPatternModalReasonInput) {
+            this.workPatternModalReasonInput.value = '';
+            this.workPatternModalReasonInput.classList.remove('is-invalid');
+        }
+        if (this.workPatternModalReasonFeedback) {
+            this.workPatternModalReasonFeedback.style.display = 'none';
+        }
+        if (this.workPatternModalReasonGroup) {
+            this.workPatternModalReasonGroup.classList.add('d-none');
+            this.workPatternModalReasonGroup.style.display = 'none';
+        }
+        if (Array.isArray(this.workPatternApprovalButtons)) {
+            this.setButtonsDisabled(this.workPatternApprovalButtons, false);
+        }
+        this.workPatternApprovalEntry = null;
+        this.workPatternApprovalButtons = null;
+        this.workPatternModalMode = 'approve';
     }
 
     /**

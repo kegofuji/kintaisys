@@ -10,6 +10,7 @@ public enum AttendanceStatus {
     LATE_AND_EARLY_LEAVE("遅刻・早退"),
     OVERTIME("残業"),
     NIGHT_SHIFT("深夜勤務"),
+    HOLIDAY("休日"),
     ABSENT("欠勤");
     
     private final String displayName;

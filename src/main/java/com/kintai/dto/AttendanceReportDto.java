@@ -86,7 +86,9 @@ public class AttendanceReportDto {
             case LATE_AND_EARLY_LEAVE -> "遅刻・早退";
             case OVERTIME -> "残業";
             case NIGHT_SHIFT -> "深夜勤務";
+            case HOLIDAY -> "休日";
             case ABSENT -> "欠勤";
+            default -> status.getDisplayName();
         };
     }
     

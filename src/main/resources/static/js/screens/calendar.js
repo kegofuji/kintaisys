@@ -242,6 +242,7 @@ class CalendarScreen {
 
                 const dayNumber = currentDate.getDate();
                 const dateString = this.formatDateString(currentDate);
+                const isNonWorkingDay = isWeekend || isHoliday;
 
                 // 勤怠データの取得
                 const attendance = this.getAttendanceForDate(dateString);
@@ -319,9 +320,12 @@ class CalendarScreen {
                     badges += `<span class="badge ${statusClass} badge-sm adjustment-badge" data-adjustment-id="${adjustmentRequest.adjustmentRequestId}" data-rejection-comment="${adjustmentRequest.rejectionComment || ''}">${statusText}</span>`;
                 }
 
+                const holidayLabel = isNonWorkingDay ? '<div class="holiday-label text-danger fw-semibold">休日</div>' : '';
+
                 calendarHtml += `
                     <div class="${dayClasses.join(' ')}" data-date="${dateString}">
                         <div class="day-number">${dayNumber}</div>
+                        ${holidayLabel}
                         <div class="day-badges">${badges}</div>
                         ${attendance ? this.renderAttendanceInfo(attendance) : ''}
                     </div>

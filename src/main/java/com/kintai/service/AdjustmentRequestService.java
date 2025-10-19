@@ -36,6 +36,9 @@ public class AdjustmentRequestService {
     @Autowired
     private TimeCalculator timeCalculator;
 
+    @Autowired
+    private WorkPatternChangeRequestService workPatternChangeRequestService;
+
     /**
      * 修正申請を作成
      * @param requestDto 修正申請DTO
@@ -141,6 +144,16 @@ public class AdjustmentRequestService {
         
         // 5. 遅刻・早退・残業・深夜を再計算
         timeCalculator.calculateAttendanceMetrics(attendanceRecord);
+        if (workPatternChangeRequestService != null) {
+            workPatternChangeRequestService.applyPatternMetrics(attendanceRecord);
+            int late = attendanceRecord.getLateMinutes() == null ? 0 : attendanceRecord.getLateMinutes();
+            int early = attendanceRecord.getEarlyLeaveMinutes() == null ? 0 : attendanceRecord.getEarlyLeaveMinutes();
+            int overtime = attendanceRecord.getOvertimeMinutes() == null ? 0 : attendanceRecord.getOvertimeMinutes();
+            int night = attendanceRecord.getNightShiftMinutes() == null ? 0 : attendanceRecord.getNightShiftMinutes();
+            attendanceRecord.setAttendanceStatus(
+                    workPatternChangeRequestService.resolveAttendanceStatus(late, early, overtime, night)
+            );
+        }
         timeCalculator.normalizeMetrics(attendanceRecord);
 
         // 6. 勤怠記録を保存

@@ -58,12 +58,14 @@ class Router {
         this.routes.set('/history', { screen: 'historyScreen', title: '勤怠履歴' });
         this.routes.set('/vacation', { screen: 'vacationScreen', title: '休暇申請' });
         this.routes.set('/adjustment', { screen: 'adjustmentScreen', title: '打刻修正' });
+        this.routes.set('/work-pattern', { screen: 'workPatternScreen', title: '勤務時間変更' });
         
         // 管理者向けルート
         this.routes.set('/admin', { screen: 'adminDashboardScreen', title: '管理者TOP', admin: true });
         this.routes.set('/admin/employees', { screen: 'adminEmployeesScreen', title: '社員管理', admin: true });
         // 勤怠管理画面は廃止
         this.routes.set('/admin/approvals', { screen: 'adminApprovalsScreen', title: '打刻修正', admin: true });
+        this.routes.set('/admin/work-pattern-change', { screen: 'adminWorkPatternScreen', title: '勤務時間変更', admin: true });
         this.routes.set('/admin/vacation-management', { screen: 'adminVacationManagementScreen', title: '休暇管理', admin: true });
     }
 
@@ -234,9 +236,19 @@ class Router {
                     window.adjustmentScreen.init();
                 }
                 break;
+            case 'workPatternScreen':
+                if (window.workPatternScreen) {
+                    window.workPatternScreen.init();
+                }
+                break;
             case 'adminDashboardScreen':
                 if (window.adminScreen) {
                     window.adminScreen.initDashboard();
+                }
+                break;
+            case 'adminWorkPatternScreen':
+                if (window.adminScreen) {
+                    window.adminScreen.initWorkPattern();
                 }
                 break;
             case 'adminEmployeesScreen':

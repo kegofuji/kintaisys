@@ -247,8 +247,6 @@ public class TimeCalculator {
         attendanceRecord.setBreakMinutes(breakMinutes);
         
         // 遅刻・早退・残業は算出しない（空欄表示用に0で保持）
-        attendanceRecord.setLateMinutes(0);
-        attendanceRecord.setEarlyLeaveMinutes(0);
         attendanceRecord.setOvertimeMinutes(0);
         
         // 実働時間を算出して残業判断に利用

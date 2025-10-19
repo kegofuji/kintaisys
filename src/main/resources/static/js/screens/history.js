@@ -360,16 +360,20 @@ class HistoryScreen {
             const breakDisplay = isConfirmed && record.breakMinutes !== undefined && record.breakMinutes !== null
                 ? TimeUtils.formatMinutesToTime(record.breakMinutes)
                 : '';
-            const lateDisplay = '';
-            const earlyLeaveDisplay = '';
+            const lateMinutes = Number(record.lateMinutes ?? 0);
+            const earlyLeaveMinutes = Number(record.earlyLeaveMinutes ?? 0);
+            const lateDisplay = lateMinutes > 0 ? TimeUtils.formatMinutesToTime(lateMinutes) : '';
+            const earlyLeaveDisplay = earlyLeaveMinutes > 0 ? TimeUtils.formatMinutesToTime(earlyLeaveMinutes) : '';
             const overtimeValue = record.overtimeMinutes ?? 0;
-            const overtimeDisplay = isConfirmed && overtimeValue > 0 ? formatMinutesToTime(overtimeValue) : '';
+            const overtimeDisplay = isConfirmed && overtimeValue > 0 ? TimeUtils.formatMinutesToTime(overtimeValue) : '';
             const nightValue = isConfirmed ? this.resolveNightMinutes(record) : 0;
-            const nightWorkDisplay = isConfirmed && nightValue > 0 ? formatMinutesToTime(nightValue) : '';
-            let status = '';
-            if (!hasIn) status = '出勤前';
-            else if (hasIn && !hasOut) status = '出勤中';
-            else if (isConfirmed) status = '退勤済';
+            const nightWorkDisplay = isConfirmed && nightValue > 0 ? TimeUtils.formatMinutesToTime(nightValue) : '';
+            let status = translateAttendanceStatus ? translateAttendanceStatus(record.attendanceStatus) : '';
+            if (!status) {
+                if (!hasIn) status = '出勤前';
+                else if (hasIn && !hasOut) status = '出勤中';
+                else if (isConfirmed) status = '退勤済';
+            }
 
             // 日付をyyyy/mm/dd形式に変換
             const formatDate = (dateStr) => {
@@ -557,6 +561,7 @@ class HistoryScreen {
             if (isHoliday) dayClasses.push('holiday');
             if (weekday === 0) dayClasses.push('sunday');
             if (weekday === 6) dayClasses.push('saturday');
+            const isNonWorkingDay = isWeekend || isHoliday;
             if (attendance) dayClasses.push('has-attendance');
             if (attendance && attendance.clockOutTime) dayClasses.push('clocked-out');
             if (attendance && attendance.clockInTime && !attendance.clockOutTime) dayClasses.push('clocked-in');
@@ -660,9 +665,12 @@ class HistoryScreen {
                 badges += `<span class="badge ${statusClass} badge-sm adjustment-badge clickable" ${dataAttrs} title="${title}">打刻修正${label}</span>`;
             }
 
+            const holidayLabel = isNonWorkingDay ? '<div class="holiday-label text-danger fw-semibold">休日</div>' : '';
+
             calendarHtml += `
                 <div class="${dayClasses.join(' ')}" data-date="${dateString}" style="cursor: pointer;" title="クリックして詳細を表示">
                     <div class="day-number">${d}</div>
+                    ${holidayLabel}
                     <div class="day-badges">${badges}</div>
                     ${attendance ? this.renderAttendanceInfo(attendance) : ''}
                 </div>
@@ -1237,18 +1245,26 @@ class HistoryScreen {
                 ? TimeUtils.formatMinutesToTime(attendance.breakMinutes)
                 : '';
 
-            // 遅刻・早退は空表示にし残業・深夜のみ表示
-            const lateDisplay = '';
-            const earlyLeaveDisplay = '';
+            const lateMinutes = Number(attendance.lateMinutes ?? 0);
+            const earlyLeaveMinutes = Number(attendance.earlyLeaveMinutes ?? 0);
+            const lateDisplay = lateMinutes > 0 ? TimeUtils.formatMinutesToTime(lateMinutes) : '';
+            const earlyLeaveDisplay = earlyLeaveMinutes > 0 ? TimeUtils.formatMinutesToTime(earlyLeaveMinutes) : '';
             const overtimeValue = attendance.overtimeMinutes ?? 0;
-            const overtimeDisplay = isConfirmedAttendance && overtimeValue > 0 ? formatMinutesToTime(overtimeValue) : '';
+            const overtimeDisplay = isConfirmedAttendance && overtimeValue > 0 ? TimeUtils.formatMinutesToTime(overtimeValue) : '';
             const nightWorkValue = isConfirmedAttendance ? this.resolveNightMinutes(attendance) : 0;
-            const nightWorkDisplay = isConfirmedAttendance && nightWorkValue > 0 ? formatMinutesToTime(nightWorkValue) : '';
+            const nightWorkDisplay = isConfirmedAttendance && nightWorkValue > 0 ? TimeUtils.formatMinutesToTime(nightWorkValue) : '';
 
             // ステータス表示
-            let status = '出勤前';
-            if (attendance.clockInTime && !attendance.clockOutTime) status = '出勤中';
-            if (attendance.clockInTime && attendance.clockOutTime) status = '退勤済';
+            let status = translateAttendanceStatus ? translateAttendanceStatus(attendance.attendanceStatus) : '';
+            if (!status) {
+                if (attendance.clockInTime && !attendance.clockOutTime) {
+                    status = '出勤中';
+                } else if (attendance.clockInTime && attendance.clockOutTime) {
+                    status = '退勤済';
+                } else {
+                    status = '出勤前';
+                }
+            }
 
             // 日付をyyyy/mm/dd形式に変換
             const formatDate = (dateStr) => {
