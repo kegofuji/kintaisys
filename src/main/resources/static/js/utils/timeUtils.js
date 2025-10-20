@@ -59,8 +59,9 @@ class TimeUtils {
                 return '0:00';
             }
 
-            // 総勤務分（丸目処理なし、正確な分数を計算）
-            let totalMinutes = Math.floor((clockOut - clockIn) / (1000 * 60));
+            // 総勤務分（1秒でもあれば1分に切り上げ）
+            let totalSeconds = Math.floor((clockOut - clockIn) / 1000);
+            let totalMinutes = Math.ceil(totalSeconds / 60);
 
             let breakMinutes = this.normalizeMinutesValue(customBreakMinutes);
             if (breakMinutes === null || Number.isNaN(breakMinutes) || breakMinutes < 0) {
@@ -120,7 +121,9 @@ class TimeUtils {
                 return '0:00';
             }
             
-            const diffMinutes = Math.floor(diffMs / (1000 * 60));
+            // 1秒でもあれば1分に切り上げる
+            const diffSeconds = Math.floor(diffMs / 1000);
+            const diffMinutes = Math.ceil(diffSeconds / 60);
             return this.formatMinutesToTime(diffMinutes);
         } catch (error) {
             console.error('Error calculating elapsed time:', error);
@@ -153,12 +156,15 @@ class TimeUtils {
         }
 
         let effectiveBreak = this.normalizeMinutesValue(breakMinutes);
+        // 1秒でもあれば1分に切り上げる
+        const totalSecondsForBreak = Math.floor((end - start) / 1000);
+        const totalMinutesForBreak = Math.ceil(totalSecondsForBreak / 60);
+        
         if (effectiveBreak === null || Number.isNaN(effectiveBreak) || effectiveBreak < 0) {
-            const totalMinutes = Math.floor((end - start) / (1000 * 60));
-            effectiveBreak = this.calculateRequiredBreakMinutes(totalMinutes);
+            effectiveBreak = this.calculateRequiredBreakMinutes(totalMinutesForBreak);
         }
 
-        effectiveBreak = Math.min(Math.max(effectiveBreak, 0), Math.floor((end - start) / (1000 * 60)));
+        effectiveBreak = Math.min(Math.max(effectiveBreak, 0), totalMinutesForBreak);
         if (effectiveBreak === 0) {
             return rawNight;
         }

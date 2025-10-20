@@ -361,7 +361,9 @@ public class WorkPatternChangeRequestService {
         LocalDate date = record.getAttendanceDate();
         if (record.getClockInTime() != null) {
             LocalDateTime scheduledStart = LocalDateTime.of(date, pattern.getStartTime());
-            long lateMinutes = Duration.between(scheduledStart, record.getClockInTime()).toMinutes();
+            // 1秒でもあれば1分に切り上げる
+            long lateSeconds = Duration.between(scheduledStart, record.getClockInTime()).getSeconds();
+            long lateMinutes = (lateSeconds + 59) / 60; // 切り上げ処理
             record.setLateMinutes((int) Math.max(lateMinutes, 0));
         } else {
             record.setLateMinutes(0);
@@ -369,7 +371,9 @@ public class WorkPatternChangeRequestService {
 
         if (record.getClockOutTime() != null) {
             LocalDateTime scheduledEnd = LocalDateTime.of(date, pattern.getEndTime());
-            long earlyMinutes = Duration.between(record.getClockOutTime(), scheduledEnd).toMinutes();
+            // 1秒でもあれば1分に切り上げる（終業時刻から退勤時刻までの時間）
+            long earlySeconds = Duration.between(record.getClockOutTime(), scheduledEnd).getSeconds();
+            long earlyMinutes = (earlySeconds + 59) / 60; // 切り上げ処理
             record.setEarlyLeaveMinutes((int) Math.max(earlyMinutes, 0));
         } else {
             record.setEarlyLeaveMinutes(0);

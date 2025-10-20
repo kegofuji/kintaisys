@@ -3,7 +3,6 @@ package com.kintai.service;
 import com.kintai.dto.ClockInRequest;
 import com.kintai.dto.ClockOutRequest;
 import com.kintai.dto.ClockResponse;
-import com.kintai.entity.AdjustmentRequest;
 import com.kintai.entity.AttendanceRecord;
 import com.kintai.entity.AttendanceStatus;
 import com.kintai.entity.Employee;
@@ -117,6 +116,12 @@ public class AttendanceService {
                                 nightShiftMinutes
                         )
                 );
+            } else {
+                // 勤務パターン変更申請が適用されていない場合は標準時間で計算
+                int lateMinutes = timeCalculator.calculateLateMinutes(existingRecord.getClockInTime(), existingRecord.getAttendanceDate());
+                int earlyLeaveMinutes = timeCalculator.calculateEarlyLeaveMinutes(existingRecord.getClockOutTime(), existingRecord.getAttendanceDate());
+                existingRecord.setLateMinutes(lateMinutes);
+                existingRecord.setEarlyLeaveMinutes(earlyLeaveMinutes);
             }
 
             ClockResponse.ClockData data = new ClockResponse.ClockData(
@@ -305,6 +310,12 @@ public class AttendanceService {
 
                 if (workPatternChangeRequestService != null) {
                     workPatternChangeRequestService.applyPatternMetrics(attendanceRecord);
+                } else {
+                    // 勤務パターン変更申請が適用されていない場合は標準時間で計算
+                    int lateMinutes = timeCalculator.calculateLateMinutes(attendanceRecord.getClockInTime(), attendanceRecord.getAttendanceDate());
+                    int earlyLeaveMinutes = timeCalculator.calculateEarlyLeaveMinutes(attendanceRecord.getClockOutTime(), attendanceRecord.getAttendanceDate());
+                    attendanceRecord.setLateMinutes(lateMinutes);
+                    attendanceRecord.setEarlyLeaveMinutes(earlyLeaveMinutes);
                 }
                 
                 // 8. 勤怠ステータス更新
@@ -448,6 +459,60 @@ public class AttendanceService {
     }
     
     /**
+     * 勤務記録を再計算する
+     * @param attendanceRecord 勤務記録
+     */
+    public void recalculateAttendanceRecord(AttendanceRecord attendanceRecord) {
+        if (attendanceRecord == null) {
+            return;
+        }
+        
+        // 勤務時間を再計算
+        if (attendanceRecord.getClockInTime() != null && attendanceRecord.getClockOutTime() != null) {
+            int breakMinutes = timeCalculator.resolveBreakMinutes(
+                    attendanceRecord.getClockInTime(),
+                    attendanceRecord.getClockOutTime(),
+                    attendanceRecord.getBreakMinutes()
+            );
+            attendanceRecord.setBreakMinutes(breakMinutes);
+            
+            int workingMinutes = timeCalculator.calculateWorkingMinutes(
+                    attendanceRecord.getClockInTime(),
+                    attendanceRecord.getClockOutTime(),
+                    breakMinutes
+            );
+            
+            int overtimeMinutes = timeCalculator.calculateOvertimeMinutes(workingMinutes);
+            attendanceRecord.setOvertimeMinutes(overtimeMinutes);
+            
+            // 深夜勤務時間計算
+            int nightShiftMinutes = timeCalculator.calculateNightShiftMinutesWithBreak(
+                    attendanceRecord.getClockInTime(),
+                    attendanceRecord.getClockOutTime(),
+                    breakMinutes
+            );
+            attendanceRecord.setNightShiftMinutes(nightShiftMinutes);
+            
+            // 遅刻・早退時間を再計算
+            if (workPatternChangeRequestService != null) {
+                workPatternChangeRequestService.applyPatternMetrics(attendanceRecord);
+            } else {
+                // 勤務パターン変更申請が適用されていない場合は標準時間で計算
+                int lateMinutes = timeCalculator.calculateLateMinutes(attendanceRecord.getClockInTime(), attendanceRecord.getAttendanceDate());
+                int earlyLeaveMinutes = timeCalculator.calculateEarlyLeaveMinutes(attendanceRecord.getClockOutTime(), attendanceRecord.getAttendanceDate());
+                attendanceRecord.setLateMinutes(lateMinutes);
+                attendanceRecord.setEarlyLeaveMinutes(earlyLeaveMinutes);
+            }
+            
+            // 勤怠ステータス更新
+            updateAttendanceStatus(attendanceRecord, overtimeMinutes, nightShiftMinutes);
+            
+            // メトリクス正規化
+            timeCalculator.normalizeMetrics(attendanceRecord);
+        }
+    }
+
+    /**
      * 勤怠履歴取得
      * @param employeeId 従業員ID
      * @return 勤怠履歴レスポンス
@@ -474,6 +539,14 @@ public class AttendanceService {
             
             List<AttendanceRecord> records = attendanceRecordRepository
                     .findByEmployeeIdAndAttendanceDateBetweenOrderByAttendanceDateDesc(employeeId, startDate, endDate);
+
+            // 各勤務記録を再計算
+            for (AttendanceRecord record : records) {
+                recalculateAttendanceRecord(record);
+            }
+            
+            // 再計算後のデータを保存
+            attendanceRecordRepository.saveAll(records);
 
             ClockResponse response = new ClockResponse(true, "勤怠履歴を取得しました", toClockDataList(records));
             setUserInfoToResponse(response);
@@ -513,6 +586,14 @@ public class AttendanceService {
             // 3. 指定月の勤怠履歴を取得
             List<AttendanceRecord> records = attendanceRecordRepository
                     .findByEmployeeAndMonth(employeeId, year, month);
+
+            // 各勤務記録を再計算
+            for (AttendanceRecord record : records) {
+                recalculateAttendanceRecord(record);
+            }
+            
+            // 再計算後のデータを保存
+            attendanceRecordRepository.saveAll(records);
 
             // 4. データが空でも正常にレスポンスを返す
             ClockResponse response = new ClockResponse(true, "指定月の勤怠履歴を取得しました", toClockDataList(records));

@@ -466,7 +466,23 @@ class HistoryScreen {
                     ? TimeUtils.formatMinutesToTime(record.breakMinutes)
                     : '');
             const lateMinutes = Number(record.lateMinutes ?? 0);
-            const earlyLeaveMinutes = Number(record.earlyLeaveMinutes ?? 0);
+            let earlyLeaveMinutes = Number(record.earlyLeaveMinutes ?? 0);
+            
+            // フロントエンド側でも早退時間を再計算（打刻データがある場合）
+            if (!isPaidLeaveApproved && record.clockInTime && record.clockOutTime) {
+                const clockOut = new Date(record.clockOutTime);
+                const clockOutDate = new Date(clockOut.getFullYear(), clockOut.getMonth(), clockOut.getDate());
+                const standardEnd = new Date(clockOutDate.getTime() + 18 * 60 * 60 * 1000); // 18:00
+                
+                if (clockOut < standardEnd) {
+                    // 1秒でもあれば1分に切り上げる
+                    const earlySeconds = Math.floor((standardEnd - clockOut) / 1000);
+                    earlyLeaveMinutes = Math.ceil(earlySeconds / 60);
+                } else {
+                    earlyLeaveMinutes = 0;
+                }
+            }
+            
             const lateDisplay = (isPaidLeaveApproved) ? '' : (isConfirmed ? TimeUtils.formatMinutesToTime(lateMinutes) : '');
             const earlyLeaveDisplay = (isPaidLeaveApproved) ? '' : (isConfirmed ? TimeUtils.formatMinutesToTime(earlyLeaveMinutes) : '');
             const overtimeValue = record.overtimeMinutes ?? 0;
@@ -1567,7 +1583,7 @@ class HistoryScreen {
             let workingTime = '';
             
             if (isPaidLeaveApproved) {
-                // 半休申請の場合は打刻修正の実働時間 + 半休分(4時間)を表示
+                // 半休申請の場合は打刻修正の実働時間 + 半休分（一律4時間）を表示
                 if (isHalfDayLeave && attendance) {
                     let adjustmentMinutes = 0;
                     
@@ -1579,8 +1595,8 @@ class HistoryScreen {
                         adjustmentMinutes = parseInt(attendance.workingMinutes) || 0;
                     }
                     
-                    // 打刻修正の実働時間 + 半休分(4時間 = 240分)を合計
-                    const halfDayMinutes = 240; // 半休分の4時間
+                    // 打刻修正の実働時間 + 半休分を合計（半休は一律4時間）
+                    const halfDayMinutes = window.WORK_TIME_CONSTANTS?.HALF_DAY_WORKING_MINUTES || 240;
                     const totalMinutes = adjustmentMinutes + halfDayMinutes;
                     workingTime = TimeUtils.formatMinutesToTime(totalMinutes);
                 } else if (isFullDayLeave) {
@@ -1682,38 +1698,50 @@ class HistoryScreen {
                     }
                 }
                 
-                // 半休分の時間（勤務時間の半分）
-                const halfDayMinutes = Math.floor(workingMinutesForHalfDay / 2);
+                // 半休分の時間（一律4時間）
+                const halfDayMinutes = window.WORK_TIME_CONSTANTS?.HALF_DAY_WORKING_MINUTES || 240;
                 
                 let expectedStartTime, expectedEndTime;
                 
                 if (vacationRequest.timeUnit === 'HALF_AM') {
-                    // AM休：終業時間から（勤務時間/2）時間前が始業時刻
+                    // AM休：終業時間から半休時間（一律4時間）前が始業時刻
                     expectedEndTime = new Date(clockIn);
                     expectedEndTime.setHours(standardEndHour, standardEndMinute, 0, 0);
                     expectedStartTime = new Date(expectedEndTime.getTime() - halfDayMinutes * 60 * 1000);
                     
                     // 遅刻時間の計算（期待される始業時刻より遅い場合）
                     if (clockIn > expectedStartTime) {
-                        lateMinutes = Math.floor((clockIn - expectedStartTime) / (1000 * 60));
+                        // 1秒でもあれば1分に切り上げる
+                        const lateSeconds = Math.floor((clockIn - expectedStartTime) / 1000);
+                        lateMinutes = Math.ceil(lateSeconds / 60);
                     }
                     
-                    // AM休の場合は早退は考慮しない（午後から勤務するため）
-                    earlyLeaveMinutes = 0;
+                    // 早退時間の計算（標準終了時刻より早い場合）
+                    if (clockOut < expectedEndTime) {
+                        // 1秒でもあれば1分に切り上げる
+                        const earlySeconds = Math.floor((expectedEndTime - clockOut) / 1000);
+                        earlyLeaveMinutes = Math.ceil(earlySeconds / 60);
+                    } else {
+                        earlyLeaveMinutes = 0;
+                    }
                 } else if (vacationRequest.timeUnit === 'HALF_PM') {
-                    // PM休：始業時間から（勤務時間/2）時間後が終業時刻
+                    // PM休：始業時間から半休時間（一律4時間）後が終業時刻
                     expectedStartTime = new Date(clockIn);
                     expectedStartTime.setHours(standardStartHour, standardStartMinute, 0, 0);
                     expectedEndTime = new Date(expectedStartTime.getTime() + halfDayMinutes * 60 * 1000);
                     
                     // PM休でも標準始業時刻より遅い場合は遅刻として計算
                     if (clockIn > expectedStartTime) {
-                        lateMinutes = Math.floor((clockIn - expectedStartTime) / (1000 * 60));
+                        // 1秒でもあれば1分に切り上げる
+                        const lateSeconds = Math.floor((clockIn - expectedStartTime) / 1000);
+                        lateMinutes = Math.ceil(lateSeconds / 60);
                     }
                     
                     // 早退時間の計算（期待される終業時刻より早い場合）
                     if (clockOut < expectedEndTime) {
-                        earlyLeaveMinutes = Math.floor((expectedEndTime - clockOut) / (1000 * 60));
+                        // 1秒でもあれば1分に切り上げる
+                        const earlySeconds = Math.floor((expectedEndTime - clockOut) / 1000);
+                        earlyLeaveMinutes = Math.ceil(earlySeconds / 60);
                     }
                 }
                 
@@ -1725,7 +1753,7 @@ class HistoryScreen {
                     actualWorkingMinutes = TimeUtils.timeStringToMinutes(TimeUtils.calculateWorkingTime(attendance.clockInTime, attendance.clockOutTime, attendance.breakMinutes));
                 }
                 
-                // 打刻修正分 + 半休分（勤務時間変更申請の実働時間の半分）を合計
+                // 打刻修正分 + 半休分（一律4時間）を合計
                 const totalWorkingMinutes = actualWorkingMinutes + halfDayMinutes;
                 overtimeValue = Math.max(0, totalWorkingMinutes - workingMinutesForHalfDay);
                 
@@ -1773,14 +1801,18 @@ class HistoryScreen {
                     
                     // 遅刻時間の計算（基準開始時刻より遅い場合）
                     if (clockIn > standardStart) {
-                        lateMinutes = Math.floor((clockIn - standardStart) / (1000 * 60));
+                        // 1秒でもあれば1分に切り上げる
+                        const lateSeconds = Math.floor((clockIn - standardStart) / 1000);
+                        lateMinutes = Math.ceil(lateSeconds / 60);
                     } else {
                         lateMinutes = 0;
                     }
                     
                     // 早退時間の計算（基準終了時刻より早い場合）
                     if (clockOut < standardEnd) {
-                        earlyLeaveMinutes = Math.floor((standardEnd - clockOut) / (1000 * 60));
+                        // 1秒でもあれば1分に切り上げる
+                        const earlySeconds = Math.floor((standardEnd - clockOut) / 1000);
+                        earlyLeaveMinutes = Math.ceil(earlySeconds / 60);
                     } else {
                         earlyLeaveMinutes = 0;
                     }

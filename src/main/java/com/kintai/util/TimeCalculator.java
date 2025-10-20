@@ -24,6 +24,7 @@ public class TimeCalculator {
     public static final LocalTime NIGHT_END_TIME = LocalTime.of(5, 0);
     public static final int LUNCH_BREAK_MINUTES = 60;
     public static final int STANDARD_WORKING_MINUTES = 480;
+    public static final int HALF_DAY_WORKING_MINUTES = 240; // 半休は一律4時間
     
     // 労働基準法第34条による休憩時間の定数
     public static final int MIN_BREAK_6_TO_8_HOURS = 45; // 6時間超8時間以下：45分
@@ -61,7 +62,10 @@ public class TimeCalculator {
             return 0;
         }
 
-        long totalMinutes = ChronoUnit.MINUTES.between(clockInTime, clockOutTime);
+        // 1秒でもあれば1分に切り上げる
+        long totalSeconds = ChronoUnit.SECONDS.between(clockInTime, clockOutTime);
+        long totalMinutes = (totalSeconds + 59) / 60; // 切り上げ処理
+        
         int effectiveBreakMinutes = resolveBreakMinutes(clockInTime, clockOutTime, breakMinutes);
         totalMinutes -= effectiveBreakMinutes;
 
@@ -103,7 +107,9 @@ public class TimeCalculator {
             return 0;
         }
 
-        int totalMinutes = (int) ChronoUnit.MINUTES.between(clockInTime, clockOutTime);
+        // 1秒でもあれば1分に切り上げる
+        long totalSeconds = ChronoUnit.SECONDS.between(clockInTime, clockOutTime);
+        int totalMinutes = (int) ((totalSeconds + 59) / 60); // 切り上げ処理
         int breakMinutes = requestedBreakMinutes != null ? requestedBreakMinutes : calculateRequiredBreakMinutes(totalMinutes);
 
         if (breakMinutes < 0) {
@@ -229,6 +235,46 @@ public class TimeCalculator {
     }
 
     /**
+     * 遅刻時間を計算する（分）
+     * @param clockInTime 出勤時刻
+     * @param attendanceDate 勤怠日
+     * @return 遅刻分数
+     */
+    public int calculateLateMinutes(LocalDateTime clockInTime, LocalDate attendanceDate) {
+        if (clockInTime == null || attendanceDate == null) {
+            return 0;
+        }
+        LocalDateTime scheduledStart = LocalDateTime.of(attendanceDate, STANDARD_START_TIME);
+        if (clockInTime.isBefore(scheduledStart) || clockInTime.isEqual(scheduledStart)) {
+            return 0;
+        }
+        // 1秒でもあれば1分に切り上げる
+        long lateSeconds = ChronoUnit.SECONDS.between(scheduledStart, clockInTime);
+        return (int) ((lateSeconds + 59) / 60);
+    }
+
+    /**
+     * 早退時間を計算する（分）
+     * @param clockOutTime 退勤時刻
+     * @param attendanceDate 勤怠日
+     * @return 早退分数
+     */
+    public int calculateEarlyLeaveMinutes(LocalDateTime clockOutTime, LocalDate attendanceDate) {
+        if (clockOutTime == null || attendanceDate == null) {
+            return 0;
+        }
+        LocalDateTime scheduledEnd = LocalDateTime.of(attendanceDate, STANDARD_END_TIME);
+        if (clockOutTime.isAfter(scheduledEnd) || clockOutTime.isEqual(scheduledEnd)) {
+            return 0;
+        }
+        // 1秒でもあれば1分に切り上げる
+        long earlySeconds = ChronoUnit.SECONDS.between(clockOutTime, scheduledEnd);
+        int earlyMinutes = (int) ((earlySeconds + 59) / 60);
+        
+        return earlyMinutes;
+    }
+
+    /**
      * 勤怠記録の休憩・深夜勤務時間を再計算し、遅刻・早退・残業は0で保持する
      * @param attendanceRecord 勤怠記録
      */
@@ -293,6 +339,14 @@ public class TimeCalculator {
         if (attendanceRecord.getBreakMinutes() == null) {
             attendanceRecord.setBreakMinutes(0);
         }
+    }
+
+    /**
+     * 半休の勤務時間を取得（一律4時間）
+     * @return 半休の勤務時間（分）
+     */
+    public int getHalfDayWorkingMinutes() {
+        return HALF_DAY_WORKING_MINUTES;
     }
 
     /**
