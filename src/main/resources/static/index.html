@@ -213,6 +213,7 @@
             display: block;
             margin: 1px 0;
             color: #000;
+            font-weight: normal;
         }
         
         .working-hours {
@@ -234,7 +235,7 @@
         }
         
         .calendar-header:nth-child(1) { color: #212529; } /* 月曜日: 黒 */
-        .calendar-header:nth-child(6) { color: #007bff; } /* 土曜日 */
+        .calendar-header:nth-child(6) { color: #007bff !important; } /* 土曜日 */
         .calendar-header:nth-child(7) { color: #dc3545; } /* 日曜日 */
         
     </style>
@@ -448,8 +449,8 @@
                                                 <thead>
                                                     <tr>
                                                         <th>日付</th>
-                                                        <th>出勤時刻</th>
-                                                        <th>退勤時刻</th>
+                                                        <th>出勤</th>
+                                                        <th>退勤</th>
                                                         <th>休憩</th>
                                                         <th>勤務</th>
                                                         <th>遅刻</th>

@@ -652,9 +652,8 @@ class DashboardScreen {
         const workingTimeElement = document.getElementById('workingTime');
         if (workingTimeElement) {
             if (data && data.clockInTime && data.clockOutTime) {
-                const workingTime = data.workingMinutes !== undefined && data.workingMinutes !== null ? 
-                    TimeUtils.formatMinutesToTime(data.workingMinutes) : 
-                    TimeUtils.calculateWorkingTime(data.clockInTime, data.clockOutTime, effectiveBreakMinutes);
+                // 打刻データがある場合は必ず計算で求める（正確性を優先）
+                const workingTime = TimeUtils.calculateWorkingTime(data.clockInTime, data.clockOutTime, effectiveBreakMinutes);
                 workingTimeElement.textContent = workingTime;
                 console.log('Working time set to:', workingTime);
             } else {
@@ -788,12 +787,11 @@ class DashboardScreen {
             const clockOutTime = record.clockOutTime ? 
                 new Date(record.clockOutTime).toLocaleTimeString('ja-JP', {hour: '2-digit', minute: '2-digit'}) : '';
 
-            // 勤務時間計算（バックエンドの値を優先）
+            // 勤務時間計算（打刻データがある場合は正確な計算を優先）
             let workingHours = '';
             if (record.clockInTime && record.clockOutTime) {
-                workingHours = record.workingMinutes !== undefined && record.workingMinutes !== null ? 
-                    TimeUtils.formatMinutesToTime(record.workingMinutes) : 
-                    TimeUtils.calculateWorkingTime(record.clockInTime, record.clockOutTime, record.breakMinutes);
+                // 打刻データがある場合は必ず計算で求める（正確性を優先）
+                workingHours = TimeUtils.calculateWorkingTime(record.clockInTime, record.clockOutTime, record.breakMinutes);
             }
 
             let breakDisplay = '';

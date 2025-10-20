@@ -63,6 +63,21 @@ public class AdjustmentRequestService {
             throw new AttendanceException("INVALID_TIME_ORDER", "出勤時間は退勤時間より前である必要があります");
         }
 
+        // 実働時間に応じた最小休憩時間の検証
+        if (newClockIn != null && newClockOut != null && requestDto.getBreakMinutes() != null) {
+            int totalMinutes = (int) java.time.temporal.ChronoUnit.MINUTES.between(newClockIn, newClockOut);
+            int workingMinutes = Math.max(totalMinutes - requestDto.getBreakMinutes(), 0);
+            
+            // 実働6時間以上8時間未満：45分以上の休憩が必要
+            if (workingMinutes >= 360 && workingMinutes < 480 && requestDto.getBreakMinutes() < 45) {
+                throw new AttendanceException("INSUFFICIENT_BREAK_TIME", "実働6時間以上8時間未満の場合、休憩時間は45分以上必要です");
+            }
+            // 実働8時間以上：60分以上の休憩が必要
+            else if (workingMinutes >= 480 && requestDto.getBreakMinutes() < 60) {
+                throw new AttendanceException("INSUFFICIENT_BREAK_TIME", "実働8時間以上の場合、休憩時間は60分以上必要です");
+            }
+        }
+
         if (targetDate == null && newClockIn != null) {
             targetDate = newClockIn.toLocalDate();
             requestDto.setTargetDate(targetDate);

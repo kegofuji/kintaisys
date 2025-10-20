@@ -432,12 +432,11 @@ class HistoryScreen {
                 }
                 
                 if (!workingTime) {
-                    // 有休承認済の場合は workingMinutes が存在すればそれを優先
-                    if (record.workingMinutes !== undefined && record.workingMinutes !== null) {
-                        workingTime = TimeUtils.formatMinutesToTime(record.workingMinutes);
-                    } else if (record.clockInTime && record.clockOutTime) {
-                        // 打刻データがある場合は計算で求める
+                    // 打刻データがある場合は必ず計算で求める（正確性を優先）
+                    if (record.clockInTime && record.clockOutTime) {
                         workingTime = TimeUtils.calculateWorkingTime(record.clockInTime, record.clockOutTime, record.breakMinutes);
+                    } else if (record.workingMinutes !== undefined && record.workingMinutes !== null) {
+                        workingTime = TimeUtils.formatMinutesToTime(record.workingMinutes);
                     }
                 }
             } else if (isConfirmed) {
@@ -452,10 +451,11 @@ class HistoryScreen {
                 }
                 
                 if (!workingTime) {
-                    if (record.workingMinutes !== undefined && record.workingMinutes !== null) {
-                        workingTime = TimeUtils.formatMinutesToTime(record.workingMinutes);
-                    } else {
+                    // 打刻データがある場合は必ず計算で求める（正確性を優先）
+                    if (record.clockInTime && record.clockOutTime) {
                         workingTime = TimeUtils.calculateWorkingTime(record.clockInTime, record.clockOutTime, record.breakMinutes);
+                    } else if (record.workingMinutes !== undefined && record.workingMinutes !== null) {
+                        workingTime = TimeUtils.formatMinutesToTime(record.workingMinutes);
                     }
                 }
             }
@@ -467,12 +467,12 @@ class HistoryScreen {
                     : '');
             const lateMinutes = Number(record.lateMinutes ?? 0);
             const earlyLeaveMinutes = Number(record.earlyLeaveMinutes ?? 0);
-            const lateDisplay = (isPaidLeaveApproved) ? '' : (lateMinutes > 0 ? TimeUtils.formatMinutesToTime(lateMinutes) : '');
-            const earlyLeaveDisplay = (isPaidLeaveApproved) ? '' : (earlyLeaveMinutes > 0 ? TimeUtils.formatMinutesToTime(earlyLeaveMinutes) : '');
+            const lateDisplay = (isPaidLeaveApproved) ? '' : (isConfirmed ? TimeUtils.formatMinutesToTime(lateMinutes) : '');
+            const earlyLeaveDisplay = (isPaidLeaveApproved) ? '' : (isConfirmed ? TimeUtils.formatMinutesToTime(earlyLeaveMinutes) : '');
             const overtimeValue = record.overtimeMinutes ?? 0;
-            const overtimeDisplay = (isPaidLeaveApproved) ? '' : (isConfirmed && overtimeValue > 0 ? TimeUtils.formatMinutesToTime(overtimeValue) : '');
+            const overtimeDisplay = (isPaidLeaveApproved) ? '' : (isConfirmed ? TimeUtils.formatMinutesToTime(overtimeValue) : '');
             const nightValue = isConfirmed ? this.resolveNightMinutes(record) : 0;
-            const nightWorkDisplay = (isPaidLeaveApproved) ? '' : (isConfirmed && nightValue > 0 ? TimeUtils.formatMinutesToTime(nightValue) : '');
+            const nightWorkDisplay = (isPaidLeaveApproved) ? '' : (isConfirmed ? TimeUtils.formatMinutesToTime(nightValue) : '');
 
             row.innerHTML = `
                 <td>${formatDate(record.attendanceDate)}</td>
@@ -1571,12 +1571,12 @@ class HistoryScreen {
                 if (isHalfDayLeave && attendance) {
                     let adjustmentMinutes = 0;
                     
-                    if (attendance.workingMinutes !== undefined && attendance.workingMinutes !== null) {
+                    // 打刻データがある場合は必ず計算で求める（正確性を優先）
+                    if (attendance.clockInTime && attendance.clockOutTime) {
+                        adjustmentMinutes = TimeUtils.timeStringToMinutes(TimeUtils.calculateWorkingTime(attendance.clockInTime, attendance.clockOutTime, attendance.breakMinutes));
+                    } else if (attendance.workingMinutes !== undefined && attendance.workingMinutes !== null) {
                         // attendance.workingMinutesは分数で提供されている
                         adjustmentMinutes = parseInt(attendance.workingMinutes) || 0;
-                    } else if (attendance.clockInTime && attendance.clockOutTime) {
-                        // 打刻データがある場合は計算で求める
-                        adjustmentMinutes = TimeUtils.timeStringToMinutes(TimeUtils.calculateWorkingTime(attendance.clockInTime, attendance.clockOutTime, attendance.breakMinutes));
                     }
                     
                     // 打刻修正の実働時間 + 半休分(4時間 = 240分)を合計
@@ -1588,21 +1588,18 @@ class HistoryScreen {
                     workingTime = '8:00';
                 } else {
                     // その他の有休申請の場合は従来の処理
-                    if (workPatternRequest && workPatternRequest.request) {
+                    // 打刻データがある場合は必ず計算で求める（正確性を優先）
+                    if (attendance && attendance.clockInTime && attendance.clockOutTime) {
+                        workingTime = TimeUtils.calculateWorkingTime(attendance.clockInTime, attendance.clockOutTime, attendance.breakMinutes);
+                    } else if (workPatternRequest && workPatternRequest.request) {
                         const patternWorkingMinutes = workPatternRequest.request.currentWorkingMinutes || 
                                                       workPatternRequest.request.workingMinutes ||
                                                       workPatternRequest.request.standardWorkingMinutes;
                         if (patternWorkingMinutes !== undefined && patternWorkingMinutes !== null) {
                             workingTime = TimeUtils.formatMinutesToTime(patternWorkingMinutes);
                         }
-                    }
-                    
-                    if (!workingTime && attendance) {
-                        if (attendance.workingMinutes !== undefined && attendance.workingMinutes !== null) {
-                            workingTime = TimeUtils.formatMinutesToTime(attendance.workingMinutes);
-                        } else if (attendance.clockInTime && attendance.clockOutTime) {
-                            workingTime = TimeUtils.calculateWorkingTime(attendance.clockInTime, attendance.clockOutTime, attendance.breakMinutes);
-                        }
+                    } else if (attendance && attendance.workingMinutes !== undefined && attendance.workingMinutes !== null) {
+                        workingTime = TimeUtils.formatMinutesToTime(attendance.workingMinutes);
                     }
                     
                     if (!workingTime) {
@@ -1611,21 +1608,18 @@ class HistoryScreen {
                 }
             } else if (isConfirmedAttendance) {
                 // 通常の場合（有休承認済でない場合）
-                if (workPatternRequest && workPatternRequest.request) {
+                // 打刻データがある場合は必ず計算で求める（正確性を優先）
+                if (attendance && attendance.clockInTime && attendance.clockOutTime) {
+                    workingTime = TimeUtils.calculateWorkingTime(attendance.clockInTime, attendance.clockOutTime, attendance.breakMinutes);
+                } else if (workPatternRequest && workPatternRequest.request) {
                     const patternWorkingMinutes = workPatternRequest.request.currentWorkingMinutes || 
                                                   workPatternRequest.request.workingMinutes ||
                                                   workPatternRequest.request.standardWorkingMinutes;
                     if (patternWorkingMinutes !== undefined && patternWorkingMinutes !== null) {
                         workingTime = TimeUtils.formatMinutesToTime(patternWorkingMinutes);
                     }
-                }
-                
-                if (!workingTime && attendance) {
-                    if (attendance.workingMinutes !== undefined && attendance.workingMinutes !== null) {
-                        workingTime = TimeUtils.formatMinutesToTime(attendance.workingMinutes);
-                    } else {
-                        workingTime = TimeUtils.calculateWorkingTime(attendance.clockInTime, attendance.clockOutTime, attendance.breakMinutes);
-                    }
+                } else if (attendance && attendance.workingMinutes !== undefined && attendance.workingMinutes !== null) {
+                    workingTime = TimeUtils.formatMinutesToTime(attendance.workingMinutes);
                 }
             }
             
@@ -1738,17 +1732,82 @@ class HistoryScreen {
                 // 深夜勤務時間の計算
                 nightWorkValue = TimeUtils.calculateNightShiftMinutes(attendance.clockInTime, attendance.clockOutTime, attendance.breakMinutes);
             } else {
-                // 通常勤務の場合は既存データを使用
-                lateMinutes = Number((attendance && attendance.lateMinutes) ?? 0);
-                earlyLeaveMinutes = Number((attendance && attendance.earlyLeaveMinutes) ?? 0);
-                overtimeValue = (attendance && attendance.overtimeMinutes) ?? 0;
-                nightWorkValue = isConfirmedAttendance && attendance ? this.resolveNightMinutes(attendance) : 0;
+                // 通常勤務の場合は打刻データから計算
+                if (isConfirmedAttendance && attendance) {
+                    // 標準勤務時間を取得（勤務時間変更申請がある場合はその値、なければ9:00-18:00）
+                    let standardStartHour = 9;
+                    let standardStartMinute = 0;
+                    let standardEndHour = 18;
+                    let standardEndMinute = 0;
+                    
+                    // 勤務時間変更申請がある場合はその時刻を使用
+                    if (workPatternRequest && workPatternRequest.request) {
+                        const request = workPatternRequest.request;
+                        
+                        if (request.startTime) {
+                            const startTimeStr = request.startTime;
+                            const startTimeMatch = startTimeStr.match(/(\d{1,2}):(\d{2})/);
+                            if (startTimeMatch) {
+                                standardStartHour = parseInt(startTimeMatch[1]) || 9;
+                                standardStartMinute = parseInt(startTimeMatch[2]) || 0;
+                            }
+                        }
+                        
+                        if (request.endTime) {
+                            const endTimeStr = request.endTime;
+                            const endTimeMatch = endTimeStr.match(/(\d{1,2}):(\d{2})/);
+                            if (endTimeMatch) {
+                                standardEndHour = parseInt(endTimeMatch[1]) || 18;
+                                standardEndMinute = parseInt(endTimeMatch[2]) || 0;
+                            }
+                        }
+                    }
+                    
+                    // 実際の打刻時刻
+                    const clockIn = new Date(attendance.clockInTime);
+                    const clockOut = new Date(attendance.clockOutTime);
+                    
+                    // 基準時刻（同じ日付で設定）
+                    const standardStart = new Date(clockIn.getFullYear(), clockIn.getMonth(), clockIn.getDate(), standardStartHour, standardStartMinute, 0, 0);
+                    const standardEnd = new Date(clockOut.getFullYear(), clockOut.getMonth(), clockOut.getDate(), standardEndHour, standardEndMinute, 0, 0);
+                    
+                    // 遅刻時間の計算（基準開始時刻より遅い場合）
+                    if (clockIn > standardStart) {
+                        lateMinutes = Math.floor((clockIn - standardStart) / (1000 * 60));
+                    } else {
+                        lateMinutes = 0;
+                    }
+                    
+                    // 早退時間の計算（基準終了時刻より早い場合）
+                    if (clockOut < standardEnd) {
+                        earlyLeaveMinutes = Math.floor((standardEnd - clockOut) / (1000 * 60));
+                    } else {
+                        earlyLeaveMinutes = 0;
+                    }
+                    
+                    // 残業時間の計算（8時間を超過した場合）
+                    const totalMinutes = Math.floor((clockOut - clockIn) / (1000 * 60));
+                    const breakMinutesValue = attendance.breakMinutes || 0;
+                    const workingMinutes = totalMinutes - breakMinutesValue;
+                    const standardWorkingMinutes = 8 * 60; // 8時間（480分）
+                    
+                    overtimeValue = Math.max(0, workingMinutes - standardWorkingMinutes);
+                    
+                    // 深夜勤務時間の計算
+                    nightWorkValue = this.resolveNightMinutes(attendance);
+                } else {
+                    // 打刻データがない場合は既存データを使用
+                    lateMinutes = Number((attendance && attendance.lateMinutes) ?? 0);
+                    earlyLeaveMinutes = Number((attendance && attendance.earlyLeaveMinutes) ?? 0);
+                    overtimeValue = (attendance && attendance.overtimeMinutes) ?? 0;
+                    nightWorkValue = 0;
+                }
             }
 
-            const lateDisplay = (isFullDayLeave) ? '' : (lateMinutes > 0 ? TimeUtils.formatMinutesToTime(lateMinutes) : '');
-            const earlyLeaveDisplay = (isFullDayLeave) ? '' : (earlyLeaveMinutes > 0 ? TimeUtils.formatMinutesToTime(earlyLeaveMinutes) : '');
-            const overtimeDisplay = (isFullDayLeave) ? '' : (isConfirmedAttendance && overtimeValue > 0 ? TimeUtils.formatMinutesToTime(overtimeValue) : '');
-            const nightWorkDisplay = (isFullDayLeave) ? '' : (isConfirmedAttendance && nightWorkValue > 0 ? TimeUtils.formatMinutesToTime(nightWorkValue) : '');
+            const lateDisplay = (isFullDayLeave) ? '' : (isConfirmedAttendance ? TimeUtils.formatMinutesToTime(lateMinutes) : '');
+            const earlyLeaveDisplay = (isFullDayLeave) ? '' : (isConfirmedAttendance ? TimeUtils.formatMinutesToTime(earlyLeaveMinutes) : '');
+            const overtimeDisplay = (isFullDayLeave) ? '' : (isConfirmedAttendance ? TimeUtils.formatMinutesToTime(overtimeValue) : '');
+            const nightWorkDisplay = (isFullDayLeave) ? '' : (isConfirmedAttendance ? TimeUtils.formatMinutesToTime(nightWorkValue) : '');
 
             // 日付をyyyy/mm/dd形式に変換
             const formatDate = (dateStr) => {

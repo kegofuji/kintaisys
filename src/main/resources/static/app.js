@@ -503,14 +503,13 @@ function displayAttendanceHistory(data) {
         const clockInTime = record.clockInTime ? formatTimeDisplay(record.clockInTime) : '-';
         const clockOutTime = record.clockOutTime ? formatTimeDisplay(record.clockOutTime) : '-';
         
-        // 勤務時間計算（バックエンドの値を優先、未確定は空白）
+        // 勤務時間計算（打刻データがある場合は正確な計算を優先）
         let workingHours = '';
         if (record.clockInTime && record.clockOutTime) {
-            if (record.workingMinutes !== undefined && record.workingMinutes !== null) {
-                workingHours = TimeUtils.formatMinutesToTime(record.workingMinutes);
-            } else {
-                workingHours = TimeUtils.calculateWorkingTime(record.clockInTime, record.clockOutTime, record.breakMinutes);
-            }
+            // 打刻データがある場合は必ず計算で求める（正確性を優先）
+            workingHours = TimeUtils.calculateWorkingTime(record.clockInTime, record.clockOutTime, record.breakMinutes);
+        } else if (record.workingMinutes !== undefined && record.workingMinutes !== null) {
+            workingHours = TimeUtils.formatMinutesToTime(record.workingMinutes);
         }
 
         let breakDisplay = '';
@@ -526,12 +525,10 @@ function displayAttendanceHistory(data) {
         const overtimeMinutes = record.clockInTime && record.clockOutTime
             ? ((record.overtimeMinutes ?? 0))
             : null;
-        const lateDisplay = lateMinutes > 0 ? formatMinutesToTime(lateMinutes) : '';
-        const earlyLeaveDisplay = earlyLeaveMinutes > 0 ? formatMinutesToTime(earlyLeaveMinutes) : '';
-        const overtimeDisplay = record.clockInTime && record.clockOutTime && overtimeMinutes && overtimeMinutes > 0
-            ? formatMinutesToTime(overtimeMinutes)
-            : '';
-        const nightWorkDisplay = nightWorkMinutes > 0 ? formatMinutesToTime(nightWorkMinutes) : '';
+        const lateDisplay = record.clockInTime && record.clockOutTime ? formatMinutesToTime(lateMinutes) : '';
+        const earlyLeaveDisplay = record.clockInTime && record.clockOutTime ? formatMinutesToTime(earlyLeaveMinutes) : '';
+        const overtimeDisplay = record.clockInTime && record.clockOutTime ? formatMinutesToTime(overtimeMinutes || 0) : '';
+        const nightWorkDisplay = record.clockInTime && record.clockOutTime ? formatMinutesToTime(nightWorkMinutes) : '';
         
         // ステータス表示
         let statusText = translateAttendanceStatus(record.attendanceStatus);
@@ -1220,26 +1217,23 @@ function filterAttendanceTableByDate(dateString) {
         const clockOutTime = attendance.clockOutTime ? 
             new Date(attendance.clockOutTime).toLocaleTimeString('ja-JP', {hour: '2-digit', minute: '2-digit'}) : '-';
 
-        // 勤務時間の計算（バックエンドの値を優先）
+        // 勤務時間の計算（打刻データがある場合は正確な計算を優先）
         let workingTime = '0:00';
         if (attendance.clockInTime && attendance.clockOutTime) {
-            if (attendance.workingMinutes !== undefined && attendance.workingMinutes !== null) {
-                workingTime = TimeUtils.formatMinutesToTime(attendance.workingMinutes);
-            } else {
-                workingTime = TimeUtils.calculateWorkingTime(attendance.clockInTime, attendance.clockOutTime, attendance.breakMinutes);
-            }
+            // 打刻データがある場合は必ず計算で求める（正確性を優先）
+            workingTime = TimeUtils.calculateWorkingTime(attendance.clockInTime, attendance.clockOutTime, attendance.breakMinutes);
+        } else if (attendance.workingMinutes !== undefined && attendance.workingMinutes !== null) {
+            workingTime = TimeUtils.formatMinutesToTime(attendance.workingMinutes);
         }
 
         const lateMinutes = Number(attendance.lateMinutes ?? 0);
         const earlyLeaveMinutes = Number(attendance.earlyLeaveMinutes ?? 0);
-        const lateDisplay = lateMinutes > 0 ? TimeUtils.formatMinutesToTime(lateMinutes) : '';
-        const earlyLeaveDisplay = earlyLeaveMinutes > 0 ? TimeUtils.formatMinutesToTime(earlyLeaveMinutes) : '';
+        const lateDisplay = TimeUtils.formatMinutesToTime(lateMinutes);
+        const earlyLeaveDisplay = TimeUtils.formatMinutesToTime(earlyLeaveMinutes);
         const overtimeMinutes = attendance.overtimeMinutes ?? 0;
-        const overtimeDisplay = overtimeMinutes > 0
-            ? TimeUtils.formatMinutesToTime(overtimeMinutes)
-            : '';
+        const overtimeDisplay = TimeUtils.formatMinutesToTime(overtimeMinutes);
         const nightWorkValue = attendance.nightWorkMinutes ?? attendance.nightShiftMinutes ?? 0;
-        const nightWorkDisplay = nightWorkValue > 0 ? TimeUtils.formatMinutesToTime(nightWorkValue) : '';
+        const nightWorkDisplay = TimeUtils.formatMinutesToTime(nightWorkValue);
 
         // ステータス表示
         let status = translateAttendanceStatus(attendance.attendanceStatus);
@@ -1563,10 +1557,11 @@ function updateAttendanceDisplay(record, clockInTime, clockOutTime, workingTime,
     }
 
     if (workingTime) {
-        if (attendance.workingMinutes !== undefined && attendance.workingMinutes !== null) {
-            workingTime.textContent = TimeUtils.formatMinutesToTime(attendance.workingMinutes);
-        } else if (attendance.clockInTime && attendance.clockOutTime) {
+        if (attendance.clockInTime && attendance.clockOutTime) {
+            // 打刻データがある場合は必ず計算で求める（正確性を優先）
             workingTime.textContent = TimeUtils.calculateWorkingTime(attendance.clockInTime, attendance.clockOutTime, attendance.breakMinutes);
+        } else if (attendance.workingMinutes !== undefined && attendance.workingMinutes !== null) {
+            workingTime.textContent = TimeUtils.formatMinutesToTime(attendance.workingMinutes);
         } else {
             workingTime.textContent = '--:--';
         }
