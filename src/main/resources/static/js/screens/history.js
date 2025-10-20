@@ -460,17 +460,19 @@ class HistoryScreen {
                 }
             }
 
-            const breakDisplay = isConfirmed && record.breakMinutes !== undefined && record.breakMinutes !== null
-                ? TimeUtils.formatMinutesToTime(record.breakMinutes)
-                : '';
+            // 有休承認済の場合は勤務時間以外の表記は空にする
+            const breakDisplay = (isPaidLeaveApproved) ? '' :
+                (isConfirmed && record.breakMinutes !== undefined && record.breakMinutes !== null
+                    ? TimeUtils.formatMinutesToTime(record.breakMinutes)
+                    : '');
             const lateMinutes = Number(record.lateMinutes ?? 0);
             const earlyLeaveMinutes = Number(record.earlyLeaveMinutes ?? 0);
-            const lateDisplay = lateMinutes > 0 ? TimeUtils.formatMinutesToTime(lateMinutes) : '';
-            const earlyLeaveDisplay = earlyLeaveMinutes > 0 ? TimeUtils.formatMinutesToTime(earlyLeaveMinutes) : '';
+            const lateDisplay = (isPaidLeaveApproved) ? '' : (lateMinutes > 0 ? TimeUtils.formatMinutesToTime(lateMinutes) : '');
+            const earlyLeaveDisplay = (isPaidLeaveApproved) ? '' : (earlyLeaveMinutes > 0 ? TimeUtils.formatMinutesToTime(earlyLeaveMinutes) : '');
             const overtimeValue = record.overtimeMinutes ?? 0;
-            const overtimeDisplay = isConfirmed && overtimeValue > 0 ? TimeUtils.formatMinutesToTime(overtimeValue) : '';
+            const overtimeDisplay = (isPaidLeaveApproved) ? '' : (isConfirmed && overtimeValue > 0 ? TimeUtils.formatMinutesToTime(overtimeValue) : '');
             const nightValue = isConfirmed ? this.resolveNightMinutes(record) : 0;
-            const nightWorkDisplay = isConfirmed && nightValue > 0 ? TimeUtils.formatMinutesToTime(nightValue) : '';
+            const nightWorkDisplay = (isPaidLeaveApproved) ? '' : (isConfirmed && nightValue > 0 ? TimeUtils.formatMinutesToTime(nightValue) : '');
 
             row.innerHTML = `
                 <td>${formatDate(record.attendanceDate)}</td>
@@ -1598,18 +1600,20 @@ class HistoryScreen {
                 }
             }
             
-            const breakDisplay = isConfirmedAttendance && attendance && attendance.breakMinutes !== undefined && attendance.breakMinutes !== null
-                ? TimeUtils.formatMinutesToTime(attendance.breakMinutes)
-                : '';
+            // 有休承認済の場合は勤務時間以外の表記は空にする
+            const breakDisplay = (isPaidLeaveApproved) ? '' :
+                (isConfirmedAttendance && attendance && attendance.breakMinutes !== undefined && attendance.breakMinutes !== null
+                    ? TimeUtils.formatMinutesToTime(attendance.breakMinutes)
+                    : '');
 
             const lateMinutes = Number((attendance && attendance.lateMinutes) ?? 0);
             const earlyLeaveMinutes = Number((attendance && attendance.earlyLeaveMinutes) ?? 0);
-            const lateDisplay = lateMinutes > 0 ? TimeUtils.formatMinutesToTime(lateMinutes) : '';
-            const earlyLeaveDisplay = earlyLeaveMinutes > 0 ? TimeUtils.formatMinutesToTime(earlyLeaveMinutes) : '';
+            const lateDisplay = (isPaidLeaveApproved) ? '' : (lateMinutes > 0 ? TimeUtils.formatMinutesToTime(lateMinutes) : '');
+            const earlyLeaveDisplay = (isPaidLeaveApproved) ? '' : (earlyLeaveMinutes > 0 ? TimeUtils.formatMinutesToTime(earlyLeaveMinutes) : '');
             const overtimeValue = (attendance && attendance.overtimeMinutes) ?? 0;
-            const overtimeDisplay = isConfirmedAttendance && overtimeValue > 0 ? TimeUtils.formatMinutesToTime(overtimeValue) : '';
+            const overtimeDisplay = (isPaidLeaveApproved) ? '' : (isConfirmedAttendance && overtimeValue > 0 ? TimeUtils.formatMinutesToTime(overtimeValue) : '');
             const nightWorkValue = isConfirmedAttendance && attendance ? this.resolveNightMinutes(attendance) : 0;
-            const nightWorkDisplay = isConfirmedAttendance && nightWorkValue > 0 ? TimeUtils.formatMinutesToTime(nightWorkValue) : '';
+            const nightWorkDisplay = (isPaidLeaveApproved) ? '' : (isConfirmedAttendance && nightWorkValue > 0 ? TimeUtils.formatMinutesToTime(nightWorkValue) : '');
 
             // 日付をyyyy/mm/dd形式に変換
             const formatDate = (dateStr) => {
