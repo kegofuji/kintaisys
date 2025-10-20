@@ -662,6 +662,12 @@ class AdjustmentScreen {
                 return;
             }
 
+            // 半休申請（HALF_AMまたはHALF_PM）の場合は競合として扱わない
+            const timeUnit = req?.timeUnit || '';
+            if (timeUnit === 'HALF_AM' || timeUnit === 'HALF_PM') {
+                return;
+            }
+
             const startDate = this.parseDate(req.startDate || req.date);
             const endDate = this.parseDate(req.endDate || req.date || req.startDate);
             if (!startDate || !endDate) {
