@@ -139,10 +139,6 @@ public class DataInitializer {
         adminData.setAdminId(1L);
         adminData.setIsActive(true);
         Admin savedAdmin = adminRepository.save(adminData);
-        if (savedAdmin == null) {
-            System.err.println("DataInitializer: Failed to save admin data");
-            return;
-        }
         System.out.println("Created admin data with ID: " + savedAdmin.getAdminId());
         
         // adminアカウントを作成

@@ -97,11 +97,11 @@ public class AttendanceService {
                 );
             }
             
-            int overtimeMinutes = timeCalculator.calculateOvertimeMinutes(workingMinutes);
+            int overtimeMinutes = timeCalculator.calculateOvertimeMinutes(workingMinutes != null ? workingMinutes : 0);
             int nightShiftMinutes = timeCalculator.calculateNightShiftMinutesWithBreak(
                     existingRecord.getClockInTime(),
                     existingRecord.getClockOutTime(),
-                    breakMinutes
+                    breakMinutes != null ? breakMinutes : 0
             );
 
             if (workPatternChangeRequestService != null) {

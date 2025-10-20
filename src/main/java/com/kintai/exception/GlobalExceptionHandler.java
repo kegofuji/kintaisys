@@ -103,7 +103,7 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(NoResourceFoundException.class)
     @ResponseStatus(HttpStatus.NOT_FOUND)
-    public ResponseEntity<ClockResponse> handleResourceNotFound(NoResourceFoundException ex) {
+    public ResponseEntity<ClockResponse> handleResourceNotFound(NoResourceFoundException ex) throws NoResourceFoundException {
         String resourcePath = ex.getResourcePath();
         
         // 静的リソースやHTMLファイルの場合は例外を再スローしてSpringのデフォルトハンドリングに任せる

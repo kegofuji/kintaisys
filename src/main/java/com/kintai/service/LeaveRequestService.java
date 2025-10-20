@@ -23,7 +23,6 @@ import java.util.*;
 public class LeaveRequestService {
 
     private static final BigDecimal HALF_DAY = new BigDecimal("0.5");
-    private static final BigDecimal ONE_DAY = BigDecimal.ONE;
 
     @Autowired
     private LeaveRequestRepository leaveRequestRepository;
