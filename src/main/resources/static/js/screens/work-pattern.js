@@ -51,6 +51,7 @@ class WorkPatternScreen {
 
     init() {
         if (this.initialized) {
+            this.updateDaySelectionVisibility();
             this.updateDaySelectionAvailability();
             this.updateHolidayButtons();
             this.updateWorkingPreview();
@@ -62,6 +63,7 @@ class WorkPatternScreen {
         this.initializeElements();
         this.setupEventListeners();
         this.setDefaultValues();
+        this.updateDaySelectionVisibility();
         this.refreshRequests();
         this.startSummaryPolling();
         this.initialized = true;
@@ -87,6 +89,7 @@ class WorkPatternScreen {
         this.dayButtons = Array.from(document.querySelectorAll('.work-pattern-day-btn'));
         this.holidayButtons = Array.from(document.querySelectorAll('.work-pattern-holiday-btn'));
         this.dayHelpText = document.getElementById('workPatternDayHelp');
+        this.daySelectionContainer = document.getElementById('workPatternDaySelectionContainer');
     }
 
     setupEventListeners() {
@@ -176,6 +179,7 @@ class WorkPatternScreen {
             this.reasonInput.value = '';
         }
         this.setDaySelection(DEFAULT_WORK_PATTERN_DAYS);
+        this.updateDaySelectionVisibility();
         this.updateWorkingPreview();
         this.updateDaySelectionAvailability();
     }
@@ -205,13 +209,17 @@ class WorkPatternScreen {
             return;
         }
 
-        if (!this.selectedDays || this.selectedDays.size === 0) {
-            this.showAlert('勤務日を少なくとも1つ選択してください。', 'warning');
-            return;
-        }
-        if (this.selectedDays.size !== 5) {
-            this.showAlert('勤務日は5日選択してください。', 'warning');
-            return;
+        // 申請期間が7日以上の場合のみ勤務日の選択を必須とする
+        const periodLength = this.getRequestedPeriodLength();
+        if (periodLength >= 7) {
+            if (!this.selectedDays || this.selectedDays.size === 0) {
+                this.showAlert('勤務日を少なくとも1つ選択してください。', 'warning');
+                return;
+            }
+            if (this.selectedDays.size !== 5) {
+                this.showAlert('勤務日は5日選択してください。', 'warning');
+                return;
+            }
         }
 
         const totalMinutes = this.calculateTotalMinutes();
@@ -724,6 +732,25 @@ class WorkPatternScreen {
         });
     }
 
+    updateDaySelectionVisibility() {
+        // 開始日と終了日の両方が入力されているかチェック
+        const hasBothDates = this.startDateInput?.value && this.endDateInput?.value;
+        
+        if (!this.daySelectionContainer) {
+            return;
+        }
+        
+        if (!hasBothDates) {
+            // 開始日・終了日のいずれかが未入力の場合は非表示
+            this.daySelectionContainer.style.display = 'none';
+        } else {
+            // 両方入力されている場合、申請期間が7日以上の場合のみ表示
+            const periodLength = this.getRequestedPeriodLength();
+            const shouldShow = periodLength >= 7;
+            this.daySelectionContainer.style.display = shouldShow ? 'block' : 'none';
+        }
+    }
+
     updateDaySelectionAvailability() {
         if (this.selectedDays.size > 5) {
             const trimmed = Array.from(this.selectedDays).slice(0, 5);
@@ -800,6 +827,7 @@ class WorkPatternScreen {
         if (this.endDateInput.value && this.startDateInput.value && this.endDateInput.value < this.startDateInput.value) {
             this.endDateInput.value = this.startDateInput.value;
         }
+        this.updateDaySelectionVisibility();
         this.updateDaySelectionAvailability();
         this.updateWorkingPreview();
     }
