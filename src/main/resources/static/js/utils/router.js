@@ -185,6 +185,28 @@ class Router {
         const targetScreen = document.getElementById(screenId);
         if (targetScreen) {
             targetScreen.classList.add('active');
+            
+            // historyScreenが表示された場合、カレンダー要素を確実に表示する
+            if (screenId === 'historyScreen' && window.historyScreen) {
+                setTimeout(() => {
+                    const calendarGrid = document.getElementById('calendarGrid');
+                    if (calendarGrid && window.historyScreen.calendarGrid) {
+                        // カレンダーが表示されていない場合は再生成
+                        if (calendarGrid.children.length === 0) {
+                            console.log('カレンダーが空のため再生成します');
+                            if (typeof window.historyScreen.generateCalendar === 'function') {
+                                window.historyScreen.generateCalendar();
+                            }
+                        }
+                    } else if (!window.historyScreen.calendarGrid) {
+                        console.log('calendarGrid要素が見つからないため、再初期化します');
+                        window.historyScreen.initializeElements();
+                        if (window.historyScreen.calendarGrid && typeof window.historyScreen.generateCalendar === 'function') {
+                            window.historyScreen.generateCalendar();
+                        }
+                    }
+                }, 100);
+            }
         } else {
             console.error(`画面が見つかりません: ${screenId}`);
         }
@@ -222,8 +244,21 @@ class Router {
                 }
                 break;
             case 'historyScreen':
-                if (window.historyScreen && !window.historyScreen.initialized) {
-                    window.historyScreen.init();
+                if (window.historyScreen) {
+                    if (!window.historyScreen.initialized) {
+                        window.historyScreen.init();
+                    } else {
+                        // 既に初期化済みの場合でも、要素が存在しない場合は再初期化
+                        if (!window.historyScreen.calendarGrid || !document.getElementById('calendarGrid')) {
+                            console.log('calendarGrid要素が見つからないため、要素を再取得します');
+                            window.historyScreen.initializeElements();
+                            if (window.historyScreen.calendarGrid) {
+                                window.historyScreen.loadCalendarData(true).catch(error => {
+                                    console.error('カレンダーデータの再読み込みに失敗:', error);
+                                });
+                            }
+                        }
+                    }
                 }
                 break;
             case 'vacationScreen':

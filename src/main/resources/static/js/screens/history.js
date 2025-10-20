@@ -57,6 +57,16 @@ class HistoryScreen {
             // 月が選択されていない場合はボタンを非表示
             this.hideMonthlySubmitButton();
         }
+        
+        // 初期化完了後にカレンダーが表示されているか確認
+        setTimeout(() => {
+            const calendarGrid = document.getElementById('calendarGrid');
+            if (calendarGrid && calendarGrid.children.length === 0 && this.calendarGrid) {
+                console.log('初期化完了後、カレンダーが空のため再生成します');
+                this.generateCalendar();
+            }
+        }, 200);
+        
         this.initialized = true;
     }
 
@@ -72,6 +82,25 @@ class HistoryScreen {
         this.vacationCancelButton = document.getElementById('vacationCancelButton');
         this.adjustmentResubmitButton = document.getElementById('adjustmentResubmitButton');
         this.vacationResubmitButton = document.getElementById('vacationResubmitButton');
+        
+        // calendarGrid要素が見つからない場合のデバッグ情報とフォールバック
+        if (!this.calendarGrid) {
+            console.error('calendarGrid要素が見つかりません。DOM要素の確認が必要です。');
+            console.log('現在のDOM構造:', document.querySelector('#calendarGrid'));
+            console.log('historyScreenのDOM要素確認:', document.querySelector('#historyScreen'));
+            
+            // 少し待ってから再試行
+            setTimeout(() => {
+                this.calendarGrid = document.getElementById('calendarGrid');
+                if (this.calendarGrid) {
+                    console.log('再試行でcalendarGrid要素を取得しました:', this.calendarGrid);
+                } else {
+                    console.error('再試行後もcalendarGrid要素が見つかりません');
+                }
+            }, 100);
+        } else {
+            console.log('calendarGrid要素を正常に取得しました:', this.calendarGrid);
+        }
     }
 
     /**
@@ -184,6 +213,12 @@ class HistoryScreen {
                 this.vacationRequests = [];
                 this.adjustmentRequests = [];
                 this.workPatternRequests = [];
+            }
+            
+            // エラーが発生した場合でも、shouldRegenerateがtrueの場合はカレンダーを生成
+            if (shouldRegenerate) {
+                console.log('エラー発生時でもカレンダーを生成します');
+                this.generateCalendar();
             }
         }
     }
@@ -357,12 +392,74 @@ class HistoryScreen {
             const hasOut = !!record.clockOutTime;
             const isConfirmed = hasIn && hasOut;
 
-            const clockInTime = hasIn ? new Date(record.clockInTime).toLocaleTimeString('ja-JP', {hour: '2-digit', minute: '2-digit'}) : '';
-            const clockOutTime = hasOut ? new Date(record.clockOutTime).toLocaleTimeString('ja-JP', {hour: '2-digit', minute: '2-digit'}) : '';
-            const workingTime = isConfirmed ? 
-                (record.workingMinutes !== undefined && record.workingMinutes !== null ? 
-                    TimeUtils.formatMinutesToTime(record.workingMinutes) : 
-                    TimeUtils.calculateWorkingTime(record.clockInTime, record.clockOutTime, record.breakMinutes)) : '';
+            // 日付をyyyy/mm/dd形式に変換
+            const formatDate = (dateStr) => {
+                if (!dateStr) return '';
+                const date = new Date(dateStr);
+                const year = date.getFullYear();
+                const month = String(date.getMonth() + 1).padStart(2, '0');
+                const day = String(date.getDate()).padStart(2, '0');
+                return `${year}/${month}/${day}`;
+            };
+
+            // 有休申請の状態を確認
+            const dateString = record.attendanceDate;
+            const vacationRequest = this.getVacationRequestForDate(dateString);
+            const isPaidLeaveApproved = vacationRequest && 
+                vacationRequest.status === 'APPROVED' && 
+                vacationRequest.leaveType === 'PAID_LEAVE';
+
+            // 勤務時間変更申請の状態を確認
+            const workPatternRequest = this.getWorkPatternRequestForDate(dateString);
+
+            // 有休承認済の場合は出勤退勤打刻の表記を非表示にする
+            const clockInTime = (isPaidLeaveApproved) ? '' :
+                (hasIn ? new Date(record.clockInTime).toLocaleTimeString('ja-JP', {hour: '2-digit', minute: '2-digit'}) : '');
+            const clockOutTime = (isPaidLeaveApproved) ? '' :
+                (hasOut ? new Date(record.clockOutTime).toLocaleTimeString('ja-JP', {hour: '2-digit', minute: '2-digit'}) : '');
+            
+            let workingTime = '';
+            if (isPaidLeaveApproved) {
+                // 有休承認済の場合は現在の勤務時間の実働をそのまま取る
+                // 勤務時間変更申請がある場合はその実働時間を使用
+                if (workPatternRequest && workPatternRequest.request) {
+                    const patternWorkingMinutes = workPatternRequest.request.currentWorkingMinutes || 
+                                                  workPatternRequest.request.workingMinutes ||
+                                                  workPatternRequest.request.standardWorkingMinutes;
+                    if (patternWorkingMinutes !== undefined && patternWorkingMinutes !== null) {
+                        workingTime = TimeUtils.formatMinutesToTime(patternWorkingMinutes);
+                    }
+                }
+                
+                if (!workingTime) {
+                    // 有休承認済の場合は workingMinutes が存在すればそれを優先
+                    if (record.workingMinutes !== undefined && record.workingMinutes !== null) {
+                        workingTime = TimeUtils.formatMinutesToTime(record.workingMinutes);
+                    } else if (record.clockInTime && record.clockOutTime) {
+                        // 打刻データがある場合は計算で求める
+                        workingTime = TimeUtils.calculateWorkingTime(record.clockInTime, record.clockOutTime, record.breakMinutes);
+                    }
+                }
+            } else if (isConfirmed) {
+                // 通常の場合（有休承認済でない場合）
+                if (workPatternRequest && workPatternRequest.request) {
+                    const patternWorkingMinutes = workPatternRequest.request.currentWorkingMinutes || 
+                                                  workPatternRequest.request.workingMinutes ||
+                                                  workPatternRequest.request.standardWorkingMinutes;
+                    if (patternWorkingMinutes !== undefined && patternWorkingMinutes !== null) {
+                        workingTime = TimeUtils.formatMinutesToTime(patternWorkingMinutes);
+                    }
+                }
+                
+                if (!workingTime) {
+                    if (record.workingMinutes !== undefined && record.workingMinutes !== null) {
+                        workingTime = TimeUtils.formatMinutesToTime(record.workingMinutes);
+                    } else {
+                        workingTime = TimeUtils.calculateWorkingTime(record.clockInTime, record.clockOutTime, record.breakMinutes);
+                    }
+                }
+            }
+
             const breakDisplay = isConfirmed && record.breakMinutes !== undefined && record.breakMinutes !== null
                 ? TimeUtils.formatMinutesToTime(record.breakMinutes)
                 : '';
@@ -374,15 +471,6 @@ class HistoryScreen {
             const overtimeDisplay = isConfirmed && overtimeValue > 0 ? TimeUtils.formatMinutesToTime(overtimeValue) : '';
             const nightValue = isConfirmed ? this.resolveNightMinutes(record) : 0;
             const nightWorkDisplay = isConfirmed && nightValue > 0 ? TimeUtils.formatMinutesToTime(nightValue) : '';
-            // 日付をyyyy/mm/dd形式に変換
-            const formatDate = (dateStr) => {
-                if (!dateStr) return '';
-                const date = new Date(dateStr);
-                const year = date.getFullYear();
-                const month = String(date.getMonth() + 1).padStart(2, '0');
-                const day = String(date.getDate()).padStart(2, '0');
-                return `${year}/${month}/${day}`;
-            };
 
             row.innerHTML = `
                 <td>${formatDate(record.attendanceDate)}</td>
@@ -506,11 +594,23 @@ class HistoryScreen {
      * カレンダー生成
      */
     generateCalendar() {
-        if (!this.calendarGrid) return;
+        console.log('generateCalendar呼び出し - calendarGrid:', this.calendarGrid);
+        
+        if (!this.calendarGrid) {
+            console.warn('calendarGrid要素が見つかりません。再取得を試みます。');
+            // 要素の再取得を試行
+            this.calendarGrid = document.getElementById('calendarGrid');
+            if (!this.calendarGrid) {
+                console.error('calendarGrid要素の再取得に失敗しました。要素のIDは「calendarGrid」です。');
+                return;
+            }
+            console.log('calendarGrid要素を再取得しました:', this.calendarGrid);
+        }
 
         // デバッグ用：データ読み込み状況を確認
         console.log('=== カレンダー生成開始 ===');
-            console.log('休暇申請データ:', this.vacationRequests?.length || 0, '件');
+        console.log('現在の年月:', this.currentYear, '/', this.currentMonth + 1);
+        console.log('休暇申請データ:', this.vacationRequests?.length || 0, '件');
         console.log('打刻修正申請データ:', this.adjustmentRequests?.length || 0, '件');
         console.log('勤怠データ:', this.attendanceData?.length || 0, '件');
 
@@ -709,12 +809,14 @@ class HistoryScreen {
                     <div class="day-number">${d}</div>
                     ${holidayLabel}
                     <div class="day-badges">${badges}</div>
-                    ${attendance ? this.renderAttendanceInfo(attendance) : ''}
+                    ${attendance ? this.renderAttendanceInfo(attendance, dateString) : ''}
                 </div>
             `;
         }
 
         this.calendarGrid.innerHTML = calendarHtml;
+        console.log('カレンダーHTMLを挿入しました。要素数:', this.calendarGrid.children.length);
+        console.log('calendarGrid要素の状態:', this.calendarGrid);
         
         // カレンダーの日付クリックイベントを設定
         this.setupCalendarClickEvents();
@@ -1410,6 +1512,16 @@ class HistoryScreen {
         // 選択された日付の勤怠データを取得
         const attendance = this.getAttendanceForDate(dateString);
         
+        // 有休申請の状態を確認
+        const vacationRequest = this.getVacationRequestForDate(dateString);
+        const isPaidLeaveApproved = vacationRequest && 
+            vacationRequest.status === 'APPROVED' && 
+            vacationRequest.leaveType === 'PAID_LEAVE';
+            
+        
+        // 勤務時間変更申請の状態を確認
+        const workPatternRequest = this.getWorkPatternRequestForDate(dateString);
+        
         // 日付の詳細情報を取得
         const selectedDate = new Date(dateString);
         const isWeekend = selectedDate.getDay() === 0 || selectedDate.getDay() === 6;
@@ -1418,35 +1530,85 @@ class HistoryScreen {
         // テーブルをクリア
         this.historyTableBody.innerHTML = '';
 
-        if (attendance) {
-            // 勤怠データがある場合
+        if (attendance || isPaidLeaveApproved) {
+            // 勤怠データがある場合、または有休承認済の場合
             const row = document.createElement('tr');
             row.classList.add('attendance-row');
 
-            // 時刻表示
-            const clockInTime = attendance.clockInTime ? 
-                new Date(attendance.clockInTime).toLocaleTimeString('ja-JP', {hour: '2-digit', minute: '2-digit'}) : '';
-            const clockOutTime = attendance.clockOutTime ? 
-                new Date(attendance.clockOutTime).toLocaleTimeString('ja-JP', {hour: '2-digit', minute: '2-digit'}) : '';
+            // 有休承認済の場合は出勤退勤打刻の表記を非表示にする
+            const clockInTime = (isPaidLeaveApproved) ? '' :
+                (attendance && attendance.clockInTime ? 
+                    new Date(attendance.clockInTime).toLocaleTimeString('ja-JP', {hour: '2-digit', minute: '2-digit'}) : '');
+            const clockOutTime = (isPaidLeaveApproved) ? '' :
+                (attendance && attendance.clockOutTime ? 
+                    new Date(attendance.clockOutTime).toLocaleTimeString('ja-JP', {hour: '2-digit', minute: '2-digit'}) : '');
 
             // 勤務時間の計算（バックエンドの値を優先）
-            const isConfirmedAttendance = attendance.clockInTime && attendance.clockOutTime;
-            const workingTime = isConfirmedAttendance
-                ? (attendance.workingMinutes !== undefined && attendance.workingMinutes !== null ? 
-                    TimeUtils.formatMinutesToTime(attendance.workingMinutes) : 
-                    TimeUtils.calculateWorkingTime(attendance.clockInTime, attendance.clockOutTime, attendance.breakMinutes))
-                : '';
-            const breakDisplay = isConfirmedAttendance && attendance.breakMinutes !== undefined && attendance.breakMinutes !== null
+            const isConfirmedAttendance = attendance && attendance.clockInTime && attendance.clockOutTime;
+            let workingTime = '';
+            
+            if (isPaidLeaveApproved) {
+                // 有休承認済の場合は現在の勤務時間の実働をそのまま取る
+                // 勤務時間変更申請がある場合はその実働時間を使用
+                if (workPatternRequest && workPatternRequest.request) {
+                    // 勤務時間変更申請の実働時間を優先（フィールド名は要確認）
+                    const patternWorkingMinutes = workPatternRequest.request.currentWorkingMinutes || 
+                                                  workPatternRequest.request.workingMinutes ||
+                                                  workPatternRequest.request.standardWorkingMinutes;
+                    if (patternWorkingMinutes !== undefined && patternWorkingMinutes !== null) {
+                        workingTime = TimeUtils.formatMinutesToTime(patternWorkingMinutes);
+                    }
+                }
+                
+                // 勤務時間変更申請がない、または実働時間が取得できない場合は通常の勤務時間を使用
+                if (!workingTime) {
+                    if (attendance) {
+                        // 有休承認済の場合は workingMinutes が存在すればそれを優先
+                        if (attendance.workingMinutes !== undefined && attendance.workingMinutes !== null) {
+                            workingTime = TimeUtils.formatMinutesToTime(attendance.workingMinutes);
+                        } else if (attendance.clockInTime && attendance.clockOutTime) {
+                            // 打刻データがある場合は計算で求める
+                            workingTime = TimeUtils.calculateWorkingTime(attendance.clockInTime, attendance.clockOutTime, attendance.breakMinutes);
+                        }
+                    }
+                    
+                    // 有休承認済でまだ勤務時間が取得できない場合は、デフォルトの8時間勤務を表示
+                    if (!workingTime && isPaidLeaveApproved) {
+                        // 有休の場合の標準勤務時間（8時間 = 480分）を表示
+                        workingTime = '8:00';
+                    }
+                }
+            } else if (isConfirmedAttendance) {
+                // 通常の場合（有休承認済でない場合）
+                if (workPatternRequest && workPatternRequest.request) {
+                    const patternWorkingMinutes = workPatternRequest.request.currentWorkingMinutes || 
+                                                  workPatternRequest.request.workingMinutes ||
+                                                  workPatternRequest.request.standardWorkingMinutes;
+                    if (patternWorkingMinutes !== undefined && patternWorkingMinutes !== null) {
+                        workingTime = TimeUtils.formatMinutesToTime(patternWorkingMinutes);
+                    }
+                }
+                
+                if (!workingTime && attendance) {
+                    if (attendance.workingMinutes !== undefined && attendance.workingMinutes !== null) {
+                        workingTime = TimeUtils.formatMinutesToTime(attendance.workingMinutes);
+                    } else {
+                        workingTime = TimeUtils.calculateWorkingTime(attendance.clockInTime, attendance.clockOutTime, attendance.breakMinutes);
+                    }
+                }
+            }
+            
+            const breakDisplay = isConfirmedAttendance && attendance && attendance.breakMinutes !== undefined && attendance.breakMinutes !== null
                 ? TimeUtils.formatMinutesToTime(attendance.breakMinutes)
                 : '';
 
-            const lateMinutes = Number(attendance.lateMinutes ?? 0);
-            const earlyLeaveMinutes = Number(attendance.earlyLeaveMinutes ?? 0);
+            const lateMinutes = Number((attendance && attendance.lateMinutes) ?? 0);
+            const earlyLeaveMinutes = Number((attendance && attendance.earlyLeaveMinutes) ?? 0);
             const lateDisplay = lateMinutes > 0 ? TimeUtils.formatMinutesToTime(lateMinutes) : '';
             const earlyLeaveDisplay = earlyLeaveMinutes > 0 ? TimeUtils.formatMinutesToTime(earlyLeaveMinutes) : '';
-            const overtimeValue = attendance.overtimeMinutes ?? 0;
+            const overtimeValue = (attendance && attendance.overtimeMinutes) ?? 0;
             const overtimeDisplay = isConfirmedAttendance && overtimeValue > 0 ? TimeUtils.formatMinutesToTime(overtimeValue) : '';
-            const nightWorkValue = isConfirmedAttendance ? this.resolveNightMinutes(attendance) : 0;
+            const nightWorkValue = isConfirmedAttendance && attendance ? this.resolveNightMinutes(attendance) : 0;
             const nightWorkDisplay = isConfirmedAttendance && nightWorkValue > 0 ? TimeUtils.formatMinutesToTime(nightWorkValue) : '';
 
             // 日付をyyyy/mm/dd形式に変換
@@ -1459,8 +1621,11 @@ class HistoryScreen {
                 return `${year}/${month}/${day}`;
             };
 
+            // 日付表示: attendanceがあればそれを使用、なければdateStringを使用
+            const displayDate = attendance && attendance.attendanceDate ? attendance.attendanceDate : dateString;
+
             row.innerHTML = `
-                <td>${formatDate(attendance.attendanceDate)}</td>
+                <td>${formatDate(displayDate)}</td>
                 <td>${clockInTime}</td>
                 <td>${clockOutTime}</td>
                 <td>${breakDisplay}</td>
@@ -2371,10 +2536,24 @@ class HistoryScreen {
     /**
      * 勤怠情報レンダリング
      */
-    renderAttendanceInfo(attendance) {
+    renderAttendanceInfo(attendance, dateString = null) {
         if (!attendance) return '';
 
         console.log('勤怠情報レンダリング:', attendance);
+
+        // 有休承認済の場合は出勤退勤打刻の表記を非表示にする
+        const vacationRequest = dateString ? this.getVacationRequestForDate(dateString) : null;
+        const isPaidLeaveApproved = vacationRequest && 
+            vacationRequest.status === 'APPROVED' && 
+            vacationRequest.leaveType === 'PAID_LEAVE';
+
+        if (isPaidLeaveApproved) {
+            return `
+                <div class="attendance-info">
+                    <!-- 有休承認済の場合は出勤退勤打刻は表示しない -->
+                </div>
+            `;
+        }
 
         const clockInTime = attendance.clockInTime ? 
             new Date(attendance.clockInTime).toLocaleTimeString('ja-JP', {hour: '2-digit', minute: '2-digit'}) : null;
