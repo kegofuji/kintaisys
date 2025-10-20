@@ -1635,13 +1635,119 @@ class HistoryScreen {
                     ? TimeUtils.formatMinutesToTime(attendance.breakMinutes)
                     : '');
 
-            const lateMinutes = Number((attendance && attendance.lateMinutes) ?? 0);
-            const earlyLeaveMinutes = Number((attendance && attendance.earlyLeaveMinutes) ?? 0);
+            // 遅刻・早退・残業・深夜時間の計算
+            let lateMinutes = 0;
+            let earlyLeaveMinutes = 0;
+            let overtimeValue = 0;
+            let nightWorkValue = 0;
+
+            if (isFullDayLeave) {
+                // 全日有休の場合は全て空欄
+                lateMinutes = 0;
+                earlyLeaveMinutes = 0;
+                overtimeValue = 0;
+                nightWorkValue = 0;
+            } else if (isHalfDayLeave && attendance && attendance.clockInTime && attendance.clockOutTime) {
+                // 半休承認済みの場合は打刻修正データから再計算
+                const clockIn = new Date(attendance.clockInTime);
+                const clockOut = new Date(attendance.clockOutTime);
+                
+                // 勤務時間変更申請の実働時間と開始・終了時刻を取得
+                let workingMinutesForHalfDay = 480; // デフォルト8時間
+                let standardStartHour = 9; // デフォルト9:00
+                let standardStartMinute = 0;
+                let standardEndHour = 18; // デフォルト18:00
+                let standardEndMinute = 0;
+                
+                if (workPatternRequest && workPatternRequest.request) {
+                    const request = workPatternRequest.request;
+                    const patternWorkingMinutes = request.currentWorkingMinutes || 
+                                                  request.workingMinutes ||
+                                                  request.standardWorkingMinutes;
+                    if (patternWorkingMinutes !== undefined && patternWorkingMinutes !== null) {
+                        workingMinutesForHalfDay = parseInt(patternWorkingMinutes) || 480;
+                    }
+                    
+                    // 勤務時間変更申請の開始・終了時刻を取得
+                    if (request.startTime) {
+                        const startTimeStr = request.startTime;
+                        const startTimeMatch = startTimeStr.match(/(\d{1,2}):(\d{2})/);
+                        if (startTimeMatch) {
+                            standardStartHour = parseInt(startTimeMatch[1]) || 9;
+                            standardStartMinute = parseInt(startTimeMatch[2]) || 0;
+                        }
+                    }
+                    
+                    if (request.endTime) {
+                        const endTimeStr = request.endTime;
+                        const endTimeMatch = endTimeStr.match(/(\d{1,2}):(\d{2})/);
+                        if (endTimeMatch) {
+                            standardEndHour = parseInt(endTimeMatch[1]) || 18;
+                            standardEndMinute = parseInt(endTimeMatch[2]) || 0;
+                        }
+                    }
+                }
+                
+                // 半休分の時間（勤務時間の半分）
+                const halfDayMinutes = Math.floor(workingMinutesForHalfDay / 2);
+                
+                let expectedStartTime, expectedEndTime;
+                
+                if (vacationRequest.timeUnit === 'HALF_AM') {
+                    // AM休：終業時間から（勤務時間/2）時間前が始業時刻
+                    expectedEndTime = new Date(clockIn);
+                    expectedEndTime.setHours(standardEndHour, standardEndMinute, 0, 0);
+                    expectedStartTime = new Date(expectedEndTime.getTime() - halfDayMinutes * 60 * 1000);
+                    
+                    // 遅刻時間の計算（期待される始業時刻より遅い場合）
+                    if (clockIn > expectedStartTime) {
+                        lateMinutes = Math.floor((clockIn - expectedStartTime) / (1000 * 60));
+                    }
+                    
+                    // AM休の場合は早退は考慮しない（午後から勤務するため）
+                    earlyLeaveMinutes = 0;
+                } else if (vacationRequest.timeUnit === 'HALF_PM') {
+                    // PM休：始業時間から（勤務時間/2）時間後が終業時刻
+                    expectedStartTime = new Date(clockIn);
+                    expectedStartTime.setHours(standardStartHour, standardStartMinute, 0, 0);
+                    expectedEndTime = new Date(expectedStartTime.getTime() + halfDayMinutes * 60 * 1000);
+                    
+                    // PM休でも標準始業時刻より遅い場合は遅刻として計算
+                    if (clockIn > expectedStartTime) {
+                        lateMinutes = Math.floor((clockIn - expectedStartTime) / (1000 * 60));
+                    }
+                    
+                    // 早退時間の計算（期待される終業時刻より早い場合）
+                    if (clockOut < expectedEndTime) {
+                        earlyLeaveMinutes = Math.floor((expectedEndTime - clockOut) / (1000 * 60));
+                    }
+                }
+                
+                // 実働時間から残業時間を計算（打刻修正分 + 半休分）
+                let actualWorkingMinutes = 0;
+                if (attendance.workingMinutes !== undefined && attendance.workingMinutes !== null) {
+                    actualWorkingMinutes = parseInt(attendance.workingMinutes) || 0;
+                } else if (attendance.clockInTime && attendance.clockOutTime) {
+                    actualWorkingMinutes = TimeUtils.timeStringToMinutes(TimeUtils.calculateWorkingTime(attendance.clockInTime, attendance.clockOutTime, attendance.breakMinutes));
+                }
+                
+                // 打刻修正分 + 半休分（勤務時間変更申請の実働時間の半分）を合計
+                const totalWorkingMinutes = actualWorkingMinutes + halfDayMinutes;
+                overtimeValue = Math.max(0, totalWorkingMinutes - workingMinutesForHalfDay);
+                
+                // 深夜勤務時間の計算
+                nightWorkValue = TimeUtils.calculateNightShiftMinutes(attendance.clockInTime, attendance.clockOutTime, attendance.breakMinutes);
+            } else {
+                // 通常勤務の場合は既存データを使用
+                lateMinutes = Number((attendance && attendance.lateMinutes) ?? 0);
+                earlyLeaveMinutes = Number((attendance && attendance.earlyLeaveMinutes) ?? 0);
+                overtimeValue = (attendance && attendance.overtimeMinutes) ?? 0;
+                nightWorkValue = isConfirmedAttendance && attendance ? this.resolveNightMinutes(attendance) : 0;
+            }
+
             const lateDisplay = (isFullDayLeave) ? '' : (lateMinutes > 0 ? TimeUtils.formatMinutesToTime(lateMinutes) : '');
             const earlyLeaveDisplay = (isFullDayLeave) ? '' : (earlyLeaveMinutes > 0 ? TimeUtils.formatMinutesToTime(earlyLeaveMinutes) : '');
-            const overtimeValue = (attendance && attendance.overtimeMinutes) ?? 0;
             const overtimeDisplay = (isFullDayLeave) ? '' : (isConfirmedAttendance && overtimeValue > 0 ? TimeUtils.formatMinutesToTime(overtimeValue) : '');
-            const nightWorkValue = isConfirmedAttendance && attendance ? this.resolveNightMinutes(attendance) : 0;
             const nightWorkDisplay = (isFullDayLeave) ? '' : (isConfirmedAttendance && nightWorkValue > 0 ? TimeUtils.formatMinutesToTime(nightWorkValue) : '');
 
             // 日付をyyyy/mm/dd形式に変換
@@ -2596,10 +2702,11 @@ class HistoryScreen {
             `;
         }
 
-        // 出退勤時刻を取得（勤怠データまたは打刻修正申請データから）
+        // 出退勤時刻を取得
         let clockInTime = null;
         let clockOutTime = null;
         
+        // まず勤怠データから時刻を取得
         if (attendance) {
             clockInTime = attendance.clockInTime ? 
                 new Date(attendance.clockInTime).toLocaleTimeString('ja-JP', {hour: '2-digit', minute: '2-digit'}) : null;
@@ -2607,8 +2714,8 @@ class HistoryScreen {
                 new Date(attendance.clockOutTime).toLocaleTimeString('ja-JP', {hour: '2-digit', minute: '2-digit'}) : null;
         }
         
-        // 打刻修正申請データからも時刻を取得（勤怠データがない場合や打刻修正の方が新しい場合）
-        if (adjustmentRequest && adjustmentRequest.request) {
+        // 打刻修正申請が承認済みの場合のみ、修正後の時刻で上書き
+        if (adjustmentRequest && adjustmentRequest.status === 'APPROVED' && adjustmentRequest.request) {
             const adjRequest = adjustmentRequest.request;
             if (adjRequest.newClockIn) {
                 clockInTime = new Date(adjRequest.newClockIn).toLocaleTimeString('ja-JP', {hour: '2-digit', minute: '2-digit'});
@@ -2617,6 +2724,7 @@ class HistoryScreen {
                 clockOutTime = new Date(adjRequest.newClockOut).toLocaleTimeString('ja-JP', {hour: '2-digit', minute: '2-digit'});
             }
         }
+        // 申請中（PENDING）の場合は、勤怠データの時刻のみ表示（修正申請の時刻は表示しない）
 
         console.log('時刻変換結果:', { clockInTime, clockOutTime });
 

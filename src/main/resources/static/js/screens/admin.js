@@ -38,6 +38,7 @@ class AdminScreen {
         this.approvalConfirmButton = null;
         this.approvalCancelButton = null;
         this.workPatternRequestMap = new Map();
+        this.vacationRequestMap = new Map();
         this.workPatternApprovalModalElement = null;
         this.workPatternApprovalModal = null;
         this.workPatternModalTitle = null;
@@ -1340,6 +1341,14 @@ class AdminScreen {
 
             // データを保存
             this.lastVacationManagementData = entries;
+            
+            // 休暇申請マップを更新
+            entries.forEach(entry => {
+                if (entry.vacationId) {
+                    this.vacationRequestMap.set(String(entry.vacationId), entry);
+                }
+            });
+            
             this.renderVacationApprovals(entries);
         } catch (error) {
             console.error('休暇申請読み込みエラー:', error);
@@ -1777,6 +1786,17 @@ class AdminScreen {
             return;
         }
 
+        // 休暇申請の場合は詳細表示モーダルを使用
+        if (requestType === 'vacation' || requestType === 'leave') {
+            const entry = this.vacationRequestMap?.get(String(requestId));
+            if (!entry) {
+                this.showAlert('休暇申請の詳細が取得できませんでした', 'danger');
+                return;
+            }
+            this.showVacationApprovalModal(entry, isApprove, buttons);
+            return;
+        }
+
         const message = `
             <div style="font-size: 14px; line-height: 1.6;">
                 <p class="mb-3">${typeLabel}を${actionText}しますか？</p>
@@ -1817,6 +1837,10 @@ class AdminScreen {
                 await this.loadPendingApprovals();
             } else if (requestType === 'vacation' || requestType === 'leave') {
                 await this.loadVacationManagementData(false); // 通常更新
+                // 休暇承認の場合は休暇残数も自動更新
+                if (isApprove) {
+                    await this.loadLeaveBalances();
+                }
             } else if (requestType === 'work-pattern') {
                 await this.loadWorkPatternRequests();
             }
@@ -2257,6 +2281,93 @@ class AdminScreen {
             reasonInput?.addEventListener('input', onInput);
 
             modal.show();
+        });
+    }
+
+    /**
+     * 休暇申請承認モーダル表示
+     * @param {Object} entry - 休暇申請データ
+     * @param {boolean} isApprove - 承認か却下か
+     * @param {Array} buttons - 無効化するボタン
+     */
+    showVacationApprovalModal(entry, isApprove, buttons) {
+        if (!entry) {
+            return;
+        }
+
+        const typeLabel = this.getLeaveTypeLabel(entry.leaveType);
+        const unitLabel = LEAVE_TIME_UNIT_LABELS[entry.timeUnit] || '';
+        const period = this.formatDateRange(entry.startDate, entry.endDate);
+        const reasonText = entry.reason || '（理由なし）';
+        const actionText = isApprove ? '承認' : '却下';
+
+        // 打刻修正承認モーダルと同じフォーマットで詳細情報を表示
+        const message = `
+            <div class="text-start small">
+                <p class="mb-2">休暇申請の内容を確認してください。</p>
+                <dl class="row g-1 mb-3 align-items-center">
+                    <dt class="col-4 text-muted text-nowrap mb-0">申請者</dt>
+                    <dd class="col-8 text-end mb-0 fw-semibold">${entry.employeeName}</dd>
+                    <dt class="col-4 text-muted text-nowrap mb-0">休暇種別</dt>
+                    <dd class="col-8 text-end mb-0 fw-semibold">${typeLabel}</dd>
+                    <dt class="col-4 text-muted text-nowrap mb-0">対象期間</dt>
+                    <dd class="col-8 text-end mb-0 fw-semibold">${period}</dd>
+                    <dt class="col-4 text-muted text-nowrap mb-0">取得単位</dt>
+                    <dd class="col-8 text-end mb-0 fw-semibold">${unitLabel}</dd>
+                    <dt class="col-4 text-muted text-nowrap mb-0">理由</dt>
+                    <dd class="col-8 text-end mb-0">${reasonText}</dd>
+                </dl>
+                <p class="mb-0">${actionText}してよろしいですか？</p>
+            </div>
+        `;
+
+        const confirmOptions = {
+            title: `休暇申請の${actionText}`,
+            message: message,
+            confirmLabel: isApprove ? '承認する' : '却下する',
+            requireReason: !isApprove
+        };
+
+        // ボタンを無効化
+        if (Array.isArray(buttons)) {
+            this.setButtonsDisabled(buttons, true);
+        }
+
+        this.promptApprovalDialog(confirmOptions).then(async (dialogResult) => {
+            try {
+                if (!dialogResult.confirmed) {
+                    return;
+                }
+
+                const reason = dialogResult.reason || '';
+                await this.executeVacationAction(isApprove, entry.vacationId, reason);
+
+                const alertType = isApprove ? 'success' : 'warning';
+                this.showAlert(`休暇申請を${actionText}しました`, alertType);
+
+                await this.loadVacationManagementData(false); // 通常更新
+                
+                // 休暇承認の場合は休暇残数も自動更新
+                if (isApprove) {
+                    await this.loadLeaveBalances();
+                }
+
+                await this.refreshEmployeeScreens();
+            } catch (error) {
+                console.error('休暇申請処理エラー:', error);
+                this.showAlert(error.message || `休暇申請の処理に失敗しました`, 'danger');
+            } finally {
+                // ボタンの無効化を解除
+                if (Array.isArray(buttons)) {
+                    this.setButtonsDisabled(buttons, false);
+                }
+            }
+        }).catch((error) => {
+            console.error('休暇申請モーダルエラー:', error);
+            // ボタンの無効化を解除
+            if (Array.isArray(buttons)) {
+                this.setButtonsDisabled(buttons, false);
+            }
         });
     }
 
