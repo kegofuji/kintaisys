@@ -1562,6 +1562,30 @@ function updateAttendanceDisplay(record, clockInTime, clockOutTime, workingTime,
     }
 
     if (editBreakButton) {
+        // 承認済み打刻修正の判定（dashboard.jsのnormalizeBooleanと同様の処理）
+        const hasApprovedAdjustment = (() => {
+            const value = attendance.hasApprovedAdjustment;
+            if (typeof value === 'boolean') {
+                return value;
+            }
+            if (typeof value === 'string') {
+                const normalized = value.trim().toLowerCase();
+                return normalized === 'true' || normalized === '1' || normalized === 'yes';
+            }
+            if (typeof value === 'number') {
+                return value === 1;
+            }
+            return false;
+        })();
+        
+        // 承認済みの打刻修正がある場合は鉛筆ボタンを完全に非表示
+        if (hasApprovedAdjustment) {
+            editBreakButton.style.display = 'none';
+            return;
+        }
+        
+        // 承認済みでない場合は通常の表示制御を行う
+        editBreakButton.style.display = '';
         const canEditBreak = !!(attendance.clockInTime && attendance.clockOutTime && !attendance.attendanceFixed);
         editBreakButton.disabled = !canEditBreak;
         editBreakButton.classList.toggle('disabled', !canEditBreak);

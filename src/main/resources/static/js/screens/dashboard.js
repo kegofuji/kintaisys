@@ -562,18 +562,23 @@ class DashboardScreen {
         }
 
         if (this.editBreakTimeBtn) {
+            // 承認済みの打刻修正がある場合は鉛筆ボタンを完全に非表示
+            if (hasApprovedAdjustment) {
+                this.editBreakTimeBtn.style.display = 'none';
+                return;
+            }
+            
+            // 承認済みでない場合は通常の表示制御を行う
+            this.editBreakTimeBtn.style.display = '';
             const canEditBreak = !!(attendanceForState
                 && attendanceForState.clockInTime
                 && attendanceForState.clockOutTime
-                && !attendanceForState.attendanceFixed
-                && !hasApprovedAdjustment);
+                && !attendanceForState.attendanceFixed);
             this.editBreakTimeBtn.disabled = !canEditBreak;
             this.editBreakTimeBtn.classList.toggle('disabled', !canEditBreak);
             if (!canEditBreak) {
                 this.editBreakTimeBtn.setAttribute('aria-disabled', 'true');
-                if (hasApprovedAdjustment) {
-                    this.editBreakTimeBtn.title = '承認済みの打刻修正が適用されているため編集できません';
-                } else if (!attendanceForState?.clockOutTime) {
+                if (!attendanceForState?.clockOutTime) {
                     this.editBreakTimeBtn.title = '退勤打刻後に編集できます';
                 } else if (attendanceForState?.attendanceFixed) {
                     this.editBreakTimeBtn.title = '確定済みの勤怠は編集できません';
