@@ -2091,18 +2091,6 @@ class HistoryScreen {
                 }
             }
 
-            // 承認情報を設定（承認済の場合のみ表示）
-            const approvalInfo = document.getElementById('adjustmentApprovalInfo');
-            if (adjustmentRequest.status === 'APPROVED') {
-                approvalInfo.style.display = 'block';
-                document.getElementById('adjustmentDetailApprover').textContent = 
-                    adjustmentRequest.approvedByEmployeeId ? `従業員ID: ${adjustmentRequest.approvedByEmployeeId}` : '管理者';
-                document.getElementById('adjustmentDetailApprovalDate').textContent = 
-                    adjustmentRequest.approvedAt ? 
-                    formatDate(adjustmentRequest.approvedAt) : '-';
-            } else {
-                approvalInfo.style.display = 'none';
-            }
 
             // 取消ボタンの表示制御
             this.currentAdjustmentDetail = {
