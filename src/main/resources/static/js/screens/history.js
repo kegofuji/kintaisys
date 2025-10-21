@@ -1078,9 +1078,12 @@ class HistoryScreen {
             const halfDayMinutes = window.WORK_TIME_CONSTANTS?.HALF_DAY_WORKING_MINUTES || 240;
 
             if (vacationRequest && vacationRequest.timeUnit === 'HALF_AM') {
-                const expectedEndTime = new Date(clockIn);
+                // AM休の場合：勤務時間変更の実働時間 - 4時間 = 半休日に働く必要がある時間
+                const expectedEndTime = new Date(clockOut);
                 expectedEndTime.setHours(standardTimes.endHour, standardTimes.endMinute, 0, 0);
-                const expectedStartTime = new Date(expectedEndTime.getTime() - halfDayMinutes * 60 * 1000);
+                // 勤務時間変更の実働時間から4時間を引いた時間が半休日に必要な勤務時間
+                const requiredWorkMinutes = Math.max(0, workingMinutesForHalfDay - halfDayMinutes);
+                const expectedStartTime = new Date(expectedEndTime.getTime() - requiredWorkMinutes * 60 * 1000);
 
                 if (clockIn > expectedStartTime) {
                     const lateSeconds = Math.floor((clockIn - expectedStartTime) / 1000);
@@ -1094,9 +1097,12 @@ class HistoryScreen {
                     earlyLeaveMinutes = 0;
                 }
             } else if (vacationRequest && vacationRequest.timeUnit === 'HALF_PM') {
+                // PM休の場合：勤務時間変更の実働時間 - 4時間 = 半休日に働く必要がある時間
                 const expectedStartTime = new Date(clockIn);
                 expectedStartTime.setHours(standardTimes.startHour, standardTimes.startMinute, 0, 0);
-                const expectedEndTime = new Date(expectedStartTime.getTime() + halfDayMinutes * 60 * 1000);
+                // 勤務時間変更の実働時間から4時間を引いた時間が半休日に必要な勤務時間
+                const requiredWorkMinutes = Math.max(0, workingMinutesForHalfDay - halfDayMinutes);
+                const expectedEndTime = new Date(expectedStartTime.getTime() + requiredWorkMinutes * 60 * 1000);
 
                 if (clockIn > expectedStartTime) {
                     const lateSeconds = Math.floor((clockIn - expectedStartTime) / 1000);
@@ -1106,6 +1112,8 @@ class HistoryScreen {
                 if (clockOut < expectedEndTime) {
                     const earlySeconds = Math.floor((expectedEndTime - clockOut) / 1000);
                     earlyLeaveMinutes = Math.ceil(earlySeconds / 60);
+                } else {
+                    earlyLeaveMinutes = 0;
                 }
             }
 
@@ -1218,11 +1226,29 @@ class HistoryScreen {
         let workingDisplay = '';
 
         if (isPaidLeaveApproved) {
-            if (isHalfDayLeave && attendance) {
-                const totalMinutes = actualWorkingMinutes + halfDayMinutes;
-                workingDisplay = TimeUtils.formatMinutesToTime(totalMinutes);
+            if (isHalfDayLeave) {
+                if (attendance && actualWorkingMinutes > 0) {
+                    // 半休で打刻データがある場合：実際に働いた時間 + 半休4時間を表示
+                    const totalWorkingMinutes = actualWorkingMinutes + halfDayMinutes;
+                    workingDisplay = TimeUtils.formatMinutesToTime(totalWorkingMinutes);
+                } else {
+                    // 半休で打刻データがない場合：半休4時間を表示
+                    console.log('半休勤務時間計算:', {
+                        patternWorkingMinutes,
+                        standardMinutes,
+                        halfDayMinutes,
+                        actualWorkingMinutes,
+                        hasAttendance: !!attendance
+                    });
+                    workingDisplay = TimeUtils.formatMinutesToTime(halfDayMinutes);
+                }
             } else if (isFullDayLeave) {
-                workingDisplay = TimeUtils.formatMinutesToTime(standardMinutes);
+                // 勤務時間変更申請が承認されている場合は、その実働時間を使用
+                if (patternWorkingMinutes !== null) {
+                    workingDisplay = TimeUtils.formatMinutesToTime(patternWorkingMinutes);
+                } else {
+                    workingDisplay = TimeUtils.formatMinutesToTime(standardMinutes);
+                }
             } else {
                 if (patternWorkingMinutes !== null) {
                     workingDisplay = TimeUtils.formatMinutesToTime(patternWorkingMinutes);
@@ -1246,10 +1272,11 @@ class HistoryScreen {
                 attendance.clockOutTime,
                 attendance.breakMinutes
             );
-        } else if (patternWorkingMinutes !== null) {
-            workingDisplay = TimeUtils.formatMinutesToTime(patternWorkingMinutes);
         } else if (actualWorkingMinutes) {
             workingDisplay = TimeUtils.formatMinutesToTime(actualWorkingMinutes);
+        } else {
+            // 申請も打刻データもない場合は空表示
+            workingDisplay = '';
         }
 
         detail.workingDisplay = workingDisplay;

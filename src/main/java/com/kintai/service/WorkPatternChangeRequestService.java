@@ -106,6 +106,16 @@ public class WorkPatternChangeRequestService {
             throw new AttendanceException(AttendanceException.INVALID_REQUEST, "勤務時間が0分以下です");
         }
 
+        // 実働時間に応じた最小休憩時間の検証
+        // 実働6時間以上8時間未満：45分以上の休憩が必要
+        if (workingMinutes >= 360 && workingMinutes < 480 && sanitizedBreak < 45) {
+            throw new AttendanceException("INSUFFICIENT_BREAK_TIME", "実働6時間以上8時間未満の場合、休憩時間は45分以上必要です");
+        }
+        // 実働8時間以上：60分以上の休憩が必要
+        else if (workingMinutes >= 480 && sanitizedBreak < 60) {
+            throw new AttendanceException("INSUFFICIENT_BREAK_TIME", "実働8時間以上の場合、休憩時間は60分以上必要です");
+        }
+
         WorkPatternChangeRequest request = new WorkPatternChangeRequest();
         request.setEmployeeId(employeeId);
         request.setStartDate(startDate);

@@ -1087,6 +1087,15 @@ function showScreen(screenId) {
             // フォールバック: 基本的な初期化のみ
             setupHistoryMonthSelect();
         }
+    } else if (screenId === 'dashboardScreen') {
+        // ダッシュボード画面の初期化
+        if (window.dashboardScreen) {
+            window.dashboardScreen.init();
+        }
+        // 打刻画面が表示された時に勤務時間を更新
+        setTimeout(() => {
+            updateTodayAttendance();
+        }, 100);
     } else if (screenId === 'vacationScreen') {
         // 休暇申請画面の初期化
         if (window.vacationScreen) {
@@ -1499,14 +1508,140 @@ async function updateTodayAttendance() {
     // APIが失敗した場合は未確定＝空白表示
     if (clockInTime) clockInTime.textContent = '--:--';
     if (clockOutTime) clockOutTime.textContent = '--:--';
-    if (workingTime) workingTime.textContent = '--:--';
     if (breakTime) breakTime.textContent = '--:--';
     if (editBreakButton) {
         editBreakButton.disabled = true;
         editBreakButton.classList.add('disabled');
         editBreakButton.setAttribute('aria-disabled', 'true');
     }
+    
+    // 勤務時間の表示を更新（休暇申請や勤務時間変更申請を考慮）
+    if (workingTime) {
+        await updateWorkingTimeForNoData(workingTime);
+    }
+    
     updateButtonStates(null, clockInBtn, clockOutBtn);
+}
+
+// データがない場合の勤務時間表示更新
+async function updateWorkingTimeForNoData(workingTime) {
+    const today = new Date().toISOString().split('T')[0];
+    let vacationRequest = null;
+    let workPatternRequest = null;
+    let patternWorkingMinutes = null;
+    
+    // データが読み込まれていない場合は、基本的な表示のみ行う
+    if (window.historyScreen) {
+        try {
+            vacationRequest = window.historyScreen.getVacationRequestForDate(today);
+            workPatternRequest = window.historyScreen.getWorkPatternRequestForDate(today);
+            patternWorkingMinutes = workPatternRequest ? 
+                window.historyScreen.extractWorkingMinutesFromPattern(workPatternRequest) : null;
+        } catch (error) {
+            console.debug('休暇申請または勤務時間変更申請の取得に失敗:', error);
+        }
+    }
+    
+    // データが読み込まれていない場合は、直接APIから取得を試行
+    if (!vacationRequest && !workPatternRequest) {
+        try {
+            // 休暇申請データを直接取得
+            const vacationResponse = await fetch(`/api/leave/requests/${currentEmployeeId}`, {
+                credentials: 'include'
+            });
+            if (vacationResponse.ok) {
+                const vacationData = await vacationResponse.json();
+                if (vacationData.success && Array.isArray(vacationData.data)) {
+                    vacationRequest = vacationData.data.find(req => 
+                        req.startDate === today && 
+                        req.status === 'APPROVED' && 
+                        req.leaveType === 'PAID_LEAVE'
+                    );
+                }
+            }
+            
+            // 勤務時間変更申請データを直接取得
+            const workPatternResponse = await fetch(`/api/work-pattern-change/requests/${currentEmployeeId}`, {
+                credentials: 'include'
+            });
+            if (workPatternResponse.ok) {
+                const workPatternData = await workPatternResponse.json();
+                if (workPatternData.success && Array.isArray(workPatternData.data)) {
+                    workPatternRequest = workPatternData.data.find(req => 
+                        req.startDate === today && 
+                        req.status === 'APPROVED'
+                    );
+                    if (workPatternRequest) {
+                        patternWorkingMinutes = workPatternRequest.workingMinutes;
+                    }
+                }
+            }
+            
+            // 打刻修正申請データを直接取得
+            const adjustmentResponse = await fetch(`/api/attendance/adjustments/${currentEmployeeId}`, {
+                credentials: 'include'
+            });
+            if (adjustmentResponse.ok) {
+                const adjustmentData = await adjustmentResponse.json();
+                if (adjustmentData.success && Array.isArray(adjustmentData.data)) {
+                    const approvedAdjustment = adjustmentData.data.find(req => 
+                        req.targetDate === today && 
+                        req.status === 'APPROVED'
+                    );
+                    if (approvedAdjustment && approvedAdjustment.newClockIn && approvedAdjustment.newClockOut) {
+                        // 打刻修正が承認されている場合は、修正後の時間から勤務時間を計算
+                        const calculatedWorkingTime = TimeUtils.calculateWorkingTime(
+                            approvedAdjustment.newClockIn, 
+                            approvedAdjustment.newClockOut, 
+                            approvedAdjustment.newBreakMinutes
+                        );
+                        workingTime.textContent = calculatedWorkingTime;
+                        return;
+                    }
+                }
+            }
+        } catch (error) {
+            console.debug('直接API取得に失敗:', error);
+        }
+    }
+    
+    const isPaidLeaveApproved = vacationRequest && 
+        vacationRequest.status === 'APPROVED' && 
+        vacationRequest.leaveType === 'PAID_LEAVE';
+    
+    // 半休申請かどうかを判定
+    const isHalfDayLeave = isPaidLeaveApproved && vacationRequest && 
+        (vacationRequest.timeUnit === 'HALF_AM' || vacationRequest.timeUnit === 'HALF_PM');
+    const isFullDayLeave = isPaidLeaveApproved && !isHalfDayLeave;
+    
+    let workingDisplay = '';
+    
+    if (isPaidLeaveApproved) {
+        if (isFullDayLeave) {
+            // 全日有休申請の場合、勤務時間変更申請があればその実働時間を使用
+            if (patternWorkingMinutes !== null) {
+                workingDisplay = TimeUtils.formatMinutesToTime(patternWorkingMinutes);
+            } else {
+                const standardMinutes = window.WORK_TIME_CONSTANTS?.STANDARD_WORKING_MINUTES || 480;
+                workingDisplay = TimeUtils.formatMinutesToTime(standardMinutes);
+            }
+        } else {
+            // その他の有休申請の場合
+            if (patternWorkingMinutes !== null) {
+                workingDisplay = TimeUtils.formatMinutesToTime(patternWorkingMinutes);
+            } else {
+                const standardMinutes = window.WORK_TIME_CONSTANTS?.STANDARD_WORKING_MINUTES || 480;
+                workingDisplay = TimeUtils.formatMinutesToTime(standardMinutes);
+            }
+        }
+    } else if (patternWorkingMinutes !== null) {
+        // 勤務時間変更申請が承認されている場合
+        workingDisplay = TimeUtils.formatMinutesToTime(patternWorkingMinutes);
+    } else {
+        workingDisplay = '--:--';
+    }
+    
+    workingTime.textContent = workingDisplay;
 }
 
 function calculateEffectiveBreakMinutes(record) {
@@ -1570,14 +1705,79 @@ function updateAttendanceDisplay(record, clockInTime, clockOutTime, workingTime,
     }
 
     if (workingTime) {
-        if (attendance.clockInTime && attendance.clockOutTime) {
-            // 打刻データがある場合は必ず計算で求める（正確性を優先）
-            workingTime.textContent = TimeUtils.calculateWorkingTime(attendance.clockInTime, attendance.clockOutTime, attendance.breakMinutes);
-        } else if (attendance.workingMinutes !== undefined && attendance.workingMinutes !== null) {
-            workingTime.textContent = TimeUtils.formatMinutesToTime(attendance.workingMinutes);
-        } else {
-            workingTime.textContent = '--:--';
+        // 休暇申請の状態を確認
+        const today = new Date().toISOString().split('T')[0];
+        let vacationRequest = null;
+        let workPatternRequest = null;
+        let patternWorkingMinutes = null;
+        
+        // データが読み込まれていない場合は、基本的な表示のみ行う
+        if (window.historyScreen) {
+            try {
+                vacationRequest = window.historyScreen.getVacationRequestForDate(today);
+                workPatternRequest = window.historyScreen.getWorkPatternRequestForDate(today);
+                patternWorkingMinutes = workPatternRequest ? 
+                    window.historyScreen.extractWorkingMinutesFromPattern(workPatternRequest) : null;
+            } catch (error) {
+                console.debug('休暇申請または勤務時間変更申請の取得に失敗:', error);
+            }
         }
+        
+        const isPaidLeaveApproved = vacationRequest && 
+            vacationRequest.status === 'APPROVED' && 
+            vacationRequest.leaveType === 'PAID_LEAVE';
+        
+        // 半休申請かどうかを判定
+        const isHalfDayLeave = isPaidLeaveApproved && vacationRequest && 
+            (vacationRequest.timeUnit === 'HALF_AM' || vacationRequest.timeUnit === 'HALF_PM');
+        const isFullDayLeave = isPaidLeaveApproved && !isHalfDayLeave;
+        
+        let workingDisplay = '';
+        
+        if (isPaidLeaveApproved) {
+            if (isHalfDayLeave && attendance.clockInTime && attendance.clockOutTime) {
+                // 半休申請で打刻データがある場合
+                const actualWorkingMinutes = TimeUtils.timeStringToMinutes(
+                    TimeUtils.calculateWorkingTime(attendance.clockInTime, attendance.clockOutTime, attendance.breakMinutes)
+                );
+                const halfDayMinutes = window.WORK_TIME_CONSTANTS?.HALF_DAY_WORKING_MINUTES || 240;
+                const totalMinutes = actualWorkingMinutes + halfDayMinutes;
+                workingDisplay = TimeUtils.formatMinutesToTime(totalMinutes);
+            } else if (isFullDayLeave) {
+                // 全日有休申請の場合、勤務時間変更申請があればその実働時間を使用
+                if (patternWorkingMinutes !== null) {
+                    workingDisplay = TimeUtils.formatMinutesToTime(patternWorkingMinutes);
+                } else {
+                    const standardMinutes = window.WORK_TIME_CONSTANTS?.STANDARD_WORKING_MINUTES || 480;
+                    workingDisplay = TimeUtils.formatMinutesToTime(standardMinutes);
+                }
+            } else {
+                // その他の有休申請の場合
+                if (patternWorkingMinutes !== null) {
+                    workingDisplay = TimeUtils.formatMinutesToTime(patternWorkingMinutes);
+                } else if (attendance.clockInTime && attendance.clockOutTime) {
+                    workingDisplay = TimeUtils.calculateWorkingTime(attendance.clockInTime, attendance.clockOutTime, attendance.breakMinutes);
+                } else if (attendance.workingMinutes !== undefined && attendance.workingMinutes !== null) {
+                    workingDisplay = TimeUtils.formatMinutesToTime(attendance.workingMinutes);
+                } else {
+                    const standardMinutes = window.WORK_TIME_CONSTANTS?.STANDARD_WORKING_MINUTES || 480;
+                    workingDisplay = TimeUtils.formatMinutesToTime(standardMinutes);
+                }
+            }
+        } else if (attendance.clockInTime && attendance.clockOutTime) {
+            // 通常の打刻データがある場合は計算で求める
+            workingDisplay = TimeUtils.calculateWorkingTime(attendance.clockInTime, attendance.clockOutTime, attendance.breakMinutes);
+        } else if (patternWorkingMinutes !== null) {
+            // 勤務時間変更申請が承認されている場合
+            workingDisplay = TimeUtils.formatMinutesToTime(patternWorkingMinutes);
+        } else if (attendance.workingMinutes !== undefined && attendance.workingMinutes !== null) {
+            // 勤怠記録の実働時間を使用
+            workingDisplay = TimeUtils.formatMinutesToTime(attendance.workingMinutes);
+        } else {
+            workingDisplay = '--:--';
+        }
+        
+        workingTime.textContent = workingDisplay;
     }
 
     if (editBreakButton) {

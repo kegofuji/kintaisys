@@ -254,6 +254,24 @@ public class TimeCalculator {
     }
 
     /**
+     * 遅刻時間を計算する（分）- カスタム開始時刻対応
+     * @param clockInTime 出勤時刻
+     * @param scheduledStart 予定開始時刻
+     * @return 遅刻分数
+     */
+    public int calculateLateMinutes(LocalDateTime clockInTime, LocalDateTime scheduledStart) {
+        if (clockInTime == null || scheduledStart == null) {
+            return 0;
+        }
+        if (clockInTime.isBefore(scheduledStart) || clockInTime.isEqual(scheduledStart)) {
+            return 0;
+        }
+        // 秒数は切り捨て
+        long lateSeconds = ChronoUnit.SECONDS.between(scheduledStart, clockInTime);
+        return (int) (lateSeconds / 60);
+    }
+
+    /**
      * 早退時間を計算する（分）
      * @param clockOutTime 退勤時刻
      * @param attendanceDate 勤怠日
@@ -264,6 +282,26 @@ public class TimeCalculator {
             return 0;
         }
         LocalDateTime scheduledEnd = LocalDateTime.of(attendanceDate, STANDARD_END_TIME);
+        if (clockOutTime.isAfter(scheduledEnd) || clockOutTime.isEqual(scheduledEnd)) {
+            return 0;
+        }
+        // 1秒でもあれば1分に切り上げる
+        long earlySeconds = ChronoUnit.SECONDS.between(clockOutTime, scheduledEnd);
+        int earlyMinutes = (int) ((earlySeconds + 59) / 60);
+        
+        return earlyMinutes;
+    }
+
+    /**
+     * 早退時間を計算する（分）- カスタム終了時刻対応
+     * @param clockOutTime 退勤時刻
+     * @param scheduledEnd 予定終了時刻
+     * @return 早退分数
+     */
+    public int calculateEarlyLeaveMinutes(LocalDateTime clockOutTime, LocalDateTime scheduledEnd) {
+        if (clockOutTime == null || scheduledEnd == null) {
+            return 0;
+        }
         if (clockOutTime.isAfter(scheduledEnd) || clockOutTime.isEqual(scheduledEnd)) {
             return 0;
         }
@@ -347,6 +385,64 @@ public class TimeCalculator {
      */
     public int getHalfDayWorkingMinutes() {
         return HALF_DAY_WORKING_MINUTES;
+    }
+
+    /**
+     * 午前半休の遅刻・早退時間を計算
+     * 半休は一律4時間付与。勤務時間変更の実働時間 - 4時間 = 半休日に働く必要がある時間
+     * 
+     * @param clockInTime 出勤時刻
+     * @param clockOutTime 退勤時刻
+     * @param attendanceDate 勤怠日
+     * @param standardWorkingMinutes 標準勤務時間（分）
+     * @return 配列[遅刻分数, 早退分数]
+     */
+    public int[] calculateHalfAmMetrics(LocalDateTime clockInTime, LocalDateTime clockOutTime, LocalDate attendanceDate, int standardWorkingMinutes) {
+        if (clockInTime == null || clockOutTime == null || attendanceDate == null) {
+            return new int[]{0, 0};
+        }
+        
+        // 勤務時間変更の実働時間から4時間を引いた時間が半休日に必要な勤務時間
+        int requiredWorkMinutes = Math.max(0, standardWorkingMinutes - HALF_DAY_WORKING_MINUTES);
+        
+        // 標準退勤時刻
+        LocalDateTime expectedEnd = LocalDateTime.of(attendanceDate, STANDARD_END_TIME);
+        // 期待開始時刻 = 標準退勤時刻 - 必要な勤務時間
+        LocalDateTime expectedStart = expectedEnd.minusMinutes(requiredWorkMinutes);
+        
+        int lateMinutes = calculateLateMinutes(clockInTime, expectedStart);
+        int earlyLeaveMinutes = calculateEarlyLeaveMinutes(clockOutTime, expectedEnd);
+        
+        return new int[]{lateMinutes, earlyLeaveMinutes};
+    }
+
+    /**
+     * 午後半休の遅刻・早退時間を計算
+     * 半休は一律4時間付与。勤務時間変更の実働時間 - 4時間 = 半休日に働く必要がある時間
+     * 
+     * @param clockInTime 出勤時刻
+     * @param clockOutTime 退勤時刻
+     * @param attendanceDate 勤怠日
+     * @param standardWorkingMinutes 標準勤務時間（分）
+     * @return 配列[遅刻分数, 早退分数]
+     */
+    public int[] calculateHalfPmMetrics(LocalDateTime clockInTime, LocalDateTime clockOutTime, LocalDate attendanceDate, int standardWorkingMinutes) {
+        if (clockInTime == null || clockOutTime == null || attendanceDate == null) {
+            return new int[]{0, 0};
+        }
+        
+        // 勤務時間変更の実働時間から4時間を引いた時間が半休日に必要な勤務時間
+        int requiredWorkMinutes = Math.max(0, standardWorkingMinutes - HALF_DAY_WORKING_MINUTES);
+        
+        // 標準退勤時刻
+        LocalDateTime expectedEnd = LocalDateTime.of(attendanceDate, STANDARD_END_TIME);
+        // 期待開始時刻 = 標準退勤時刻 - 必要な勤務時間
+        LocalDateTime expectedStart = expectedEnd.minusMinutes(requiredWorkMinutes);
+        
+        int lateMinutes = calculateLateMinutes(clockInTime, expectedStart);
+        int earlyLeaveMinutes = calculateEarlyLeaveMinutes(clockOutTime, expectedEnd);
+        
+        return new int[]{lateMinutes, earlyLeaveMinutes};
     }
 
     /**
