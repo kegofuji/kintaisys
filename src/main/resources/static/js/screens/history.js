@@ -36,6 +36,7 @@ class HistoryScreen {
         this.pollIntervalMs = 1000;
         this.visibilityChangeHandler = null;
         this.pollingInProgress = false;
+        this.attendanceDetailCache = new Map();
     }
 
     /**
@@ -261,6 +262,8 @@ class HistoryScreen {
             return;
         }
 
+        this.invalidateAttendanceDetailCache();
+
         const selectedMonth = this.historyMonthSelect?.value;
         let url = `/api/attendance/history/${window.currentEmployeeId}`;
         
@@ -275,15 +278,20 @@ class HistoryScreen {
                 '勤怠履歴の取得に失敗しました'
             );
 
-            if (data.success) {
-                this.displayAttendanceHistory(data.data);
+            if (data && data.success) {
+                this.attendanceData = Array.isArray(data.data) ? data.data : [];
             } else {
-                // APIが失敗した場合もモックデータは表示しない
-                this.displayAttendanceHistory([]);
+                this.attendanceData = [];
             }
+
+            await this.loadVacationRequests();
+            await this.loadAdjustmentRequests();
+            await this.loadWorkPatternRequests();
+
+            this.displayAttendanceHistory(this.attendanceData);
         } catch (error) {
             console.error('勤怠履歴読み込みエラー:', error);
-            // エラーの場合もモックデータは表示しない
+            this.attendanceData = [];
             this.displayAttendanceHistory([]);
         }
     }
@@ -384,126 +392,44 @@ class HistoryScreen {
             return;
         }
 
+        const updatedKeys = [];
+
         data.forEach(record => {
+            const dateKey = this.normalizeDateKey(record.attendanceDate);
+            const detail = this.getAttendanceDetailForDate(dateKey, {
+                attendanceOverride: record,
+                includeVacations: true,
+                force: true
+            });
+
+            if (!detail) {
+                return;
+            }
+
+            updatedKeys.push(detail.dateKey);
+
             const row = document.createElement('tr');
             row.classList.add('attendance-row');
-
-            const hasIn = !!record.clockInTime;
-            const hasOut = !!record.clockOutTime;
-            const isConfirmed = hasIn && hasOut;
-
-            // 日付をyyyy/mm/dd形式に変換
-            const formatDate = (dateStr) => {
-                if (!dateStr) return '';
-                const date = new Date(dateStr);
-                const year = date.getFullYear();
-                const month = String(date.getMonth() + 1).padStart(2, '0');
-                const day = String(date.getDate()).padStart(2, '0');
-                return `${year}/${month}/${day}`;
-            };
-
-            // 有休申請の状態を確認
-            const dateString = record.attendanceDate;
-            const vacationRequest = this.getVacationRequestForDate(dateString);
-            const isPaidLeaveApproved = vacationRequest && 
-                vacationRequest.status === 'APPROVED' && 
-                vacationRequest.leaveType === 'PAID_LEAVE';
-
-            // 勤務時間変更申請の状態を確認
-            const workPatternRequest = this.getWorkPatternRequestForDate(dateString);
-
-            // 有休承認済の場合は出勤退勤打刻の表記を非表示にする
-            const clockInTime = (isPaidLeaveApproved) ? '' :
-                (hasIn ? new Date(record.clockInTime).toLocaleTimeString('ja-JP', {hour: '2-digit', minute: '2-digit'}) : '');
-            const clockOutTime = (isPaidLeaveApproved) ? '' :
-                (hasOut ? new Date(record.clockOutTime).toLocaleTimeString('ja-JP', {hour: '2-digit', minute: '2-digit'}) : '');
-            
-            let workingTime = '';
-            if (isPaidLeaveApproved) {
-                // 有休承認済の場合は現在の勤務時間の実働をそのまま取る
-                // 勤務時間変更申請がある場合はその実働時間を使用
-                if (workPatternRequest && workPatternRequest.request) {
-                    const patternWorkingMinutes = workPatternRequest.request.currentWorkingMinutes || 
-                                                  workPatternRequest.request.workingMinutes ||
-                                                  workPatternRequest.request.standardWorkingMinutes;
-                    if (patternWorkingMinutes !== undefined && patternWorkingMinutes !== null) {
-                        workingTime = TimeUtils.formatMinutesToTime(patternWorkingMinutes);
-                    }
-                }
-                
-                if (!workingTime) {
-                    // 打刻データがある場合は必ず計算で求める（正確性を優先）
-                    if (record.clockInTime && record.clockOutTime) {
-                        workingTime = TimeUtils.calculateWorkingTime(record.clockInTime, record.clockOutTime, record.breakMinutes);
-                    } else if (record.workingMinutes !== undefined && record.workingMinutes !== null) {
-                        workingTime = TimeUtils.formatMinutesToTime(record.workingMinutes);
-                    }
-                }
-            } else if (isConfirmed) {
-                // 通常の場合（有休承認済でない場合）
-                if (workPatternRequest && workPatternRequest.request) {
-                    const patternWorkingMinutes = workPatternRequest.request.currentWorkingMinutes || 
-                                                  workPatternRequest.request.workingMinutes ||
-                                                  workPatternRequest.request.standardWorkingMinutes;
-                    if (patternWorkingMinutes !== undefined && patternWorkingMinutes !== null) {
-                        workingTime = TimeUtils.formatMinutesToTime(patternWorkingMinutes);
-                    }
-                }
-                
-                if (!workingTime) {
-                    // 打刻データがある場合は必ず計算で求める（正確性を優先）
-                    if (record.clockInTime && record.clockOutTime) {
-                        workingTime = TimeUtils.calculateWorkingTime(record.clockInTime, record.clockOutTime, record.breakMinutes);
-                    } else if (record.workingMinutes !== undefined && record.workingMinutes !== null) {
-                        workingTime = TimeUtils.formatMinutesToTime(record.workingMinutes);
-                    }
-                }
-            }
-
-            // 有休承認済の場合は勤務時間以外の表記は空にする
-            const breakDisplay = (isPaidLeaveApproved) ? '' :
-                (isConfirmed && record.breakMinutes !== undefined && record.breakMinutes !== null
-                    ? TimeUtils.formatMinutesToTime(record.breakMinutes)
-                    : '');
-            const lateMinutes = Number(record.lateMinutes ?? 0);
-            let earlyLeaveMinutes = Number(record.earlyLeaveMinutes ?? 0);
-            
-            // フロントエンド側でも早退時間を再計算（打刻データがある場合）
-            if (!isPaidLeaveApproved && record.clockInTime && record.clockOutTime) {
-                const clockOut = new Date(record.clockOutTime);
-                const clockOutDate = new Date(clockOut.getFullYear(), clockOut.getMonth(), clockOut.getDate());
-                const standardEnd = new Date(clockOutDate.getTime() + 18 * 60 * 60 * 1000); // 18:00
-                
-                if (clockOut < standardEnd) {
-                    // 1秒でもあれば1分に切り上げる
-                    const earlySeconds = Math.floor((standardEnd - clockOut) / 1000);
-                    earlyLeaveMinutes = Math.ceil(earlySeconds / 60);
-                } else {
-                    earlyLeaveMinutes = 0;
-                }
-            }
-            
-            const lateDisplay = (isPaidLeaveApproved) ? '' : (isConfirmed ? TimeUtils.formatMinutesToTime(lateMinutes) : '');
-            const earlyLeaveDisplay = (isPaidLeaveApproved) ? '' : (isConfirmed ? TimeUtils.formatMinutesToTime(earlyLeaveMinutes) : '');
-            const overtimeValue = record.overtimeMinutes ?? 0;
-            const overtimeDisplay = (isPaidLeaveApproved) ? '' : (isConfirmed ? TimeUtils.formatMinutesToTime(overtimeValue) : '');
-            const nightValue = isConfirmed ? this.resolveNightMinutes(record) : 0;
-            const nightWorkDisplay = (isPaidLeaveApproved) ? '' : (isConfirmed ? TimeUtils.formatMinutesToTime(nightValue) : '');
+            row.dataset.dateKey = detail.dateKey;
 
             row.innerHTML = `
-                <td>${formatDate(record.attendanceDate)}</td>
-                <td>${clockInTime}</td>
-                <td>${clockOutTime}</td>
-                <td>${breakDisplay}</td>
-                <td>${workingTime}</td>
-                <td>${lateDisplay}</td>
-                <td>${earlyLeaveDisplay}</td>
-                <td>${overtimeDisplay}</td>
-                <td>${nightWorkDisplay}</td>
+                <td>${detail.dateDisplay}</td>
+                <td>${detail.clockInDisplay}</td>
+                <td>${detail.clockOutDisplay}</td>
+                <td>${detail.breakDisplay}</td>
+                <td>${detail.workingDisplay}</td>
+                <td>${detail.lateDisplay}</td>
+                <td>${detail.earlyLeaveDisplay}</td>
+                <td>${detail.overtimeDisplay}</td>
+                <td>${detail.nightDisplay}</td>
             `;
 
             this.historyTableBody.appendChild(row);
         });
+
+        if (updatedKeys.length > 0) {
+            this.notifyAttendanceDetailUpdate(updatedKeys);
+        }
     }
 
     /**
@@ -986,6 +912,434 @@ class HistoryScreen {
                String(date.getDate()).padStart(2, '0');
     }
 
+    normalizeDateKey(value) {
+        if (value === null || value === undefined) {
+            return '';
+        }
+
+        if (typeof value === 'string') {
+            const trimmed = value.trim();
+            if (!trimmed) {
+                return '';
+            }
+
+            const hyphenMatch = trimmed.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+            if (hyphenMatch) {
+                const [, year, month, day] = hyphenMatch;
+                return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+            }
+
+            const slashMatch = trimmed.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})/);
+            if (slashMatch) {
+                const [, year, month, day] = slashMatch;
+                return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+            }
+
+            if (trimmed.length >= 10) {
+                return trimmed.substring(0, 10);
+            }
+        }
+
+        try {
+            const date = new Date(value);
+            if (Number.isNaN(date.getTime())) {
+                return '';
+            }
+            return this.formatDateString(date);
+        } catch (error) {
+            console.warn('normalizeDateKey failed:', error, value);
+        }
+        return '';
+    }
+
+    formatDisplayDate(value) {
+        if (!value) {
+            return '';
+        }
+        try {
+            const date = value instanceof Date ? value : new Date(value);
+            if (Number.isNaN(date.getTime())) {
+                return '';
+            }
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            return `${year}/${month}/${day}`;
+        } catch (error) {
+            console.warn('formatDisplayDate failed:', error, value);
+            return '';
+        }
+    }
+
+    extractWorkingMinutesFromPattern(workPatternRequest) {
+        if (!workPatternRequest || !workPatternRequest.request) {
+            return null;
+        }
+        const request = workPatternRequest.request;
+        const candidates = [
+            request.currentWorkingMinutes,
+            request.workingMinutes,
+            request.standardWorkingMinutes
+        ];
+        for (const candidate of candidates) {
+            const normalized = TimeUtils.normalizeMinutesValue(candidate);
+            if (normalized !== null && !Number.isNaN(normalized)) {
+                return normalized;
+            }
+        }
+        return null;
+    }
+
+    extractStandardTimes(workPatternRequest) {
+        const defaults = {
+            startHour: 9,
+            startMinute: 0,
+            endHour: 18,
+            endMinute: 0
+        };
+
+        if (!workPatternRequest || !workPatternRequest.request) {
+            return defaults;
+        }
+
+        const request = workPatternRequest.request;
+        if (request.startTime) {
+            const match = String(request.startTime).match(/(\d{1,2}):(\d{2})/);
+            if (match) {
+                defaults.startHour = parseInt(match[1], 10) || defaults.startHour;
+                defaults.startMinute = parseInt(match[2], 10) || defaults.startMinute;
+            }
+        }
+        if (request.endTime) {
+            const match = String(request.endTime).match(/(\d{1,2}):(\d{2})/);
+            if (match) {
+                defaults.endHour = parseInt(match[1], 10) || defaults.endHour;
+                defaults.endMinute = parseInt(match[2], 10) || defaults.endMinute;
+            }
+        }
+
+        return defaults;
+    }
+
+    calculateActualWorkingMinutes(attendance) {
+        if (!attendance) {
+            return 0;
+        }
+
+        const direct = TimeUtils.normalizeMinutesValue(attendance.workingMinutes);
+        if (direct !== null && !Number.isNaN(direct)) {
+            return direct;
+        }
+
+        if (attendance.clockInTime && attendance.clockOutTime) {
+            const workingStr = TimeUtils.calculateWorkingTime(
+                attendance.clockInTime,
+                attendance.clockOutTime,
+                attendance.breakMinutes
+            );
+            return TimeUtils.timeStringToMinutes(workingStr);
+        }
+
+        return 0;
+    }
+
+    computeAttendanceMetrics({
+        attendance,
+        vacationRequest,
+        workPatternRequest,
+        isHalfDayLeave,
+        isFullDayLeave,
+        actualWorkingMinutes
+    }) {
+        if (isFullDayLeave) {
+            return {
+                lateDisplay: '',
+                earlyLeaveDisplay: '',
+                overtimeDisplay: '',
+                nightDisplay: ''
+            };
+        }
+
+        const hasClockIn = !!attendance?.clockInTime;
+        const hasClockOut = !!attendance?.clockOutTime;
+        const isConfirmedAttendance = hasClockIn && hasClockOut;
+
+        let lateMinutes = 0;
+        let earlyLeaveMinutes = 0;
+        let overtimeMinutes = 0;
+        let nightMinutes = 0;
+
+        if (isHalfDayLeave && isConfirmedAttendance) {
+            const clockIn = new Date(attendance.clockInTime);
+            const clockOut = new Date(attendance.clockOutTime);
+            const patternMinutes = this.extractWorkingMinutesFromPattern(workPatternRequest);
+            let workingMinutesForHalfDay = patternMinutes !== null ? parseInt(patternMinutes, 10) || 480 : 480;
+            const standardTimes = this.extractStandardTimes(workPatternRequest);
+            const halfDayMinutes = window.WORK_TIME_CONSTANTS?.HALF_DAY_WORKING_MINUTES || 240;
+
+            if (vacationRequest && vacationRequest.timeUnit === 'HALF_AM') {
+                const expectedEndTime = new Date(clockIn);
+                expectedEndTime.setHours(standardTimes.endHour, standardTimes.endMinute, 0, 0);
+                const expectedStartTime = new Date(expectedEndTime.getTime() - halfDayMinutes * 60 * 1000);
+
+                if (clockIn > expectedStartTime) {
+                    const lateSeconds = Math.floor((clockIn - expectedStartTime) / 1000);
+                    lateMinutes = Math.ceil(lateSeconds / 60);
+                }
+
+                if (clockOut < expectedEndTime) {
+                    const earlySeconds = Math.floor((expectedEndTime - clockOut) / 1000);
+                    earlyLeaveMinutes = Math.ceil(earlySeconds / 60);
+                } else {
+                    earlyLeaveMinutes = 0;
+                }
+            } else if (vacationRequest && vacationRequest.timeUnit === 'HALF_PM') {
+                const expectedStartTime = new Date(clockIn);
+                expectedStartTime.setHours(standardTimes.startHour, standardTimes.startMinute, 0, 0);
+                const expectedEndTime = new Date(expectedStartTime.getTime() + halfDayMinutes * 60 * 1000);
+
+                if (clockIn > expectedStartTime) {
+                    const lateSeconds = Math.floor((clockIn - expectedStartTime) / 1000);
+                    lateMinutes = Math.ceil(lateSeconds / 60);
+                }
+
+                if (clockOut < expectedEndTime) {
+                    const earlySeconds = Math.floor((expectedEndTime - clockOut) / 1000);
+                    earlyLeaveMinutes = Math.ceil(earlySeconds / 60);
+                }
+            }
+
+            const totalWorkingMinutes = (actualWorkingMinutes || 0) + halfDayMinutes;
+            overtimeMinutes = Math.max(0, totalWorkingMinutes - workingMinutesForHalfDay);
+            nightMinutes = TimeUtils.calculateNightShiftMinutes(
+                attendance.clockInTime,
+                attendance.clockOutTime,
+                attendance.breakMinutes
+            );
+        } else if (isConfirmedAttendance && attendance) {
+            const standardTimes = this.extractStandardTimes(workPatternRequest);
+            const clockIn = new Date(attendance.clockInTime);
+            const clockOut = new Date(attendance.clockOutTime);
+            const standardStart = new Date(clockIn.getFullYear(), clockIn.getMonth(), clockIn.getDate(),
+                standardTimes.startHour, standardTimes.startMinute, 0, 0);
+            const standardEnd = new Date(clockOut.getFullYear(), clockOut.getMonth(), clockOut.getDate(),
+                standardTimes.endHour, standardTimes.endMinute, 0, 0);
+
+            if (clockIn > standardStart) {
+                const lateSeconds = Math.floor((clockIn - standardStart) / 1000);
+                lateMinutes = Math.floor(lateSeconds / 60);
+            }
+
+            if (clockOut < standardEnd) {
+                const earlySeconds = Math.floor((standardEnd - clockOut) / 1000);
+                earlyLeaveMinutes = Math.ceil(earlySeconds / 60);
+            }
+
+            const totalMinutes = Math.floor((clockOut - clockIn) / (1000 * 60));
+            const breakMinutes = TimeUtils.normalizeMinutesValue(attendance.breakMinutes) || 0;
+            const workingMinutes = totalMinutes - breakMinutes;
+            const standardWorkingMinutes = 8 * 60;
+            overtimeMinutes = Math.max(0, workingMinutes - standardWorkingMinutes);
+            nightMinutes = this.resolveNightMinutes(attendance);
+        } else if (attendance) {
+            lateMinutes = Number(attendance.lateMinutes ?? 0);
+            earlyLeaveMinutes = Number(attendance.earlyLeaveMinutes ?? 0);
+            overtimeMinutes = Number(attendance.overtimeMinutes ?? 0);
+            nightMinutes = Number(
+                attendance.nightShiftMinutes ??
+                attendance.nightWorkMinutes ??
+                0
+            );
+        }
+
+        const formatMetric = (minutes) => TimeUtils.formatMinutesToTime(Math.max(0, minutes));
+
+        return {
+            lateDisplay: isConfirmedAttendance ? formatMetric(lateMinutes) : '',
+            earlyLeaveDisplay: isConfirmedAttendance ? formatMetric(earlyLeaveMinutes) : '',
+            overtimeDisplay: isConfirmedAttendance ? formatMetric(overtimeMinutes) : '',
+            nightDisplay: isConfirmedAttendance ? formatMetric(nightMinutes) : ''
+        };
+    }
+
+    buildAttendanceDetail(dateKey, attendance, vacationRequest, workPatternRequest) {
+        const detail = {
+            dateKey,
+            dateDisplay: this.formatDisplayDate(
+                attendance && attendance.attendanceDate ? attendance.attendanceDate : dateKey
+            ),
+            clockInDisplay: '',
+            clockOutDisplay: '',
+            breakDisplay: '',
+            workingDisplay: '',
+            lateDisplay: '',
+            earlyLeaveDisplay: '',
+            overtimeDisplay: '',
+            nightDisplay: '',
+            isPaidLeaveApproved: false,
+            isHalfDayLeave: false,
+            isFullDayLeave: false,
+            hasAttendance: !!attendance,
+            raw: {
+                attendance,
+                vacationRequest,
+                workPatternRequest
+            }
+        };
+
+        const status = (vacationRequest?.status || '').toUpperCase();
+        const leaveType = (vacationRequest?.leaveType || '').toUpperCase();
+        const timeUnit = (vacationRequest?.timeUnit || '').toUpperCase();
+
+        const isPaidLeaveApproved = status === 'APPROVED' && leaveType === 'PAID_LEAVE';
+        const isHalfDayLeave = isPaidLeaveApproved && (timeUnit === 'HALF_AM' || timeUnit === 'HALF_PM');
+        const isFullDayLeave = isPaidLeaveApproved && !isHalfDayLeave;
+        const hasClockIn = !!attendance?.clockInTime;
+        const hasClockOut = !!attendance?.clockOutTime;
+        const isConfirmedAttendance = hasClockIn && hasClockOut;
+        const formatTime = (value) => value
+            ? new Date(value).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })
+            : '';
+
+        detail.isPaidLeaveApproved = isPaidLeaveApproved;
+        detail.isHalfDayLeave = isHalfDayLeave;
+        detail.isFullDayLeave = isFullDayLeave;
+
+        if (!isFullDayLeave) {
+            detail.clockInDisplay = hasClockIn ? formatTime(attendance.clockInTime) : '';
+            detail.clockOutDisplay = hasClockOut ? formatTime(attendance.clockOutTime) : '';
+        }
+
+        const standardMinutes = window.WORK_TIME_CONSTANTS?.STANDARD_WORKING_MINUTES || 480;
+        const halfDayMinutes = window.WORK_TIME_CONSTANTS?.HALF_DAY_WORKING_MINUTES || 240;
+        const patternWorkingMinutes = this.extractWorkingMinutesFromPattern(workPatternRequest);
+        const actualWorkingMinutes = this.calculateActualWorkingMinutes(attendance);
+
+        let workingDisplay = '';
+
+        if (isPaidLeaveApproved) {
+            if (isHalfDayLeave && attendance) {
+                const totalMinutes = actualWorkingMinutes + halfDayMinutes;
+                workingDisplay = TimeUtils.formatMinutesToTime(totalMinutes);
+            } else if (isFullDayLeave) {
+                workingDisplay = TimeUtils.formatMinutesToTime(standardMinutes);
+            } else {
+                if (patternWorkingMinutes !== null) {
+                    workingDisplay = TimeUtils.formatMinutesToTime(patternWorkingMinutes);
+                } else if (isConfirmedAttendance) {
+                    workingDisplay = TimeUtils.calculateWorkingTime(
+                        attendance.clockInTime,
+                        attendance.clockOutTime,
+                        attendance.breakMinutes
+                    );
+                } else if (actualWorkingMinutes) {
+                    workingDisplay = TimeUtils.formatMinutesToTime(actualWorkingMinutes);
+                }
+
+                if (!workingDisplay) {
+                    workingDisplay = TimeUtils.formatMinutesToTime(standardMinutes);
+                }
+            }
+        } else if (isConfirmedAttendance) {
+            workingDisplay = TimeUtils.calculateWorkingTime(
+                attendance.clockInTime,
+                attendance.clockOutTime,
+                attendance.breakMinutes
+            );
+        } else if (patternWorkingMinutes !== null) {
+            workingDisplay = TimeUtils.formatMinutesToTime(patternWorkingMinutes);
+        } else if (actualWorkingMinutes) {
+            workingDisplay = TimeUtils.formatMinutesToTime(actualWorkingMinutes);
+        }
+
+        detail.workingDisplay = workingDisplay;
+
+        const breakMinutesValue = TimeUtils.normalizeMinutesValue(attendance?.breakMinutes);
+        if (!isFullDayLeave && isConfirmedAttendance && breakMinutesValue !== null) {
+            detail.breakDisplay = TimeUtils.formatMinutesToTime(breakMinutesValue);
+        } else {
+            detail.breakDisplay = '';
+        }
+
+        const metrics = this.computeAttendanceMetrics({
+            attendance,
+            vacationRequest,
+            workPatternRequest,
+            isHalfDayLeave,
+            isFullDayLeave,
+            actualWorkingMinutes
+        });
+
+        detail.lateDisplay = metrics.lateDisplay;
+        detail.earlyLeaveDisplay = metrics.earlyLeaveDisplay;
+        detail.overtimeDisplay = metrics.overtimeDisplay;
+        detail.nightDisplay = metrics.nightDisplay;
+
+        return detail;
+    }
+
+    computeAttendanceDetail(dateKey, attendance, overrides = {}) {
+        const vacationRequest = overrides.vacationRequestOverride !== undefined
+            ? overrides.vacationRequestOverride
+            : this.getVacationRequestForDate(dateKey);
+        const workPatternRequest = overrides.workPatternRequestOverride !== undefined
+            ? overrides.workPatternRequestOverride
+            : this.getWorkPatternRequestForDate(dateKey);
+
+        const detail = this.buildAttendanceDetail(
+            dateKey,
+            attendance,
+            vacationRequest,
+            workPatternRequest
+        );
+
+        this.attendanceDetailCache.set(dateKey, detail);
+        return detail;
+    }
+
+    getAttendanceDetailForDate(dateString, options = {}) {
+        const dateKey = this.normalizeDateKey(dateString);
+        if (!dateKey) {
+            return null;
+        }
+
+        if (!options.force && this.attendanceDetailCache.has(dateKey)) {
+            return this.attendanceDetailCache.get(dateKey);
+        }
+
+        const attendance = options.attendanceOverride !== undefined
+            ? options.attendanceOverride
+            : this.getAttendanceForDate(dateKey);
+
+        if (!attendance && !options.includeVacations && !this.getVacationRequestForDate(dateKey)) {
+            // データが存在しない場合はnullを返却（空行と同じ扱い）
+            return null;
+        }
+
+        return this.computeAttendanceDetail(dateKey, attendance, options);
+    }
+
+    invalidateAttendanceDetailCache() {
+        if (this.attendanceDetailCache) {
+            this.attendanceDetailCache.clear();
+        }
+    }
+
+    notifyAttendanceDetailUpdate(dateKeys = null) {
+        try {
+            const detailKeys = Array.isArray(dateKeys) ? dateKeys : Array.from(this.attendanceDetailCache.keys());
+            const event = new CustomEvent('history:detail-updated', {
+                detail: {
+                    dateKeys: detailKeys,
+                    timestamp: Date.now()
+                }
+            });
+            window.dispatchEvent(event);
+        } catch (error) {
+            console.warn('Failed to dispatch history detail update event:', error);
+        }
+    }
+
     /**
      * 指定日の勤怠データ取得
      */
@@ -994,25 +1348,7 @@ class HistoryScreen {
             return null;
         }
 
-        const normalize = (value) => {
-            if (!value) return '';
-            if (typeof value === 'string') {
-                // 文字列の場合は先頭10文字（YYYY-MM-DD）を優先
-                return value.substring(0, 10);
-            }
-            try {
-                const date = new Date(value);
-                if (Number.isNaN(date.getTime())) {
-                    return '';
-                }
-                return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-            } catch (e) {
-                console.warn('勤怠日付の正規化に失敗:', e, value);
-                return '';
-            }
-        };
-
-        const target = normalize(dateString);
+        const target = this.normalizeDateKey(dateString);
         if (!target) return null;
 
         // デバッグ用ログを追加
@@ -1023,7 +1359,7 @@ class HistoryScreen {
         });
 
         const found = this.attendanceData.find(record => {
-            const recordDate = normalize(record.attendanceDate);
+            const recordDate = this.normalizeDateKey(record.attendanceDate);
             console.log('比較:', { recordDate, target, match: recordDate === target });
             return recordDate === target;
         });
@@ -1093,6 +1429,8 @@ class HistoryScreen {
             this.vacationRequests = [];
             return;
         }
+
+        this.invalidateAttendanceDetailCache();
 
         try {
             const response = await fetchWithAuth.handleApiCall(
@@ -1282,6 +1620,8 @@ class HistoryScreen {
             this.workPatternRequests = [];
             return;
         }
+
+        this.invalidateAttendanceDetailCache();
 
         try {
             const response = await fetchWithAuth.handleApiCall(
@@ -1538,335 +1878,49 @@ class HistoryScreen {
     filterAttendanceTableByDate(dateString) {
         if (!this.historyTableBody) return;
 
-        // 選択された日付の勤怠データを取得
-        const attendance = this.getAttendanceForDate(dateString);
-        
-        // 有休申請の状態を確認
-        const vacationRequest = this.getVacationRequestForDate(dateString);
-        const isPaidLeaveApproved = vacationRequest && 
-            vacationRequest.status === 'APPROVED' && 
-            vacationRequest.leaveType === 'PAID_LEAVE';
-        
-        // 半休申請かどうかを判定
-        const isHalfDayLeave = isPaidLeaveApproved && vacationRequest && 
-            (vacationRequest.timeUnit === 'HALF_AM' || vacationRequest.timeUnit === 'HALF_PM');
-            
-        // 全日有休かどうかを判定（半休申請でない有休申請）
-        const isFullDayLeave = isPaidLeaveApproved && !isHalfDayLeave;
-        
-        // 勤務時間変更申請の状態を確認
-        const workPatternRequest = this.getWorkPatternRequestForDate(dateString);
-        
-        // 日付の詳細情報を取得
-        const selectedDate = new Date(dateString);
-        const isWeekend = selectedDate.getDay() === 0 || selectedDate.getDay() === 6;
-        const isHoliday = this.isHoliday(selectedDate);
-        
         // テーブルをクリア
         this.historyTableBody.innerHTML = '';
 
-        if (attendance || isPaidLeaveApproved) {
-            // 勤怠データがある場合、または有休承認済の場合
+        const dateKey = this.normalizeDateKey(dateString);
+        const attendance = this.getAttendanceForDate(dateKey);
+        const detail = this.getAttendanceDetailForDate(dateKey, {
+            attendanceOverride: attendance,
+            includeVacations: true,
+            force: true
+        });
+
+        if (detail) {
             const row = document.createElement('tr');
             row.classList.add('attendance-row');
+            row.dataset.dateKey = detail.dateKey;
 
-            // 全日有休の場合は出勤退勤打刻の表記を非表示、半休申請の場合は打刻修正の内容を表示
-            const clockInTime = (isFullDayLeave) ? '' :
-                (attendance && attendance.clockInTime ? 
-                    new Date(attendance.clockInTime).toLocaleTimeString('ja-JP', {hour: '2-digit', minute: '2-digit'}) : '');
-            const clockOutTime = (isFullDayLeave) ? '' :
-                (attendance && attendance.clockOutTime ? 
-                    new Date(attendance.clockOutTime).toLocaleTimeString('ja-JP', {hour: '2-digit', minute: '2-digit'}) : '');
-
-            // 勤務時間の計算（バックエンドの値を優先）
-            const isConfirmedAttendance = attendance && attendance.clockInTime && attendance.clockOutTime;
-            let workingTime = '';
-            
-            if (isPaidLeaveApproved) {
-                // 半休申請の場合は打刻修正の実働時間 + 半休分（一律4時間）を表示
-                if (isHalfDayLeave && attendance) {
-                    let adjustmentMinutes = 0;
-                    
-                    // 打刻データがある場合は必ず計算で求める（正確性を優先）
-                    if (attendance.clockInTime && attendance.clockOutTime) {
-                        adjustmentMinutes = TimeUtils.timeStringToMinutes(TimeUtils.calculateWorkingTime(attendance.clockInTime, attendance.clockOutTime, attendance.breakMinutes));
-                    } else if (attendance.workingMinutes !== undefined && attendance.workingMinutes !== null) {
-                        // attendance.workingMinutesは分数で提供されている
-                        adjustmentMinutes = parseInt(attendance.workingMinutes) || 0;
-                    }
-                    
-                    // 打刻修正の実働時間 + 半休分を合計（半休は一律4時間）
-                    const halfDayMinutes = window.WORK_TIME_CONSTANTS?.HALF_DAY_WORKING_MINUTES || 240;
-                    const totalMinutes = adjustmentMinutes + halfDayMinutes;
-                    workingTime = TimeUtils.formatMinutesToTime(totalMinutes);
-                } else if (isFullDayLeave) {
-                    // 全日有休の場合は標準の8時間勤務を表示
-                    workingTime = '8:00';
-                } else {
-                    // その他の有休申請の場合は従来の処理
-                    // 打刻データがある場合は必ず計算で求める（正確性を優先）
-                    if (attendance && attendance.clockInTime && attendance.clockOutTime) {
-                        workingTime = TimeUtils.calculateWorkingTime(attendance.clockInTime, attendance.clockOutTime, attendance.breakMinutes);
-                    } else if (workPatternRequest && workPatternRequest.request) {
-                        const patternWorkingMinutes = workPatternRequest.request.currentWorkingMinutes || 
-                                                      workPatternRequest.request.workingMinutes ||
-                                                      workPatternRequest.request.standardWorkingMinutes;
-                        if (patternWorkingMinutes !== undefined && patternWorkingMinutes !== null) {
-                            workingTime = TimeUtils.formatMinutesToTime(patternWorkingMinutes);
-                        }
-                    } else if (attendance && attendance.workingMinutes !== undefined && attendance.workingMinutes !== null) {
-                        workingTime = TimeUtils.formatMinutesToTime(attendance.workingMinutes);
-                    }
-                    
-                    if (!workingTime) {
-                        workingTime = '8:00';
-                    }
-                }
-            } else if (isConfirmedAttendance) {
-                // 通常の場合（有休承認済でない場合）
-                // 打刻データがある場合は必ず計算で求める（正確性を優先）
-                if (attendance && attendance.clockInTime && attendance.clockOutTime) {
-                    workingTime = TimeUtils.calculateWorkingTime(attendance.clockInTime, attendance.clockOutTime, attendance.breakMinutes);
-                } else if (workPatternRequest && workPatternRequest.request) {
-                    const patternWorkingMinutes = workPatternRequest.request.currentWorkingMinutes || 
-                                                  workPatternRequest.request.workingMinutes ||
-                                                  workPatternRequest.request.standardWorkingMinutes;
-                    if (patternWorkingMinutes !== undefined && patternWorkingMinutes !== null) {
-                        workingTime = TimeUtils.formatMinutesToTime(patternWorkingMinutes);
-                    }
-                } else if (attendance && attendance.workingMinutes !== undefined && attendance.workingMinutes !== null) {
-                    workingTime = TimeUtils.formatMinutesToTime(attendance.workingMinutes);
-                }
-            }
-            
-            // 全日有休の場合は勤務時間以外の表記は空にする、半休申請の場合は打刻修正の内容を表示
-            const breakDisplay = (isFullDayLeave) ? '' :
-                (isConfirmedAttendance && attendance && attendance.breakMinutes !== undefined && attendance.breakMinutes !== null
-                    ? TimeUtils.formatMinutesToTime(attendance.breakMinutes)
-                    : '');
-
-            // 遅刻・早退・残業・深夜時間の計算
-            let lateMinutes = 0;
-            let earlyLeaveMinutes = 0;
-            let overtimeValue = 0;
-            let nightWorkValue = 0;
-
-            if (isFullDayLeave) {
-                // 全日有休の場合は全て空欄
-                lateMinutes = 0;
-                earlyLeaveMinutes = 0;
-                overtimeValue = 0;
-                nightWorkValue = 0;
-            } else if (isHalfDayLeave && attendance && attendance.clockInTime && attendance.clockOutTime) {
-                // 半休承認済みの場合は打刻修正データから再計算
-                const clockIn = new Date(attendance.clockInTime);
-                const clockOut = new Date(attendance.clockOutTime);
-                
-                // 勤務時間変更申請の実働時間と開始・終了時刻を取得
-                let workingMinutesForHalfDay = 480; // デフォルト8時間
-                let standardStartHour = 9; // デフォルト9:00
-                let standardStartMinute = 0;
-                let standardEndHour = 18; // デフォルト18:00
-                let standardEndMinute = 0;
-                
-                if (workPatternRequest && workPatternRequest.request) {
-                    const request = workPatternRequest.request;
-                    const patternWorkingMinutes = request.currentWorkingMinutes || 
-                                                  request.workingMinutes ||
-                                                  request.standardWorkingMinutes;
-                    if (patternWorkingMinutes !== undefined && patternWorkingMinutes !== null) {
-                        workingMinutesForHalfDay = parseInt(patternWorkingMinutes) || 480;
-                    }
-                    
-                    // 勤務時間変更申請の開始・終了時刻を取得
-                    if (request.startTime) {
-                        const startTimeStr = request.startTime;
-                        const startTimeMatch = startTimeStr.match(/(\d{1,2}):(\d{2})/);
-                        if (startTimeMatch) {
-                            standardStartHour = parseInt(startTimeMatch[1]) || 9;
-                            standardStartMinute = parseInt(startTimeMatch[2]) || 0;
-                        }
-                    }
-                    
-                    if (request.endTime) {
-                        const endTimeStr = request.endTime;
-                        const endTimeMatch = endTimeStr.match(/(\d{1,2}):(\d{2})/);
-                        if (endTimeMatch) {
-                            standardEndHour = parseInt(endTimeMatch[1]) || 18;
-                            standardEndMinute = parseInt(endTimeMatch[2]) || 0;
-                        }
-                    }
-                }
-                
-                // 半休分の時間（一律4時間）
-                const halfDayMinutes = window.WORK_TIME_CONSTANTS?.HALF_DAY_WORKING_MINUTES || 240;
-                
-                let expectedStartTime, expectedEndTime;
-                
-                if (vacationRequest.timeUnit === 'HALF_AM') {
-                    // AM休：終業時間から半休時間（一律4時間）前が始業時刻
-                    expectedEndTime = new Date(clockIn);
-                    expectedEndTime.setHours(standardEndHour, standardEndMinute, 0, 0);
-                    expectedStartTime = new Date(expectedEndTime.getTime() - halfDayMinutes * 60 * 1000);
-                    
-                    // 遅刻時間の計算（期待される始業時刻より遅い場合）
-                    if (clockIn > expectedStartTime) {
-                        // 1秒でもあれば1分に切り上げる
-                        const lateSeconds = Math.floor((clockIn - expectedStartTime) / 1000);
-                        lateMinutes = Math.ceil(lateSeconds / 60);
-                    }
-                    
-                    // 早退時間の計算（標準終了時刻より早い場合）
-                    if (clockOut < expectedEndTime) {
-                        // 1秒でもあれば1分に切り上げる
-                        const earlySeconds = Math.floor((expectedEndTime - clockOut) / 1000);
-                        earlyLeaveMinutes = Math.ceil(earlySeconds / 60);
-                    } else {
-                        earlyLeaveMinutes = 0;
-                    }
-                } else if (vacationRequest.timeUnit === 'HALF_PM') {
-                    // PM休：始業時間から半休時間（一律4時間）後が終業時刻
-                    expectedStartTime = new Date(clockIn);
-                    expectedStartTime.setHours(standardStartHour, standardStartMinute, 0, 0);
-                    expectedEndTime = new Date(expectedStartTime.getTime() + halfDayMinutes * 60 * 1000);
-                    
-                    // PM休でも標準始業時刻より遅い場合は遅刻として計算
-                    if (clockIn > expectedStartTime) {
-                        // 1秒でもあれば1分に切り上げる
-                        const lateSeconds = Math.floor((clockIn - expectedStartTime) / 1000);
-                        lateMinutes = Math.ceil(lateSeconds / 60);
-                    }
-                    
-                    // 早退時間の計算（期待される終業時刻より早い場合）
-                    if (clockOut < expectedEndTime) {
-                        // 1秒でもあれば1分に切り上げる
-                        const earlySeconds = Math.floor((expectedEndTime - clockOut) / 1000);
-                        earlyLeaveMinutes = Math.ceil(earlySeconds / 60);
-                    }
-                }
-                
-                // 実働時間から残業時間を計算（打刻修正分 + 半休分）
-                let actualWorkingMinutes = 0;
-                if (attendance.workingMinutes !== undefined && attendance.workingMinutes !== null) {
-                    actualWorkingMinutes = parseInt(attendance.workingMinutes) || 0;
-                } else if (attendance.clockInTime && attendance.clockOutTime) {
-                    actualWorkingMinutes = TimeUtils.timeStringToMinutes(TimeUtils.calculateWorkingTime(attendance.clockInTime, attendance.clockOutTime, attendance.breakMinutes));
-                }
-                
-                // 打刻修正分 + 半休分（一律4時間）を合計
-                const totalWorkingMinutes = actualWorkingMinutes + halfDayMinutes;
-                overtimeValue = Math.max(0, totalWorkingMinutes - workingMinutesForHalfDay);
-                
-                // 深夜勤務時間の計算
-                nightWorkValue = TimeUtils.calculateNightShiftMinutes(attendance.clockInTime, attendance.clockOutTime, attendance.breakMinutes);
+            if (!detail.hasAttendance && !detail.isPaidLeaveApproved) {
+                row.innerHTML = `
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                `;
             } else {
-                // 通常勤務の場合は打刻データから計算
-                if (isConfirmedAttendance && attendance) {
-                    // 標準勤務時間を取得（勤務時間変更申請がある場合はその値、なければ9:00-18:00）
-                    let standardStartHour = 9;
-                    let standardStartMinute = 0;
-                    let standardEndHour = 18;
-                    let standardEndMinute = 0;
-                    
-                    // 勤務時間変更申請がある場合はその時刻を使用
-                    if (workPatternRequest && workPatternRequest.request) {
-                        const request = workPatternRequest.request;
-                        
-                        if (request.startTime) {
-                            const startTimeStr = request.startTime;
-                            const startTimeMatch = startTimeStr.match(/(\d{1,2}):(\d{2})/);
-                            if (startTimeMatch) {
-                                standardStartHour = parseInt(startTimeMatch[1]) || 9;
-                                standardStartMinute = parseInt(startTimeMatch[2]) || 0;
-                            }
-                        }
-                        
-                        if (request.endTime) {
-                            const endTimeStr = request.endTime;
-                            const endTimeMatch = endTimeStr.match(/(\d{1,2}):(\d{2})/);
-                            if (endTimeMatch) {
-                                standardEndHour = parseInt(endTimeMatch[1]) || 18;
-                                standardEndMinute = parseInt(endTimeMatch[2]) || 0;
-                            }
-                        }
-                    }
-                    
-                    // 実際の打刻時刻
-                    const clockIn = new Date(attendance.clockInTime);
-                    const clockOut = new Date(attendance.clockOutTime);
-                    
-                    // 基準時刻（同じ日付で設定）
-                    const standardStart = new Date(clockIn.getFullYear(), clockIn.getMonth(), clockIn.getDate(), standardStartHour, standardStartMinute, 0, 0);
-                    const standardEnd = new Date(clockOut.getFullYear(), clockOut.getMonth(), clockOut.getDate(), standardEndHour, standardEndMinute, 0, 0);
-                    
-                    // 遅刻時間の計算（基準開始時刻より遅い場合）
-                    if (clockIn > standardStart) {
-                        // 秒数は切り捨て
-                        const lateSeconds = Math.floor((clockIn - standardStart) / 1000);
-                        lateMinutes = Math.floor(lateSeconds / 60);
-                    } else {
-                        lateMinutes = 0;
-                    }
-                    
-                    // 早退時間の計算（基準終了時刻より早い場合）
-                    if (clockOut < standardEnd) {
-                        // 1秒でもあれば1分に切り上げる
-                        const earlySeconds = Math.floor((standardEnd - clockOut) / 1000);
-                        earlyLeaveMinutes = Math.ceil(earlySeconds / 60);
-                    } else {
-                        earlyLeaveMinutes = 0;
-                    }
-                    
-                    // 残業時間の計算（8時間を超過した場合）
-                    const totalMinutes = Math.floor((clockOut - clockIn) / (1000 * 60));
-                    const breakMinutesValue = attendance.breakMinutes || 0;
-                    const workingMinutes = totalMinutes - breakMinutesValue;
-                    const standardWorkingMinutes = 8 * 60; // 8時間（480分）
-                    
-                    overtimeValue = Math.max(0, workingMinutes - standardWorkingMinutes);
-                    
-                    // 深夜勤務時間の計算
-                    nightWorkValue = this.resolveNightMinutes(attendance);
-                } else {
-                    // 打刻データがない場合は既存データを使用
-                    lateMinutes = Number((attendance && attendance.lateMinutes) ?? 0);
-                    earlyLeaveMinutes = Number((attendance && attendance.earlyLeaveMinutes) ?? 0);
-                    overtimeValue = (attendance && attendance.overtimeMinutes) ?? 0;
-                    nightWorkValue = 0;
-                }
+                row.innerHTML = `
+                    <td>${detail.dateDisplay}</td>
+                    <td>${detail.clockInDisplay}</td>
+                    <td>${detail.clockOutDisplay}</td>
+                    <td>${detail.breakDisplay}</td>
+                    <td>${detail.workingDisplay}</td>
+                    <td>${detail.lateDisplay}</td>
+                    <td>${detail.earlyLeaveDisplay}</td>
+                    <td>${detail.overtimeDisplay}</td>
+                    <td>${detail.nightDisplay}</td>
+                `;
             }
-
-            const lateDisplay = (isFullDayLeave) ? '' : (isConfirmedAttendance ? TimeUtils.formatMinutesToTime(lateMinutes) : '');
-            const earlyLeaveDisplay = (isFullDayLeave) ? '' : (isConfirmedAttendance ? TimeUtils.formatMinutesToTime(earlyLeaveMinutes) : '');
-            const overtimeDisplay = (isFullDayLeave) ? '' : (isConfirmedAttendance ? TimeUtils.formatMinutesToTime(overtimeValue) : '');
-            const nightWorkDisplay = (isFullDayLeave) ? '' : (isConfirmedAttendance ? TimeUtils.formatMinutesToTime(nightWorkValue) : '');
-
-            // 日付をyyyy/mm/dd形式に変換
-            const formatDate = (dateStr) => {
-                if (!dateStr) return '';
-                const date = new Date(dateStr);
-                const year = date.getFullYear();
-                const month = String(date.getMonth() + 1).padStart(2, '0');
-                const day = String(date.getDate()).padStart(2, '0');
-                return `${year}/${month}/${day}`;
-            };
-
-            // 日付表示: attendanceがあればそれを使用、なければdateStringを使用
-            const displayDate = attendance && attendance.attendanceDate ? attendance.attendanceDate : dateString;
-
-            row.innerHTML = `
-                <td>${formatDate(displayDate)}</td>
-                <td>${clockInTime}</td>
-                <td>${clockOutTime}</td>
-                <td>${breakDisplay}</td>
-                <td>${workingTime}</td>
-                <td>${lateDisplay}</td>
-                <td>${earlyLeaveDisplay}</td>
-                <td>${overtimeDisplay}</td>
-                <td>${nightWorkDisplay}</td>
-            `;
-
             this.historyTableBody.appendChild(row);
+            this.notifyAttendanceDetailUpdate([detail.dateKey]);
         } else {
             // 勤怠データがない場合
             const row = document.createElement('tr');

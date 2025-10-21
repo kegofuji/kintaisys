@@ -6,7 +6,6 @@ class DashboardScreen {
     constructor() {
         this.clockInBtn = null;
         this.clockOutBtn = null;
-        this.clockStatus = null;
         this.refreshHistoryBtn = null;
         this.attendanceHistory = null;
         this.monthlySubmitBtn = null;
@@ -106,7 +105,6 @@ class DashboardScreen {
     initializeElements() {
         this.clockInBtn = document.getElementById('clockInBtn');
         this.clockOutBtn = document.getElementById('clockOutBtn');
-        this.clockStatus = document.getElementById('clockStatus');
         this.refreshHistoryBtn = document.getElementById('refreshHistoryBtn');
         this.attendanceHistory = document.getElementById('attendanceHistory');
         this.monthlySubmitBtn = document.getElementById('monthlySubmitBtn');
@@ -541,11 +539,6 @@ class DashboardScreen {
         console.log('displayTodayAttendance called with data:', data);
         console.log('Data type:', typeof data);
         console.log('Data keys:', data ? Object.keys(data) : 'null');
-        
-        if (!this.clockStatus) {
-            console.log('clockStatus element not found');
-            return;
-        }
 
         const effectiveBreakMinutes = this.calculateEffectiveBreakMinutes(data);
         const attendanceForState = data ? { ...data } : data;
@@ -554,22 +547,10 @@ class DashboardScreen {
             attendanceForState.breakMinutes = effectiveBreakMinutes;
         }
 
-        // ステータス表示（未確定は空白）→ 出勤前/出勤中/退勤済に統一
-        let statusText = '';
-        if (!data || !data.clockInTime) {
-            statusText = '出勤前';
-        } else if (data.clockInTime && !data.clockOutTime) {
-            statusText = '出勤中';
-        } else if (data.clockInTime && data.clockOutTime) {
-            statusText = '退勤済';
-        }
-
         const hasApprovedAdjustment = this.normalizeBoolean(attendanceForState?.hasApprovedAdjustment);
         if (attendanceForState) {
             attendanceForState.hasApprovedAdjustment = hasApprovedAdjustment;
         }
-        console.log('Setting status:', statusText);
-        this.clockStatus.innerHTML = statusText;
         this.currentAttendance = attendanceForState;
 
         if (this.breakTimeElement) {

@@ -11,7 +11,6 @@ const loginForm = document.getElementById('loginForm');
 const currentUserSpan = document.getElementById('currentUserDisplay');
 const clockInBtn = document.getElementById('clockInBtn');
 const clockOutBtn = document.getElementById('clockOutBtn');
-const clockStatus = document.getElementById('clockStatus');
 const refreshHistoryBtn = document.getElementById('refreshHistoryBtn');
 const attendanceHistory = document.getElementById('historyTableBody');
 const monthlySubmitBtn = document.getElementById('monthlySubmitBtn');
@@ -1456,7 +1455,6 @@ async function updateTodayAttendance() {
     const clockOutTime = document.getElementById('clockOutTime');
     const workingTime = document.getElementById('workingTime');
     const breakTime = document.getElementById('breakTime');
-    const clockStatus = document.getElementById('clockStatus');
     const clockInBtn = document.getElementById('clockInBtn');
     const clockOutBtn = document.getElementById('clockOutBtn');
 
@@ -1470,7 +1468,7 @@ async function updateTodayAttendance() {
             const data = await response.json();
             if (data.success && data.data) {
                 const record = data.data;
-                updateAttendanceDisplay(record, clockInTime, clockOutTime, workingTime, breakTime, clockStatus, editBreakButton);
+                updateAttendanceDisplay(record, clockInTime, clockOutTime, workingTime, breakTime, editBreakButton);
                 updateButtonStates(record, clockInBtn, clockOutBtn);
                 return;
             }
@@ -1479,14 +1477,11 @@ async function updateTodayAttendance() {
         console.error('今日の勤怠状況取得エラー:', error);
     }
     
-    // APIが失敗した場合は未確定＝空白表示、ステータスは出勤前
+    // APIが失敗した場合は未確定＝空白表示
     if (clockInTime) clockInTime.textContent = '--:--';
     if (clockOutTime) clockOutTime.textContent = '--:--';
     if (workingTime) workingTime.textContent = '--:--';
     if (breakTime) breakTime.textContent = '--:--';
-    if (clockStatus) {
-        clockStatus.innerHTML = '出勤前';
-    }
     if (editBreakButton) {
         editBreakButton.disabled = true;
         editBreakButton.classList.add('disabled');
@@ -1526,7 +1521,7 @@ function calculateEffectiveBreakMinutes(record) {
 }
 
 // 勤怠状況表示を更新
-function updateAttendanceDisplay(record, clockInTime, clockOutTime, workingTime, breakTime, clockStatus, editBreakButton) {
+function updateAttendanceDisplay(record, clockInTime, clockOutTime, workingTime, breakTime, editBreakButton) {
     if (!record) return;
 
     const effectiveBreakMinutes = calculateEffectiveBreakMinutes(record);
@@ -1563,16 +1558,6 @@ function updateAttendanceDisplay(record, clockInTime, clockOutTime, workingTime,
             workingTime.textContent = TimeUtils.formatMinutesToTime(attendance.workingMinutes);
         } else {
             workingTime.textContent = '--:--';
-        }
-    }
-
-    if (clockStatus) {
-        if (!attendance.clockInTime) {
-            clockStatus.innerHTML = '未出勤';
-        } else if (attendance.clockInTime && !attendance.clockOutTime) {
-            clockStatus.innerHTML = '出勤中';
-        } else {
-            clockStatus.innerHTML = '退勤済';
         }
     }
 
