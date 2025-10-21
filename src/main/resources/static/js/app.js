@@ -303,14 +303,103 @@ class App {
     }
 }
 
+// グローバルなshowAlert関数を定義
+window.showAlert = function(message, type = 'info') {
+    const alertContainer = document.getElementById('alertContainer');
+    if (!alertContainer) {
+        console.warn('Alert container not found');
+        return;
+    }
+
+    // 既存のアラートをクリア（新しいアラートが優先されるように）
+    const existingAlerts = alertContainer.querySelectorAll('.alert');
+    existingAlerts.forEach(alert => alert.remove());
+
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+    alertDiv.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    
+    alertContainer.appendChild(alertDiv);
+    
+    // 5秒後に自動削除
+    setTimeout(() => {
+        if (alertDiv.parentNode) {
+            alertDiv.parentNode.removeChild(alertDiv);
+        }
+    }, 5000);
+};
+
 // DOM読み込み完了時にアプリケーションとルーターを初期化
 document.addEventListener('DOMContentLoaded', async () => {
     window.app = new App();
     window.router = new Router();
 
+    // フォームバリデーションカスタマイズ
+    setupCustomFormValidation();
+
     window.app.setupNavigationListeners();
     await window.app.init();
 });
+
+/**
+ * カスタムフォームバリデーション設定
+ * ブラウザのデフォルトバリデーションメッセージを「必要な項目はすべて入力してください」に変更
+ */
+function setupCustomFormValidation() {
+    // 対象フォームのID
+    const targetFormIds = ['vacationForm', 'adjustmentForm', 'workPatternForm'];
+    
+    targetFormIds.forEach(formId => {
+        const form = document.getElementById(formId);
+        if (form) {
+            form.addEventListener('submit', function(event) {
+                const requiredFields = form.querySelectorAll('[required]');
+                let hasEmptyFields = false;
+                
+                requiredFields.forEach(field => {
+                    if (!field.value.trim()) {
+                        hasEmptyFields = true;
+                        field.classList.add('is-invalid');
+                    } else {
+                        field.classList.remove('is-invalid');
+                    }
+                });
+                
+                if (hasEmptyFields) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    
+                    // トーストアラートで表示
+                    showToastAlert('必要な項目はすべて入力してください', 'warning');
+                    
+                    // 最初の無効なフィールドにフォーカス
+                    const firstInvalidField = form.querySelector('.is-invalid');
+                    if (firstInvalidField) {
+                        firstInvalidField.focus();
+                    }
+                }
+            }, true);
+            
+            // フィールドの入力時にクラスをクリア
+            form.addEventListener('input', function(event) {
+                if (event.target.hasAttribute('required')) {
+                    event.target.classList.remove('is-invalid');
+                }
+            });
+        }
+    });
+}
+
+/**
+ * トーストアラートを表示
+ */
+function showToastAlert(message, type = 'warning') {
+    // グローバルなshowAlert関数を使用
+    window.showAlert(message, type);
+}
 
 // ページ離脱時の処理
 window.addEventListener('beforeunload', () => {
