@@ -180,6 +180,25 @@ class DashboardScreen {
             this.showAlert(data.message, 'success');
             await this.loadTodayAttendance();
             await this.loadAttendanceHistory();
+            
+            // カレンダーを即時更新
+            try {
+                if (window.historyScreen && typeof window.historyScreen.loadCalendarData === 'function') {
+                    await window.historyScreen.loadCalendarData();
+                    if (typeof window.historyScreen.generateCalendar === 'function') {
+                        window.historyScreen.generateCalendar();
+                    }
+                }
+                // 旧カレンダー画面にも反映（存在する場合）
+                if (window.calendarScreen && typeof window.calendarScreen.loadCalendarData === 'function') {
+                    await window.calendarScreen.loadCalendarData();
+                    if (typeof window.calendarScreen.generateCalendar === 'function') {
+                        window.calendarScreen.generateCalendar();
+                    }
+                }
+            } catch (calendarError) {
+                console.warn('カレンダー更新エラー:', calendarError);
+            }
         } catch (error) {
             // エラー時は状態を再同期のみ実行
             await this.loadTodayAttendance();

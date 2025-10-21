@@ -304,6 +304,25 @@ async function handleClockIn() {
             showAlert(data.message, 'success');
             await loadAttendanceHistory();
             await updateTodayAttendance();
+            
+            // 履歴カレンダーを即時更新
+            try {
+                if (window.historyScreen && typeof window.historyScreen.loadCalendarData === 'function') {
+                    await window.historyScreen.loadCalendarData();
+                    if (typeof window.historyScreen.generateCalendar === 'function') {
+                        window.historyScreen.generateCalendar();
+                    }
+                }
+                // 旧カレンダー画面にも反映（存在する場合）
+                if (window.calendarScreen && typeof window.calendarScreen.loadCalendarData === 'function') {
+                    await window.calendarScreen.loadCalendarData();
+                    if (typeof window.calendarScreen.generateCalendar === 'function') {
+                        window.calendarScreen.generateCalendar();
+                    }
+                }
+            } catch (calendarError) {
+                console.warn('カレンダー更新エラー:', calendarError);
+            }
         } else {
             // エラー時は状態を再同期のみ実行
             await updateTodayAttendance();

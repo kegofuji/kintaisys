@@ -51,6 +51,11 @@ class VacationScreen {
         this.setupEventListeners();
         this.clearPrefillState();
         await this.loadAllSupportingData();
+        
+        // ブラウザの初期化完了後に再度空白を確実に設定
+        setTimeout(() => {
+            this.clearPrefillState();
+        }, 100);
     }
 
     /**
@@ -78,6 +83,14 @@ class VacationScreen {
         this.prefillCancelButton = document.getElementById('vacationFormCancel');
         this.formTitle = document.getElementById('vacationFormTitle');
         this.refreshLeaveBalanceButton = document.getElementById('refreshLeaveBalance');
+
+        // 要素が取得できた直後に空白を設定（ブラウザのデフォルト値を上書き）
+        if (this.vacationStartDate) {
+            this.vacationStartDate.value = '';
+        }
+        if (this.vacationEndDate) {
+            this.vacationEndDate.value = '';
+        }
     }
 
     /**
@@ -119,6 +132,12 @@ class VacationScreen {
         if (this.prefillCancelButton) {
             this.prefillCancelButton.style.display = 'none';
             this.prefillCancelButton.onclick = null;
+        }
+        if (this.vacationStartDate) {
+            this.vacationStartDate.value = '';
+        }
+        if (this.vacationEndDate) {
+            this.vacationEndDate.value = '';
         }
         if (this.leaveTypeSelect) {
             // 先頭の利用可能な選択肢を選択

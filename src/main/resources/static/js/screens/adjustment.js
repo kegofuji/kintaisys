@@ -115,6 +115,11 @@ class AdjustmentScreen {
         this.setupEventListeners();
         this.setDefaultDate();
         this.clearPrefillState();
+        
+        // ブラウザの初期化完了後に再度空白を確実に設定
+        setTimeout(() => {
+            this.setDefaultDate();
+        }, 100);
     }
 
     /**
@@ -131,6 +136,23 @@ class AdjustmentScreen {
         this.adjustmentReason = document.getElementById('adjustmentReason');
         this.formTitle = document.getElementById('adjustmentFormTitle');
         this.cancelPrefillButton = document.getElementById('adjustmentFormCancel');
+
+        // 要素が取得できた直後に空白を設定（ブラウザのデフォルト値を上書き）
+        if (this.clockInDateInput) {
+            this.clockInDateInput.value = '';
+        }
+        if (this.clockOutDateInput) {
+            this.clockOutDateInput.value = '';
+        }
+        if (this.clockInTimeInput) {
+            this.clockInTimeInput.value = '';
+        }
+        if (this.clockOutTimeInput) {
+            this.clockOutTimeInput.value = '';
+        }
+        if (this.breakTimeInput) {
+            this.breakTimeInput.value = '';
+        }
     }
 
     /**
@@ -182,17 +204,11 @@ class AdjustmentScreen {
      * デフォルト日付設定（今日の日付）
      */
     setDefaultDate() {
-        const today = new Date();
-        const year = today.getFullYear();
-        const month = String(today.getMonth() + 1).padStart(2, '0');
-        const day = String(today.getDate()).padStart(2, '0');
-        const todayStr = `${year}-${month}-${day}`;
-
         if (this.clockInDateInput) {
-            this.clockInDateInput.value = todayStr;
+            this.clockInDateInput.value = '';
         }
         if (this.clockOutDateInput) {
-            this.clockOutDateInput.value = todayStr;
+            this.clockOutDateInput.value = '';
         }
         if (this.clockInTimeInput) {
             this.clockInTimeInput.value = '';

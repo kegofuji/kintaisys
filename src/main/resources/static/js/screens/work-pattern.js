@@ -67,6 +67,11 @@ class WorkPatternScreen {
         this.refreshRequests();
         this.startSummaryPolling();
         this.initialized = true;
+        
+        // ブラウザの初期化完了後に再度空白を確実に設定
+        setTimeout(() => {
+            this.setDefaultValues();
+        }, 100);
     }
 
     initializeElements() {
@@ -90,6 +95,26 @@ class WorkPatternScreen {
         this.holidayButtons = Array.from(document.querySelectorAll('.work-pattern-holiday-btn'));
         this.dayHelpText = document.getElementById('workPatternDayHelp');
         this.daySelectionContainer = document.getElementById('workPatternDaySelectionContainer');
+
+        // 要素が取得できた直後に空白を設定（ブラウザのデフォルト値を上書き）
+        if (this.startDateInput) {
+            this.startDateInput.value = '';
+        }
+        if (this.endDateInput) {
+            this.endDateInput.value = '';
+        }
+        if (this.startTimeInput) {
+            this.startTimeInput.value = '';
+        }
+        if (this.endTimeInput) {
+            this.endTimeInput.value = '';
+        }
+        if (this.breakTimeInput) {
+            this.breakTimeInput.value = '';
+        }
+        if (this.reasonInput) {
+            this.reasonInput.value = '';
+        }
     }
 
     setupEventListeners() {
@@ -145,35 +170,20 @@ class WorkPatternScreen {
     }
 
     setDefaultValues() {
-        const today = new Date();
-        const yyyy = today.getFullYear();
-        const mm = String(today.getMonth() + 1).padStart(2, '0');
-        const dd = String(today.getDate()).padStart(2, '0');
-        const todayStr = `${yyyy}-${mm}-${dd}`;
-
         if (this.startDateInput) {
-            this.startDateInput.value = this.startDateInput.value || todayStr;
+            this.startDateInput.value = '';
         }
         if (this.endDateInput) {
-            this.endDateInput.value = this.endDateInput.value || todayStr;
+            this.endDateInput.value = '';
         }
         if (this.startTimeInput) {
-            this.startTimeInput.value = this.startTimeInput.value || '09:00';
+            this.startTimeInput.value = '';
         }
         if (this.endTimeInput) {
-            this.endTimeInput.value = this.endTimeInput.value || '18:00';
+            this.endTimeInput.value = '';
         }
         if (this.breakTimeInput) {
-            const totalMinutes = this.calculateTotalMinutes();
-            if (totalMinutes != null) {
-                const autoBreak = Math.min(
-                    Math.max(TimeUtils.calculateRequiredBreakMinutes(totalMinutes), 0),
-                    totalMinutes
-                );
-                this.breakTimeInput.value = TimeUtils.formatMinutesToTime(autoBreak);
-            } else {
-                this.breakTimeInput.value = '1:00';
-            }
+            this.breakTimeInput.value = '';
         }
         if (this.reasonInput) {
             this.reasonInput.value = '';
@@ -643,12 +653,6 @@ class WorkPatternScreen {
             return;
         }
         this.form.reset();
-        if (this.startDateInput) {
-            this.startDateInput.value = this.startDateInput.value || this.getToday();
-        }
-        if (this.endDateInput) {
-            this.endDateInput.value = this.startDateInput?.value || this.getToday();
-        }
         this.setDefaultValues();
     }
 
