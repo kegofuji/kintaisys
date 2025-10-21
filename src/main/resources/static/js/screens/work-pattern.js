@@ -1013,7 +1013,6 @@ class WorkPatternScreen {
                     <td class="text-start">${workDayDisplay}</td>
                     <td class="text-start">${reasonText}</td>
                     <td class="text-start">${this.translateStatus(status)}</td>
-                    <td class="text-start">${this.formatDateTime(entry.createdAt)}</td>
                 `;
                 this.tableBody.appendChild(row);
             });
@@ -1025,7 +1024,7 @@ class WorkPatternScreen {
         }
         const row = document.createElement('tr');
         row.innerHTML = `
-            <td colspan="8" class="text-center ${textClass}">${message}</td>
+            <td colspan="7" class="text-center ${textClass}">${message}</td>
         `;
         this.tableBody.appendChild(row);
     }
