@@ -1161,10 +1161,19 @@ class WorkPatternScreen {
             : '指定なし（標準勤務）';
         const headline = '現在の勤務時間';
 
+        // 7日未満の申請（承認済み）の場合は、勤務日・休日表示を非表示
+        const hideDaysRow = Boolean(summary.hasApprovedRequest) && this.isPeriodLessThanWeek(
+            summary.patternStartDate,
+            summary.patternEndDate
+        );
+        const daysRowHtml = hideDaysRow
+            ? ''
+            : `<div>勤務日: <span class="text-body text-success fw-semibold">${this.escapeHtml(workingDaysText)}</span> | 休日: <span class="text-body text-danger fw-semibold">${this.escapeHtml(holidayDaysText)}</span></div>`;
+
         this.currentSummaryContainer.innerHTML = `
             <div class="fw-semibold text-body">${this.escapeHtml(headline)}</div>
             <div class="mt-1">定時: <span class="fw-semibold text-body">${this.escapeHtml(startTimeText)} 〜 ${this.escapeHtml(endTimeText)}</span> / 休憩: <span class="fw-semibold text-body">${this.escapeHtml(breakText)}</span> / 実働: <span class="fw-semibold text-body">${this.escapeHtml(workingText)}</span></div>
-            <div>勤務日: <span class="text-body text-success fw-semibold">${this.escapeHtml(workingDaysText)}</span> | 休日: <span class="text-body text-danger fw-semibold">${this.escapeHtml(holidayDaysText)}</span></div>
+            ${daysRowHtml}
             <div class="mt-1">適用期間: <span class="text-body">${this.escapeHtml(periodText)}</span></div>
             <div class="mt-2 small text-muted" data-summary-status hidden></div>
         `.trim();
