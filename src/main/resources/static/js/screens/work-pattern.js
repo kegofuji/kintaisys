@@ -199,7 +199,7 @@ class WorkPatternScreen {
             return;
         }
         if (!window.currentEmployeeId) {
-            this.showAlert('従業員IDを取得できません。再度ログインしてください。', 'danger');
+            this.showAlert('従業員IDを取得できません。再度ログインしてください', 'danger');
             return;
         }
 
@@ -209,12 +209,12 @@ class WorkPatternScreen {
         const endTime = this.endTimeInput?.value;
 
         if (!startDate || !endDate || !startTime || !endTime) {
-            this.showAlert('必須項目を入力してください。', 'warning');
+            this.showAlert('必須項目を入力してください', 'warning');
             return;
         }
 
         if (endDate < startDate) {
-            this.showAlert('終了日は開始日以降を指定してください。', 'warning');
+            this.showAlert('終了日は開始日以降を指定してください', 'warning');
             this.endDateInput?.focus();
             return;
         }
@@ -223,22 +223,22 @@ class WorkPatternScreen {
         const periodLength = this.getRequestedPeriodLength();
         if (periodLength >= 7) {
             if (!this.selectedDays || this.selectedDays.size === 0) {
-                this.showAlert('勤務日を少なくとも1つ選択してください。', 'warning');
+                this.showAlert('勤務日を少なくとも1つ選択してください', 'warning');
                 return;
             }
             if (this.selectedDays.size !== 5) {
-                this.showAlert('勤務日は5日選択してください。', 'warning');
+                this.showAlert('勤務日は5日選択してください', 'warning');
                 return;
             }
         }
 
         const totalMinutes = this.calculateTotalMinutes();
         if (totalMinutes === null) {
-            this.showAlert('有効な勤務時間を入力してください。', 'warning');
+            this.showAlert('有効な勤務時間を入力してください', 'warning');
             return;
         }
         if (totalMinutes <= 0) {
-            this.showAlert('勤務時間が0分以下です。', 'warning');
+            this.showAlert('勤務時間が0分以下です', 'warning');
             return;
         }
 
@@ -270,7 +270,7 @@ class WorkPatternScreen {
         const reason = this.reasonInput?.value?.trim() || '';
         
         if (!reason) {
-            this.showAlert('理由を入力してください。', 'warning');
+            this.showAlert('理由を入力してください', 'warning');
             this.reasonInput?.focus();
             return;
         }
@@ -312,7 +312,7 @@ class WorkPatternScreen {
             );
 
             if (response?.success) {
-                this.showAlert('勤務時間変更を申請しました。', 'success');
+                this.showAlert('勤務時間変更を申請しました', 'success');
                 this.resetFormAfterSubmit();
                 await this.refreshRequests();
             } else {
@@ -321,7 +321,7 @@ class WorkPatternScreen {
             }
         } catch (error) {
             console.error('勤務時間変更申請エラー:', error);
-            this.showAlert('勤務時間変更の申請に失敗しました。', 'danger', false);
+            this.showAlert('勤務時間変更の申請に失敗しました', 'danger', false);
         } finally {
             this.isSubmitting = false;
             this.toggleFormDisabled(false);
@@ -687,7 +687,7 @@ class WorkPatternScreen {
             this.updateDayButtonState(button, false);
         } else {
             if (this.selectedDays.size >= 5) {
-                this.showAlert('勤務日は5日まで選択できます。', 'warning');
+                this.showAlert('勤務日は5日まで選択できます', 'warning');
                 return;
             }
             this.selectedDays.add(dayKey);
@@ -1161,10 +1161,19 @@ class WorkPatternScreen {
             : '指定なし（標準勤務）';
         const headline = '現在の勤務時間';
 
+        // 7日未満の申請の場合は勤務日と休日の表示をしない
+        const isShortPeriod = summary.hasApprovedRequest && 
+            this.isPeriodLessThanWeek(summary.patternStartDate, summary.patternEndDate);
+
+        let workDaysHtml = '';
+        if (!isShortPeriod) {
+            workDaysHtml = `<div>勤務日: <span class="text-body text-success fw-semibold">${this.escapeHtml(workingDaysText)}</span> | 休日: <span class="text-body text-danger fw-semibold">${this.escapeHtml(holidayDaysText)}</span></div>`;
+        }
+
         this.currentSummaryContainer.innerHTML = `
             <div class="fw-semibold text-body">${this.escapeHtml(headline)}</div>
             <div class="mt-1">定時: <span class="fw-semibold text-body">${this.escapeHtml(startTimeText)} 〜 ${this.escapeHtml(endTimeText)}</span> / 休憩: <span class="fw-semibold text-body">${this.escapeHtml(breakText)}</span> / 実働: <span class="fw-semibold text-body">${this.escapeHtml(workingText)}</span></div>
-            <div>勤務日: <span class="text-body text-success fw-semibold">${this.escapeHtml(workingDaysText)}</span> | 休日: <span class="text-body text-danger fw-semibold">${this.escapeHtml(holidayDaysText)}</span></div>
+            ${workDaysHtml}
             <div class="mt-1">適用期間: <span class="text-body">${this.escapeHtml(periodText)}</span></div>
             <div class="mt-2 small text-muted" data-summary-status hidden></div>
         `.trim();

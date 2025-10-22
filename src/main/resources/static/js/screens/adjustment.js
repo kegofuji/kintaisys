@@ -328,12 +328,12 @@ class AdjustmentScreen {
             if (conflicts.length > 0) {
                 const displayDates = conflicts.map((date) => this.formatDateForDisplay(date)).filter(Boolean);
                 const dateLabel = displayDates.length > 0 ? `対象日（${displayDates.join(', ')}）` : '対象日';
-                this.showAlert(`${dateLabel}には有給申請が存在します。打刻修正するには、有給申請を取消してください。`, 'warning');
+                this.showAlert(`${dateLabel}には有給申請が存在します。打刻修正するには、有給申請を取消してください`, 'warning');
                 return;
             }
         } catch (error) {
             console.error('有給申請状況の確認に失敗しました:', error);
-            this.showAlert('有給申請状況の確認に失敗しました。時間をおいて再度お試しください。', 'danger');
+            this.showAlert('有給申請状況の確認に失敗しました。時間をおいて再度お試しください', 'danger');
             return;
         }
 

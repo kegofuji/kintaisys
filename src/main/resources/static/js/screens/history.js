@@ -2198,7 +2198,7 @@ class HistoryScreen {
         const normalizedId = (requestId || '').trim();
 
         if (!normalizedId) {
-            this.showAlert('申請IDを取得できません。画面を再読み込みしてください。', 'warning');
+            this.showAlert('申請IDを取得できません。画面を再読み込みしてください', 'warning');
             return;
         }
         if (!window.currentEmployeeId) {
@@ -2252,7 +2252,7 @@ class HistoryScreen {
             const isStateError = message.includes('取消できない');
 
             if (isMissing || isStateError) {
-                this.showAlert(`${message}。最新の状態を反映します。`, 'warning');
+                this.showAlert(`${message}。最新の状態を反映します`, 'warning');
                 refreshRequired = true;
                 closeModal = true;
             } else {
@@ -2481,7 +2481,7 @@ class HistoryScreen {
         const normalizedId = (vacationId || '').trim();
 
         if (!normalizedId) {
-            this.showAlert('申請IDを取得できません。画面を再読み込みしてください。', 'warning');
+            this.showAlert('申請IDを取得できません。画面を再読み込みしてください', 'warning');
             return;
         }
         if (!window.currentEmployeeId) {
@@ -2535,7 +2535,7 @@ class HistoryScreen {
             const isStateError = message.includes('取消できない');
 
             if (isMissing || isStateError) {
-                this.showAlert(`${message}。最新の状態を反映します。`, 'warning');
+                this.showAlert(`${message}。最新の状態を反映します`, 'warning');
                 refreshRequired = true;
                 closeModal = true;
             } else {
