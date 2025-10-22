@@ -449,7 +449,13 @@ public class LeaveRequestService {
                 : Optional.empty();
 
         if (patternOpt.isPresent()) {
-            boolean applies = patternOpt.get().appliesTo(date, holiday);
+            WorkPatternChangeRequest pattern = patternOpt.get();
+            // 祝日かつ applyHoliday=false の場合は休日扱い（勤務日ではない）
+            if (holiday && !Boolean.TRUE.equals(pattern.isApplyHoliday())) {
+                log.debug("[Leave] isWorkingDay: patternFound=true holiday=true applyHoliday=false -> working=false date={}", date);
+                return false;
+            }
+            boolean applies = pattern.appliesTo(date, holiday);
             log.debug("[Leave] isWorkingDay: patternFound=true holiday={} applies={} date={}", holiday, applies, date);
             return applies;
         }
