@@ -308,11 +308,11 @@ class AdjustmentScreen {
         // 実働6時間以上8時間未満：45分以上の休憩が必要
         // 実働8時間以上：60分以上の休憩が必要
         if (workingMinutes >= 360 && workingMinutes < 480 && breakMinutes < 45) {
-            this.showAlert('実働6時間以上8時間未満の場合、休憩時間は45分以上必要です', 'warning');
+            this.showAlert('実働6時間以上8時間未満の場合、休憩時間は45分以上必要です', 'danger');
             this.breakTimeInput?.focus();
             return;
         } else if (workingMinutes >= 480 && breakMinutes < 60) {
-            this.showAlert('実働8時間以上の場合、休憩時間は60分以上必要です', 'warning');
+            this.showAlert('実働8時間以上の場合、休憩時間は60分以上必要です', 'danger');
             this.breakTimeInput?.focus();
             return;
         }
