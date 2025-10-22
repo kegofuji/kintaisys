@@ -1923,7 +1923,11 @@ class HistoryScreen {
 
             if (!detail.hasAttendance && !detail.isPaidLeaveApproved) {
                 row.innerHTML = `
+<<<<<<< HEAD
                     <td>${detail.dateDisplay}</td>
+=======
+                    <td></td>
+>>>>>>> 1835ddd0ff592fdbd30a5e2f09b52a32c3080185
                     <td></td>
                     <td></td>
                     <td></td>
@@ -1951,10 +1955,16 @@ class HistoryScreen {
         } else {
             // 勤怠データがない場合
             const row = document.createElement('tr');
+<<<<<<< HEAD
             const dateDisplay = this.formatDisplayDate(dateString);
 
             row.innerHTML = `
                 <td>${dateDisplay}</td>
+=======
+
+            row.innerHTML = `
+                <td></td>
+>>>>>>> 1835ddd0ff592fdbd30a5e2f09b52a32c3080185
                 <td></td>
                 <td></td>
                 <td></td>

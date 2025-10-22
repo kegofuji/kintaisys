@@ -1073,20 +1073,21 @@ class WorkPatternScreen {
                 return null;
             }
 
+            // 適用前の情報は表示しない（upcoming が true の場合はスキップ）
+            if (effectiveSummary.upcoming) {
+                if (!silent) {
+                    this.renderDefaultSummary();
+                    this.setSummaryMessage('', false);
+                }
+                return null;
+            }
+
             const signature = this.generateSummarySignature(effectiveSummary);
             if (force || this.lastSummarySignature !== signature) {
-                const upcoming = this.renderCurrentSummary(effectiveSummary, { isFetched: true });
-                if (upcoming) {
-                    this.setSummaryMessage('承認済みの勤務パターンは適用開始前です。', false);
-                } else {
-                    this.setSummaryMessage('', false);
-                }
+                this.renderCurrentSummary(effectiveSummary, { isFetched: true });
+                this.setSummaryMessage('', false);
             } else if (!silent) {
-                if (effectiveSummary.upcoming) {
-                    this.setSummaryMessage('承認済みの勤務パターンは適用開始前です。', false);
-                } else {
-                    this.setSummaryMessage('', false);
-                }
+                this.setSummaryMessage('', false);
             }
             this.lastSummaryData = effectiveSummary;
             return effectiveSummary;
@@ -1094,20 +1095,21 @@ class WorkPatternScreen {
             console.error('勤務パターン概要取得エラー:', error);
             const fallback = this.buildSummaryFromEntries(this.latestRequestCache);
             if (fallback) {
+                // 適用前の情報は表示しない（upcoming が true の場合はスキップ）
+                if (fallback.upcoming) {
+                    if (!silent) {
+                        this.renderDefaultSummary();
+                        this.setSummaryMessage('', false);
+                    }
+                    return null;
+                }
+
                 const signature = this.generateSummarySignature(fallback);
                 if (force || this.lastSummarySignature !== signature) {
-                    const upcoming = this.renderCurrentSummary(fallback, { isFetched: true });
-                    if (upcoming) {
-                        this.setSummaryMessage('承認済みの勤務パターンは適用開始前です。', false);
-                    } else {
-                        this.setSummaryMessage('', false);
-                    }
+                    this.renderCurrentSummary(fallback, { isFetched: true });
+                    this.setSummaryMessage('', false);
                 } else if (!silent) {
-                    if (fallback.upcoming) {
-                        this.setSummaryMessage('承認済みの勤務パターンは適用開始前です。', false);
-                    } else {
-                        this.setSummaryMessage('', false);
-                    }
+                    this.setSummaryMessage('', false);
                 }
                 this.lastSummaryData = fallback;
                 return fallback;
@@ -1157,7 +1159,7 @@ class WorkPatternScreen {
         const periodText = summary.hasApprovedRequest
             ? this.formatDateRange(summary.patternStartDate, summary.patternEndDate)
             : '指定なし（標準勤務）';
-        const headline = summary.upcoming ? '承認済みの次回勤務パターン' : '現在の勤務時間';
+        const headline = '現在の勤務時間';
 
         this.currentSummaryContainer.innerHTML = `
             <div class="fw-semibold text-body">${this.escapeHtml(headline)}</div>
