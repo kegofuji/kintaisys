@@ -605,6 +605,7 @@ class AdminScreen {
         this.approvalConfirmReasonInput = document.getElementById('adminApprovalReason');
         this.approvalConfirmButton = document.getElementById('adminApprovalConfirmButton');
         this.approvalCancelButton = document.getElementById('adminApprovalCancelButton');
+        this.adminApprovalsRefreshBtn = document.getElementById('adminApprovalsRefreshBtn');
     }
 
     /**
@@ -729,6 +730,12 @@ class AdminScreen {
         // 既存のイベントリスナーを削除（重複防止）
         if (this.approvalEventListener) {
             document.removeEventListener('click', this.approvalEventListener);
+        }
+
+        // 更新ボタン
+        if (this.adminApprovalsRefreshBtn && !this.adminApprovalsRefreshBtn.dataset.bound) {
+            this.adminApprovalsRefreshBtn.addEventListener('click', () => this.loadPendingApprovals());
+            this.adminApprovalsRefreshBtn.dataset.bound = 'true';
         }
 
         // 承認・却下ボタン（イベント委譲）

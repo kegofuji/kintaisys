@@ -624,7 +624,7 @@
                     <div class="card-body">
                         <div class="mb-4">
                             <div class="d-flex justify-content-between align-items-center mb-3">
-                                <h6 class="mb-0"><i class="fas fa-calendar-check me-2"></i>残休暇日数</h6>
+                                <h6 class="mb-0">残休暇日数</h6>
                                 <button type="button" class="btn btn-outline-primary btn-sm" id="refreshLeaveBalance">
                                     <i class="fas fa-sync-alt me-1"></i>更新
                                 </button>
@@ -957,8 +957,11 @@
             <!-- 打刻修正画面（管理者） -->
             <div id="adminApprovalsScreen" class="screen-container">
                 <div class="card">
-                    <div class="card-header">
+                    <div class="card-header d-flex justify-content-between align-items-center">
                         <h5 class="mb-0">打刻修正</h5>
+                        <button class="btn btn-outline-primary btn-sm" id="adminApprovalsRefreshBtn">
+                            <i class="fas fa-sync-alt me-1"></i>更新
+                        </button>
                     </div>
                     <div class="card-body">
                         <div class="table-responsive">
@@ -1026,7 +1029,9 @@
                         <div class="card h-100">
                             <div class="card-header d-flex justify-content-between align-items-center">
                                 <h5 class="mb-0">休暇申請</h5>
-                                <button class="btn btn-sm btn-outline-secondary" id="refreshLeaveRequestsButton">更新</button>
+                                <button class="btn btn-outline-primary btn-sm" id="refreshLeaveRequestsButton">
+                                    <i class="fas fa-sync-alt me-1"></i>更新
+                                </button>
                             </div>
                             <div class="card-body">
                                 <div class="table-responsive">
@@ -1107,7 +1112,9 @@
                         <div class="card">
                             <div class="card-header d-flex justify-content-between align-items-center">
                                 <h5 class="mb-0">休暇残数</h5>
-                                <button class="btn btn-sm btn-outline-secondary" id="refreshLeaveBalancesButton">更新</button>
+                                <button class="btn btn-outline-primary btn-sm" id="refreshLeaveBalancesButton">
+                                    <i class="fas fa-sync-alt me-1"></i>更新
+                                </button>
                             </div>
                             <div class="card-body">
                                 <div class="table-responsive">
