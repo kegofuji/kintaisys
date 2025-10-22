@@ -2069,16 +2069,34 @@ class AdminScreen {
             const daysDisplay = this.formatWorkPatternDays(entry);
             const reasonText = entry.reason ? entry.reason : '（理由なし）';
 
-            const plainMessage = [
+            // 7日以内（終了日含む）の場合は勤務日行を省略
+            const isWithinAWeek = (() => {
+                try {
+                    const s = new Date(entry.startDate);
+                    const e = new Date(entry.endDate);
+                    if (Number.isNaN(s.getTime()) || Number.isNaN(e.getTime()) || e < s) {
+                        return false;
+                    }
+                    const diffDays = Math.floor((e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+                    return diffDays <= 7;
+                } catch (_) {
+                    return false;
+                }
+            })();
+
+            const messageLines = [
                 `勤務時間変更申請を${isApprove ? '承認' : '却下'}しますか？`,
                 `社員: ${applicant}`,
                 `期間: ${period}`,
                 `勤務時間: ${timeRange}`,
                 `休憩: ${breakDisplay}`,
-                `実働: ${workingDisplay}`,
-                `勤務日: ${daysDisplay}`,
-                `理由: ${reasonText}`
-            ].join('\n');
+                `実働: ${workingDisplay}`
+            ];
+            if (!isWithinAWeek) {
+                messageLines.push(`勤務日: ${daysDisplay}`);
+            }
+            messageLines.push(`理由: ${reasonText}`);
+            const plainMessage = messageLines.join('\n');
 
             const options = {
                 title: `勤務時間変更申請の${isApprove ? '承認' : '却下'}`,
@@ -2178,8 +2196,36 @@ class AdminScreen {
         if (this.workPatternModalWorkingEl) {
             this.workPatternModalWorkingEl.innerHTML = this.escapeHtml(workingDisplay);
         }
+        // 7日以内（終了日含む）は勤務日行を非表示
+        const isWithinAWeek = (() => {
+            try {
+                const s = new Date(entry.startDate);
+                const e = new Date(entry.endDate);
+                if (Number.isNaN(s.getTime()) || Number.isNaN(e.getTime()) || e < s) {
+                    return false;
+                }
+                const diffDays = Math.floor((e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+                return diffDays <= 7;
+            } catch (_) {
+                return false;
+            }
+        })();
+
         if (this.workPatternModalDaysEl) {
-            this.workPatternModalDaysEl.innerHTML = this.escapeHtml(daysDisplay);
+            // 対応するdt要素（直前の兄弟）も同時に切り替え
+            const labelDt = this.workPatternModalDaysEl.previousElementSibling;
+            if (isWithinAWeek) {
+                this.workPatternModalDaysEl.style.display = 'none';
+                if (labelDt && labelDt.tagName === 'DT') {
+                    labelDt.style.display = 'none';
+                }
+            } else {
+                this.workPatternModalDaysEl.style.display = '';
+                if (labelDt && labelDt.tagName === 'DT') {
+                    labelDt.style.display = '';
+                }
+                this.workPatternModalDaysEl.innerHTML = this.escapeHtml(daysDisplay);
+            }
         }
         if (this.workPatternModalReasonTextEl) {
             this.workPatternModalReasonTextEl.innerHTML = reasonText;

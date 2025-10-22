@@ -618,16 +618,33 @@ class WorkPatternScreen {
         const reasonDisplay = reason ? reason : '（記載なし）';
         const daysDisplay = selectedDaysDisplay && selectedDaysDisplay !== '-' ? selectedDaysDisplay : '（選択なし）';
 
-        const plainMessage = [
+        // 申請期間が7日以内かを判定（終了日を含む）
+        const diffDays = (() => {
+            try {
+                const s = new Date(startDate);
+                const e = new Date(endDate);
+                if (Number.isNaN(s.getTime()) || Number.isNaN(e.getTime()) || e < s) {
+                    return 0;
+                }
+                return Math.floor((e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+            } catch (_) {
+                return 0;
+            }
+        })();
+        const hideDaysRow = diffDays <= 7;
+
+        const plainLines = [
             '勤務時間変更申請の内容を確認してください。',
             `適用期間 ${dateRange}`,
             `勤務時間 ${timeRange}`,
             `休憩 ${breakDisplay}`,
-            `実働 ${workingDisplay}`,
-            `勤務日 ${daysDisplay}`,
-            `理由 ${reasonDisplay}`,
-            '申請してよろしいですか？'
-        ].join('\n');
+            `実働 ${workingDisplay}`
+        ];
+        if (!hideDaysRow) {
+            plainLines.push(`勤務日 ${daysDisplay}`);
+        }
+        plainLines.push(`理由 ${reasonDisplay}`, '申請してよろしいですか？');
+        const plainMessage = plainLines.join('\n');
 
         const htmlMessage = `
             <div class="text-start small">
@@ -641,8 +658,10 @@ class WorkPatternScreen {
                     <dd class="col-8 text-end mb-0 fw-semibold">${this.escapeHtml(breakDisplay)}</dd>
                     <dt class="col-4 text-muted text-nowrap mb-0">実働</dt>
                     <dd class="col-8 text-end mb-0 fw-semibold">${this.escapeHtml(workingDisplay)}</dd>
+                    ${hideDaysRow ? '' : `
                     <dt class="col-4 text-muted text-nowrap mb-0">勤務日</dt>
                     <dd class="col-8 text-end mb-0 fw-semibold">${this.escapeHtml(daysDisplay)}</dd>
+                    `}
                     <dt class="col-4 text-muted text-nowrap mb-0">理由</dt>
                     <dd class="col-8 text-end mb-0">${this.escapeHtml(reasonDisplay)}</dd>
                 </dl>
