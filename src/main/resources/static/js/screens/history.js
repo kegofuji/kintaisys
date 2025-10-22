@@ -2080,7 +2080,8 @@ class HistoryScreen {
             }
             const statusElement = document.getElementById('adjustmentDetailStatus');
             statusElement.textContent = statusText;
-            statusElement.className = ''; // 色クラスを削除して黒文字にする
+            // 余計な色クラスのみ除去し、レイアウト用クラスは保持
+            statusElement.classList.remove('text-success', 'text-danger', 'text-warning', 'text-muted');
 
             // 修正内容を設定
             const clockInDate = formatDate(adjustmentRequest.newClockIn) || '';
@@ -2110,13 +2111,10 @@ class HistoryScreen {
             const rejectionField = document.getElementById('adjustmentDetailRejection');
             if (rejectionRow && rejectionField) {
                 const comment = adjustmentRequest.rejectionComment || '';
-                if (comment.trim()) {
-                    rejectionRow.style.display = '';
-                    rejectionField.textContent = comment.trim();
-                } else {
-                    rejectionRow.style.display = 'none';
-                    rejectionField.textContent = '-';
-                }
+                const visible = comment.trim().length > 0;
+                rejectionRow.style.display = visible ? '' : 'none';
+                rejectionField.style.display = visible ? '' : 'none';
+                rejectionField.textContent = visible ? comment.trim() : '-';
             }
 
 
@@ -2400,13 +2398,10 @@ class HistoryScreen {
         const vacationRejectionField = document.getElementById('vacationDetailRejection');
         if (vacationRejectionRow && vacationRejectionField) {
             const comment = request.rejectionComment || request.rejectionReason || '';
-            if (comment.trim()) {
-                vacationRejectionRow.style.display = '';
-                vacationRejectionField.textContent = comment.trim();
-            } else {
-                vacationRejectionRow.style.display = 'none';
-                vacationRejectionField.textContent = '-';
-            }
+            const visible = comment.trim().length > 0;
+            vacationRejectionRow.style.display = visible ? '' : 'none';
+            vacationRejectionField.style.display = visible ? '' : 'none';
+            vacationRejectionField.textContent = visible ? comment.trim() : '-';
         }
 
         this.currentVacationDetail = {

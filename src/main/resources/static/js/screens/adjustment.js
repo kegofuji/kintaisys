@@ -347,12 +347,19 @@ class AdjustmentScreen {
 
         const readableBreak = TimeUtils.formatMinutesToTime(breakMinutes);
         const readableWork = TimeUtils.formatMinutesToTime(workingMinutes);
+        const reasonDisplay = (reason || '').trim() || '記載なし';
+        const escapeHtml = (value) => String(value ?? '').replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
         const modalMessageText = [
             '打刻修正申請の内容を確認してください。',
             `出勤 ${formatDateForDialog(clockInDate)} ${clockInTime}`,
             `退勤 ${formatDateForDialog(clockOutDate)} ${clockOutTime}`,
             `休憩 ${readableBreak}`,
             `勤務 ${readableWork}`,
+            `理由 ${reasonDisplay}`,
             '申請してよろしいですか？'
         ].join('\n');
         const modalMessageHtml = `
@@ -367,6 +374,8 @@ class AdjustmentScreen {
                     <dd class="col-8 text-end mb-0 fw-semibold">${readableBreak}</dd>
                     <dt class="col-4 text-muted text-nowrap mb-0">勤務</dt>
                     <dd class="col-8 text-end mb-0 fw-semibold">${readableWork}</dd>
+                    <dt class="col-4 text-muted text-nowrap mb-0">理由</dt>
+                    <dd class="col-8 text-end mb-0">${escapeHtml(reasonDisplay)}</dd>
                 </dl>
                 <p class="mb-0">申請してよろしいですか？</p>
             </div>

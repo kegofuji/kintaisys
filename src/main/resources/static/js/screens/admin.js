@@ -39,6 +39,7 @@ class AdminScreen {
         this.approvalCancelButton = null;
         this.workPatternRequestMap = new Map();
         this.vacationRequestMap = new Map();
+        this.adjustmentRequestMap = new Map();
         this.workPatternApprovalModalElement = null;
         this.workPatternApprovalModal = null;
         this.workPatternModalTitle = null;
@@ -1038,6 +1039,14 @@ class AdminScreen {
                 });
             });
 
+            // 詳細モーダル用のマップを更新
+            this.adjustmentRequestMap = new Map();
+            list.forEach((item) => {
+                if (item && item.requestId != null) {
+                    this.adjustmentRequestMap.set(String(item.requestId), item);
+                }
+            });
+
             this.renderAdjustmentApprovals(list);
         } catch (error) {
             console.error('打刻修正申請読み込みエラー:', error);
@@ -1793,6 +1802,17 @@ class AdminScreen {
             return;
         }
 
+        // 打刻修正申請は詳細表示モーダルを使用
+        if (requestType === 'adjustment') {
+            const entry = this.adjustmentRequestMap?.get(String(requestId));
+            if (!entry) {
+                this.showAlert('打刻修正申請の詳細が取得できませんでした', 'danger');
+                return;
+            }
+            this.showAdjustmentApprovalModal(entry, isApprove, buttons);
+            return;
+        }
+
         // 休暇申請の場合は詳細表示モーダルを使用
         if (requestType === 'vacation' || requestType === 'leave') {
             const entry = this.vacationRequestMap?.get(String(requestId));
@@ -1886,6 +1906,87 @@ class AdminScreen {
                 '打刻修正申請の却下に失敗しました'
             );
         }
+    }
+
+    /**
+     * 打刻修正申請 承認モーダル表示（詳細付き）
+     */
+    showAdjustmentApprovalModal(entry, isApprove, buttons) {
+        if (!entry) return;
+
+        const breakMinutes = typeof entry.newBreakMinutes === 'number' ? Math.max(entry.newBreakMinutes, 0) : null;
+        const formatMinutes = (typeof TimeUtils !== 'undefined' && typeof TimeUtils.formatMinutesToTime === 'function')
+            ? TimeUtils.formatMinutesToTime.bind(TimeUtils)
+            : ((value) => {
+                if (typeof value !== 'number' || Number.isNaN(value)) return '-';
+                const h = Math.floor(value / 60);
+                const m = Math.abs(value % 60);
+                return `${h}:${String(m).padStart(2, '0')}`;
+            });
+        const calcWorking = (typeof TimeUtils !== 'undefined' && typeof TimeUtils.calculateWorkingTime === 'function')
+            ? TimeUtils.calculateWorkingTime.bind(TimeUtils)
+            : null;
+
+        const breakDisplay = breakMinutes == null ? '-' : formatMinutes(breakMinutes);
+        const workingDisplay = (calcWorking && entry.newClockIn && entry.newClockOut)
+            ? calcWorking(entry.newClockIn, entry.newClockOut, breakMinutes || 0)
+            : '-';
+
+        const actionText = isApprove ? '承認' : '却下';
+        const message = `
+            <div class="text-start small">
+                <p class="mb-2">打刻修正申請の内容を確認してください。</p>
+                <dl class="row g-1 mb-3 align-items-center">
+                    <dt class="col-4 text-muted text-nowrap mb-0">申請者</dt>
+                    <dd class="col-8 text-end mb-0 fw-semibold">${this.escapeHtml(entry.employeeName)}</dd>
+                    <dt class="col-4 text-muted text-nowrap mb-0">対象日</dt>
+                    <dd class="col-8 text-end mb-0 fw-semibold">${this.formatDate(entry.targetDate)}</dd>
+                    <dt class="col-4 text-muted text-nowrap mb-0">出勤</dt>
+                    <dd class="col-8 text-end mb-0 fw-semibold">${this.formatTime(entry.newClockIn)}</dd>
+                    <dt class="col-4 text-muted text-nowrap mb-0">退勤</dt>
+                    <dd class="col-8 text-end mb-0 fw-semibold">${this.formatTime(entry.newClockOut)}</dd>
+                    <dt class="col-4 text-muted text-nowrap mb-0">休憩</dt>
+                    <dd class="col-8 text-end mb-0 fw-semibold">${breakDisplay}</dd>
+                    <dt class="col-4 text-muted text-nowrap mb-0">実働</dt>
+                    <dd class="col-8 text-end mb-0 fw-semibold">${workingDisplay}</dd>
+                    <dt class="col-4 text-muted text-nowrap mb-0">理由</dt>
+                    <dd class="col-8 text-end mb-0">${this.escapeHtml(entry.reason || '（理由なし）')}</dd>
+                </dl>
+                <p class="mb-0">${actionText}してよろしいですか？</p>
+            </div>
+        `;
+
+        const confirmOptions = {
+            title: `打刻修正申請の${actionText}`,
+            message: message,
+            confirmLabel: isApprove ? '承認する' : '却下する',
+            requireReason: !isApprove
+        };
+
+        // ボタンを無効化
+        if (Array.isArray(buttons)) {
+            this.setButtonsDisabled(buttons, true);
+        }
+
+        this.promptApprovalDialog(confirmOptions).then(async (dialogResult) => {
+            try {
+                if (!dialogResult.confirmed) return;
+                const reason = dialogResult.reason || '';
+                await this.executeAdjustmentAction(isApprove, entry.requestId, reason);
+                const alertType = isApprove ? 'success' : 'warning';
+                this.showAlert(`打刻修正申請を${actionText}しました`, alertType);
+                await this.loadPendingApprovals();
+                await this.refreshEmployeeScreens();
+            } catch (error) {
+                console.error('打刻修正申請処理エラー:', error);
+                this.showAlert(error.message || `打刻修正申請の処理に失敗しました`, 'danger');
+            } finally {
+                if (Array.isArray(buttons)) this.setButtonsDisabled(buttons, false);
+            }
+        }).catch((error) => {
+            console.error('打刻修正申請モーダルエラー:', error);
+            if (Array.isArray(buttons)) this.setButtonsDisabled(buttons, false);
+        });
     }
 
     /**

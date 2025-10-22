@@ -506,48 +506,25 @@
                             <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                         </div>
                         <div class="modal-body">
-                            <div class="row">
-                                <div class="col-12">
-                                    <h6>修正内容</h6>
-                                    <table class="table table-sm">
-                                        <tr>
-                                            <td><strong>対象日:</strong></td>
-                                            <td id="adjustmentDetailDate">-</td>
-                                        </tr>
-                                        <tr>
-                                            <td><strong>出勤:</strong></td>
-                                            <td id="adjustmentDetailClockIn">-</td>
-                                        </tr>
-                                        <tr>
-                                            <td><strong>退勤:</strong></td>
-                                            <td id="adjustmentDetailClockOut">-</td>
-                                        </tr>
-                                        <tr>
-                                            <td><strong>休憩:</strong></td>
-                                            <td id="adjustmentDetailBreak">-</td>
-                                        </tr>
-                                        <tr>
-                                            <td><strong>実働:</strong></td>
-                                            <td id="adjustmentDetailWorkingTime">-</td>
-                                        </tr>
-                                        <tr>
-                                            <td><strong>申請状態:</strong></td>
-                                            <td id="adjustmentDetailStatus">-</td>
-                                        </tr>
-                                        <tr id="adjustmentRejectionRow" style="display: none;">
-                                            <td><strong>却下理由:</strong></td>
-                                            <td id="adjustmentDetailRejection">-</td>
-                                        </tr>
-                                    </table>
-                                </div>
-                            </div>
-                            <div class="row mt-3">
-                                <div class="col-12">
-                                    <h6>修正理由</h6>
-                                    <div id="adjustmentDetailReason" class="border p-2 rounded bg-light">
-                                        -
-                                    </div>
-                                </div>
+                            <div class="text-start small">
+                                <dl class="row g-1 mb-0 align-items-center">
+                                    <dt class="col-4 text-muted text-nowrap mb-0">対象日</dt>
+                                    <dd class="col-8 text-end mb-1 fw-semibold" id="adjustmentDetailDate">-</dd>
+                                    <dt class="col-4 text-muted text-nowrap mb-0">出勤</dt>
+                                    <dd class="col-8 text-end mb-1 fw-semibold" id="adjustmentDetailClockIn">-</dd>
+                                    <dt class="col-4 text-muted text-nowrap mb-0">退勤</dt>
+                                    <dd class="col-8 text-end mb-1 fw-semibold" id="adjustmentDetailClockOut">-</dd>
+                                    <dt class="col-4 text-muted text-nowrap mb-0">休憩</dt>
+                                    <dd class="col-8 text-end mb-1 fw-semibold" id="adjustmentDetailBreak">-</dd>
+                                    <dt class="col-4 text-muted text-nowrap mb-0">実働</dt>
+                                    <dd class="col-8 text-end mb-1 fw-semibold" id="adjustmentDetailWorkingTime">-</dd>
+                                    <dt class="col-4 text-muted text-nowrap mb-0">申請状態</dt>
+                                    <dd class="col-8 text-end mb-1 fw-semibold" id="adjustmentDetailStatus">-</dd>
+                                    <dt class="col-4 text-muted text-nowrap mb-0">修正理由</dt>
+                                    <dd class="col-8 text-end mb-1" id="adjustmentDetailReason">-</dd>
+                                    <dt class="col-4 text-muted text-nowrap mb-0" id="adjustmentRejectionRow" style="display: none;">却下理由</dt>
+                                    <dd class="col-8 text-end mb-0" id="adjustmentDetailRejection">-</dd>
+                                </dl>
                             </div>
                         </div>
                         <div class="modal-footer">
@@ -567,42 +544,23 @@
                             <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                         </div>
                         <div class="modal-body">
-                            <div class="row">
-                                <div class="col-12">
-                                    <h6>申請情報</h6>
-                                    <table class="table table-sm">
-                                        <tr>
-                                            <td><strong>対象日:</strong></td>
-                                            <td id="vacationDetailTargetDate">-</td>
-                                        </tr>
-                                        <tr>
-                                            <td><strong>休暇種別:</strong></td>
-                                            <td id="vacationDetailType">-</td>
-                                        </tr>
-                                        <tr>
-                                            <td><strong>取得単位:</strong></td>
-                                            <td id="vacationDetailTimeUnit">-</td>
-                                        </tr>
-                                        <tr>
-                                            <td><strong>申請日数:</strong></td>
-                                            <td id="vacationDetailDays">-</td>
-                                        </tr>
-                                        <tr>
-                                            <td><strong>申請状態:</strong></td>
-                                            <td id="vacationDetailStatus">-</td>
-                                        </tr>
-                                        <tr id="vacationRejectionRow" style="display: none;">
-                                            <td><strong>却下理由:</strong></td>
-                                            <td id="vacationDetailRejection">-</td>
-                                        </tr>
-                                    </table>
-                                </div>
-                            </div>
-                            <div class="row mt-3">
-                                <div class="col-12">
-                                    <h6>申請理由</h6>
-                                    <div id="vacationDetailReason" class="border p-2 rounded bg-light">-</div>
-                                </div>
+                            <div class="text-start small">
+                                <dl class="row g-1 mb-0 align-items-center">
+                                    <dt class="col-4 text-muted text-nowrap mb-0">対象日</dt>
+                                    <dd class="col-8 text-end mb-1 fw-semibold" id="vacationDetailTargetDate">-</dd>
+                                    <dt class="col-4 text-muted text-nowrap mb-0">休暇種別</dt>
+                                    <dd class="col-8 text-end mb-1 fw-semibold" id="vacationDetailType">-</dd>
+                                    <dt class="col-4 text-muted text-nowrap mb-0">取得単位</dt>
+                                    <dd class="col-8 text-end mb-1 fw-semibold" id="vacationDetailTimeUnit">-</dd>
+                                    <dt class="col-4 text-muted text-nowrap mb-0">申請日数</dt>
+                                    <dd class="col-8 text-end mb-1 fw-semibold" id="vacationDetailDays">-</dd>
+                                    <dt class="col-4 text-muted text-nowrap mb-0">申請状態</dt>
+                                    <dd class="col-8 text-end mb-1 fw-semibold" id="vacationDetailStatus">-</dd>
+                                    <dt class="col-4 text-muted text-nowrap mb-0">申請理由</dt>
+                                    <dd class="col-8 text-end mb-1" id="vacationDetailReason">-</dd>
+                                    <dt class="col-4 text-muted text-nowrap mb-0" id="vacationRejectionRow" style="display: none;">却下理由</dt>
+                                    <dd class="col-8 text-end mb-0" id="vacationDetailRejection">-</dd>
+                                </dl>
                             </div>
                         </div>
                         <div class="modal-footer">
