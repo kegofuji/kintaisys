@@ -644,7 +644,11 @@ class VacationScreen {
             await this.loadAllSupportingData();
             await this.refreshAllScreens();
         } catch (error) {
-            this.showAlert(error.message || '休暇申請に失敗しました', 'danger');
+            // サーバ側の休日バリデーションに合わせたメッセージ変換
+            const msg = (error && typeof error.message === 'string' && error.message.includes('勤務日がありません'))
+                ? '休日に休暇申請はできません'
+                : (error.message || '休暇申請に失敗しました');
+            this.showAlert(msg, 'danger');
         }
     }
 

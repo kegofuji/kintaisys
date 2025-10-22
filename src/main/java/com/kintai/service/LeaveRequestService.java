@@ -5,6 +5,8 @@ import com.kintai.entity.*;
 import com.kintai.exception.VacationException;
 import com.kintai.repository.*;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -14,6 +16,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.*;
+import com.kintai.util.BusinessDayCalculator;
 
 /**
  * 休暇申請サービス
@@ -23,6 +26,7 @@ import java.util.*;
 public class LeaveRequestService {
 
     private static final BigDecimal HALF_DAY = new BigDecimal("0.5");
+    private static final Logger log = LoggerFactory.getLogger(LeaveRequestService.class);
 
     @Autowired
     private LeaveRequestRepository leaveRequestRepository;
@@ -45,6 +49,12 @@ public class LeaveRequestService {
     @Autowired
     private AdjustmentRequestService adjustmentRequestService;
 
+    @Autowired
+    private WorkPatternChangeRequestService workPatternChangeRequestService;
+
+    @Autowired
+    private BusinessDayCalculator businessDayCalculator;
+
     /**
      * 休暇申請を作成
      */
@@ -64,7 +74,11 @@ public class LeaveRequestService {
 
             validateInputs(leaveType, timeUnit, startDate, endDate, reason);
 
-            BigDecimal requestedDays = calculateRequestedDays(startDate, endDate, timeUnit);
+            BigDecimal requestedDays = calculateRequestedDays(employeeId, startDate, endDate, timeUnit);
+            log.debug("[Leave] employeeId={}, range={}~{}, unit={}, requestedDays={}", employeeId, startDate, endDate, timeUnit, requestedDays);
+            if (requestedDays == null || requestedDays.signum() <= 0) {
+                throw new VacationException(VacationException.INVALID_REQUEST, "休日に休暇申請はできません");
+            }
 
             validateNoOverlaps(employeeId, startDate, endDate, leaveType, timeUnit);
 
@@ -399,15 +413,57 @@ public class LeaveRequestService {
         leaveBalanceRepository.save(balance);
     }
 
-    private BigDecimal calculateRequestedDays(LocalDate startDate, LocalDate endDate, LeaveTimeUnit timeUnit) {
+    private BigDecimal calculateRequestedDays(Long employeeId, LocalDate startDate, LocalDate endDate, LeaveTimeUnit timeUnit) {
         if (timeUnit == LeaveTimeUnit.HALF_AM || timeUnit == LeaveTimeUnit.HALF_PM) {
+            // 半休は単日で勤務日のみ許可
+            if (!isWorkingDay(employeeId, startDate)) {
+                throw new VacationException(VacationException.INVALID_REQUEST, "休日に休暇申請はできません");
+            }
             return HALF_DAY;
         }
-        long days = java.time.temporal.ChronoUnit.DAYS.between(startDate, endDate) + 1;
-        if (days <= 0) {
+
+        long span = java.time.temporal.ChronoUnit.DAYS.between(startDate, endDate) + 1;
+        if (span <= 0) {
             throw new VacationException(VacationException.INVALID_DATE_RANGE, "申請期間の日付が不正です");
         }
-        return BigDecimal.valueOf(days);
+
+        int workingDays = 0;
+        for (LocalDate d = startDate; !d.isAfter(endDate); d = d.plusDays(1)) {
+            boolean working = isWorkingDay(employeeId, d);
+            log.debug("[Leave]   date={}, working={}", d, working);
+            if (working) {
+                workingDays++;
+            }
+        }
+
+        if (workingDays == 0) {
+            throw new VacationException(VacationException.INVALID_REQUEST, "休日に休暇申請はできません");
+        }
+        return BigDecimal.valueOf(workingDays);
+    }
+
+    private boolean isWorkingDay(Long employeeId, LocalDate date) {
+        boolean holiday = businessDayCalculator != null && businessDayCalculator.isJapaneseHoliday(date);
+        Optional<WorkPatternChangeRequest> patternOpt = workPatternChangeRequestService != null
+                ? workPatternChangeRequestService.findApplicablePattern(employeeId, date)
+                : Optional.empty();
+
+        if (patternOpt.isPresent()) {
+            boolean applies = patternOpt.get().appliesTo(date, holiday);
+            log.debug("[Leave] isWorkingDay: patternFound=true holiday={} applies={} date={}", holiday, applies, date);
+            return applies;
+        }
+        // 勤務時間変更がない場合のフォールバック
+        if (businessDayCalculator != null) {
+            boolean biz = businessDayCalculator.isBusinessDay(date);
+            log.debug("[Leave] isWorkingDay: patternFound=false businessDayCalculator=true businessDay={} date={}", biz, date);
+            return biz;
+        }
+        // ユーティリティ未注入時でも最低限の土日判定を行う
+        java.time.DayOfWeek dow = date.getDayOfWeek();
+        boolean fallback = dow != java.time.DayOfWeek.SATURDAY && dow != java.time.DayOfWeek.SUNDAY;
+        log.debug("[Leave] isWorkingDay: patternFound=false businessDayCalculator=false weekendFallback={} date={}", fallback, date);
+        return fallback;
     }
 
     private void approveRequest(LeaveRequest request, Long approverId) {

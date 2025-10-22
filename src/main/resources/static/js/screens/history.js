@@ -660,8 +660,8 @@ class HistoryScreen {
                 });
             }
             
-            // 休暇申請状況の表示（申請がある場合のみ）
-            if (vacationRequest) {
+            // 休暇申請状況の表示（申請がある場合のみ）。休日は表示しない
+            if (vacationRequest && !(isWeekend || isHoliday)) {
                 const statusUpper = (vacationRequest.status || '').toUpperCase();
                 let statusClass = 'bg-secondary';
                 let statusLabel = '申請';

@@ -157,7 +157,11 @@ class CalendarScreen {
             if (item.date) {
                 const parsed = this.parseDateString(item.date);
                 if (parsed) {
-                    normalized.push({ ...item, date: this.formatDateString(parsed) });
+                    const isWeekend = parsed.getDay() === 0 || parsed.getDay() === 6;
+                    const isHoliday = this.isHoliday(parsed);
+                    if (!(isWeekend || isHoliday)) {
+                        normalized.push({ ...item, date: this.formatDateString(parsed) });
+                    }
                 }
                 return;
             }
@@ -171,6 +175,11 @@ class CalendarScreen {
 
                 for (let d = new Date(start); d.getTime() <= end.getTime(); d.setDate(d.getDate() + 1)) {
                     const current = new Date(d);
+                    const isWeekend = current.getDay() === 0 || current.getDay() === 6;
+                    const isHoliday = this.isHoliday(current);
+                    if (isWeekend || isHoliday) {
+                        continue; // 休日は休暇バッジを表示しない
+                    }
                     normalized.push({ ...item, date: this.formatDateString(current) });
                 }
             }
