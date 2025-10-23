@@ -157,9 +157,15 @@
             border: 1px solid #dee2e6;
         }
         
+        .day-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 4px;
+        }
+        
         .day-number {
             font-weight: bold;
-            margin-bottom: 4px;
         }
         
         .day-badges {
@@ -168,9 +174,9 @@
         
         .holiday-label {
             font-size: 0.75rem;
-            margin-bottom: 4px;
             color: #dc3545;
             font-weight: 600;
+            margin-left: 4px;
         }
 
         .work-pattern-btn-group {
@@ -558,7 +564,7 @@
                                 <dl class="row g-1 mb-0 align-items-center">
                                     <dt class="col-4 text-muted text-nowrap mb-0">申請種別</dt>
                                     <dd class="col-8 text-end mb-1 fw-semibold" id="holidayDetailType">-</dd>
-                                    <dt class="col-4 text-muted text-nowrap mb-0" id="holidayDetailDateLabel">対象日</dt>
+                                    <dt class="col-4 text-muted text-nowrap mb-0" id="holidayDetailDateLabel">休日出勤日</dt>
                                     <dd class="col-8 text-end mb-1 fw-semibold" id="holidayDetailDate">-</dd>
                                     <!-- 休日出勤申請の場合のみ表示 -->
                                     <dt class="col-4 text-muted text-nowrap mb-0" id="holidayDetailTakeCompLabel" style="display: none;">代休取得</dt>

@@ -732,7 +732,7 @@ class AdminScreen {
             const contentHtml = isHolidayWork
                 ? [
                     `休日出勤日: ${workDate}`,
-                    `代休: ${compDate}`
+                    `代休日: ${compDate}`
                   ].join('<br>')
                 : [
                     `振替出勤日: ${workDate}`,
@@ -810,19 +810,19 @@ class AdminScreen {
                 <dd class="col-8 text-end mb-0 fw-semibold">${this.escapeHtml(employeeName)}</dd>
                 <dt class="col-4 text-muted text-nowrap mb-0">申請種別</dt>
                 <dd class="col-8 text-end mb-0 fw-semibold">休日出勤</dd>
-                <dt class="col-4 text-muted text-nowrap mb-0">対象日</dt>
+                <dt class="col-4 text-muted text-nowrap mb-0">休日出勤日</dt>
                 <dd class="col-8 text-end mb-0 fw-semibold">${this.formatDate(entry.workDate) || '-'}</dd>
-                <dt class="col-4 text-muted text-nowrap mb-0">代休</dt>
+                <dt class="col-4 text-muted text-nowrap mb-0">代休日</dt>
                 <dd class="col-8 text-end mb-0 fw-semibold">${compText}</dd>`;
         } else if (type === 'TRANSFER') {
             detailsHtml = `
                 <dt class="col-4 text-muted text-nowrap mb-0">申請者</dt>
                 <dd class="col-8 text-end mb-0 fw-semibold">${this.escapeHtml(employeeName)}</dd>
                 <dt class="col-4 text-muted text-nowrap mb-0">申請種別</dt>
-                <dd class="col-8 text-end mb-0 fw-semibold">振替出勤</dd>
-                <dt class="col-4 text-muted text-nowrap mb-0">対象日</dt>
+                <dd class="col-8 text-end mb-0 fw-semibold">振替</dd>
+                <dt class="col-4 text-muted text-nowrap mb-0">振替出勤日</dt>
                 <dd class="col-8 text-end mb-0 fw-semibold">${this.formatDate(entry.workDate) || '-'}</dd>
-                <dt class="col-4 text-muted text-nowrap mb-0">振替</dt>
+                <dt class="col-4 text-muted text-nowrap mb-0">振替休日</dt>
                 <dd class="col-8 text-end mb-0 fw-semibold">${this.formatDate(entry.transferHolidayDate) || '-'}</dd>`;
         } else {
             // 不明な申請種別の場合のフォールバック（代休情報も含める）
@@ -832,9 +832,9 @@ class AdminScreen {
                 <dd class="col-8 text-end mb-0 fw-semibold">${this.escapeHtml(employeeName)}</dd>
                 <dt class="col-4 text-muted text-nowrap mb-0">申請種別</dt>
                 <dd class="col-8 text-end mb-0 fw-semibold">休日出勤</dd>
-                <dt class="col-4 text-muted text-nowrap mb-0">対象日</dt>
+                <dt class="col-4 text-muted text-nowrap mb-0">休日出勤日</dt>
                 <dd class="col-8 text-end mb-0 fw-semibold">${this.formatDate(entry.workDate) || '-'}</dd>
-                <dt class="col-4 text-muted text-nowrap mb-0">代休</dt>
+                <dt class="col-4 text-muted text-nowrap mb-0">代休日</dt>
                 <dd class="col-8 text-end mb-0 fw-semibold">${compText}</dd>`;
         }
         const reasonText = entry.reason || '（理由なし）';

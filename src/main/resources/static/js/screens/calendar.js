@@ -433,9 +433,11 @@ class CalendarScreen {
 
                 calendarHtml += `
                     <div class="${dayClasses.join(' ')}" data-date="${dateString}">
-                        <div class="day-number">${dayNumber}</div>
-                        ${customHolidayLabel}
-                        ${holidayLabel}
+                        <div class="day-header">
+                            <div class="day-number">${dayNumber}</div>
+                            ${customHolidayLabel}
+                            ${holidayLabel}
+                        </div>
                         <div class="day-badges">${badges}</div>
                         ${attendance ? this.renderAttendanceInfo(attendance) : ''}
                     </div>

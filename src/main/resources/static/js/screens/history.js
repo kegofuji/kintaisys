@@ -846,9 +846,11 @@ class HistoryScreen {
 
             calendarHtml += `
                 <div class="${dayClasses.join(' ')}" data-date="${dateString}" style="${styleAttr}" title="クリックして詳細を表示">
-                    <div class="day-number">${d}</div>
-                    ${customHolidayLabel}
-                    ${holidayLabel}
+                    <div class="day-header">
+                        <div class="day-number">${d}</div>
+                        ${customHolidayLabel}
+                        ${holidayLabel}
+                    </div>
                     <div class="day-badges">${badges}</div>
                     ${attendance || adjustmentRequest?.status === 'APPROVED' ? this.renderAttendanceInfo(attendance, dateString, adjustmentRequest) : ''}
                 </div>
@@ -2616,10 +2618,11 @@ class HistoryScreen {
             if (holidayRequest.requestType === 'HOLIDAY_WORK') {
                 // 休日出勤申請の場合
                 document.getElementById('holidayDetailType').textContent = '休日出勤';
-                // 対象日は表示（休日出勤日）
+                // 休日出勤日は表示
                 const dateLabelEl = document.getElementById('holidayDetailDateLabel');
                 const dateValueEl = document.getElementById('holidayDetailDate');
                 if (dateLabelEl) dateLabelEl.style.display = '';
+                if (dateLabelEl) dateLabelEl.textContent = '休日出勤日';
                 if (dateValueEl) {
                     dateValueEl.style.display = '';
                     dateValueEl.textContent = formatDate(holidayRequest.workDate);
