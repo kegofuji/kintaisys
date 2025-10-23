@@ -1312,10 +1312,33 @@ class HistoryScreen {
         const workPatternRequest = overrides.workPatternRequestOverride !== undefined
             ? overrides.workPatternRequestOverride
             : this.getWorkPatternRequestForDate(dateKey);
+        const adjustmentRequest = overrides.adjustmentRequestOverride !== undefined
+            ? overrides.adjustmentRequestOverride
+            : this.getAdjustmentRequestForDate(dateKey);
+
+        // 承認済みの打刻修正がある場合は、勤怠データにマージして詳細計算に反映する
+        let effectiveAttendance = attendance;
+        try {
+            const isApproved = adjustmentRequest && (adjustmentRequest.status || '').toUpperCase() === 'APPROVED';
+            const req = adjustmentRequest && adjustmentRequest.request ? adjustmentRequest.request : null;
+            if (isApproved && req) {
+                const normalizedBreak = typeof req.newBreakMinutes === 'number' && Number.isFinite(req.newBreakMinutes)
+                    ? Math.max(0, req.newBreakMinutes)
+                    : (attendance ? attendance.breakMinutes : null);
+                effectiveAttendance = {
+                    ...(attendance || { attendanceDate: dateKey }),
+                    clockInTime: req.newClockIn ?? (attendance ? attendance.clockInTime : null),
+                    clockOutTime: req.newClockOut ?? (attendance ? attendance.clockOutTime : null),
+                    breakMinutes: normalizedBreak
+                };
+            }
+        } catch (e) {
+            console.warn('承認済み打刻修正の適用中にエラー:', e);
+        }
 
         const detail = this.buildAttendanceDetail(
             dateKey,
-            attendance,
+            effectiveAttendance,
             vacationRequest,
             workPatternRequest
         );
@@ -1910,8 +1933,10 @@ class HistoryScreen {
 
         const dateKey = this.normalizeDateKey(dateString);
         const attendance = this.getAttendanceForDate(dateKey);
+        const adjustmentRequest = this.getAdjustmentRequestForDate(dateKey);
         const detail = this.getAttendanceDetailForDate(dateKey, {
             attendanceOverride: attendance,
+            adjustmentRequestOverride: adjustmentRequest,
             includeVacations: true,
             force: true
         });

@@ -1932,6 +1932,10 @@ class AdminScreen {
             ? calcWorking(entry.newClockIn, entry.newClockOut, breakMinutes || 0)
             : '-';
 
+        // 出退勤の前に日付を付与して表示（YYYY/MM/DD HH:mm）
+        const clockInDisplay = `${this.formatDate(entry.newClockIn || entry.targetDate)} ${this.formatTime(entry.newClockIn)}`;
+        const clockOutDisplay = `${this.formatDate(entry.newClockOut || entry.targetDate)} ${this.formatTime(entry.newClockOut)}`;
+
         const actionText = isApprove ? '承認' : '却下';
         const message = `
             <div class="text-start small">
@@ -1942,9 +1946,9 @@ class AdminScreen {
                     <dt class="col-4 text-muted text-nowrap mb-0">対象日</dt>
                     <dd class="col-8 text-end mb-0 fw-semibold">${this.formatDate(entry.targetDate)}</dd>
                     <dt class="col-4 text-muted text-nowrap mb-0">出勤</dt>
-                    <dd class="col-8 text-end mb-0 fw-semibold">${this.formatTime(entry.newClockIn)}</dd>
+                    <dd class="col-8 text-end mb-0 fw-semibold">${clockInDisplay}</dd>
                     <dt class="col-4 text-muted text-nowrap mb-0">退勤</dt>
-                    <dd class="col-8 text-end mb-0 fw-semibold">${this.formatTime(entry.newClockOut)}</dd>
+                    <dd class="col-8 text-end mb-0 fw-semibold">${clockOutDisplay}</dd>
                     <dt class="col-4 text-muted text-nowrap mb-0">休憩</dt>
                     <dd class="col-8 text-end mb-0 fw-semibold">${breakDisplay}</dd>
                     <dt class="col-4 text-muted text-nowrap mb-0">実働</dt>
