@@ -878,6 +878,24 @@ function setupNavigationListeners() {
             });
         });
     }
+
+    // 一般ユーザー: 休日関連
+    const holidayNavLink = document.getElementById('holidayNavLink');
+    if (holidayNavLink) {
+        holidayNavLink.addEventListener('click', (e) => {
+            console.log('休日関連リンクがクリックされました');
+            handleNavigationClick(e, {
+                path: '/holiday',
+                fallbackScreenId: 'holidayScreen',
+                fallbackActiveLink: holidayNavLink,
+                fallbackInit: () => {
+                    if (window.holidayScreen && typeof window.holidayScreen.init === 'function') {
+                        window.holidayScreen.init();
+                    }
+                }
+            });
+        });
+    }
     
     // 管理者メニューのイベントリスナー
     if (adminMonthlySubmissionsNavLink) {

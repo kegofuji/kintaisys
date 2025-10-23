@@ -305,8 +305,16 @@ class HolidayScreen {
 
         const isTransfer = this.typeTransferRadio?.checked === true;
 
-        // 事前バリデーション
+        // 事前バリデーション（理由必須）
+        const reasonValue = (this.reason?.value || '').trim();
+        const hasReason = reasonValue.length > 0;
+        if (!hasReason) {
+            this.setValidity(this.reason, false, '理由は必須です');
+        } else {
+            this.setValidity(this.reason, true);
+        }
         const checks = [
+            hasReason,
             isTransfer ? this.validateTransferWorkDate() : this.validateWorkDate(),
             isTransfer ? this.validateTransferHolidayDate() : this.validateCompDate()
         ];
@@ -317,26 +325,93 @@ class HolidayScreen {
 
         try {
             const payload = this.buildPayload();
-            const url = isTransfer ? '/api/holiday/transfer' : '/api/holiday/holiday-work';
+            // 既存実装を踏襲: /api/holiday/requests に統一して送信
+            const primaryUrl = '/api/holiday/requests';
+            const altUrl = isTransfer ? '/api/holiday/transfer' : '/api/holiday/holiday-work';
             const body = isTransfer
                 ? {
                     employeeId: window.currentEmployeeId,
+                    requestType: 'TRANSFER',
                     transferWorkDate: payload.transferWorkDate,
                     transferHolidayDate: payload.transferHolidayDate,
                     reason: payload.reason || ''
                 }
                 : {
                     employeeId: window.currentEmployeeId,
+                    requestType: 'HOLIDAY_WORK',
                     workDate: payload.workDate,
                     takeComp: !!payload.takeComp,
                     compDate: payload.compDate || null,
                     reason: payload.reason || ''
                 };
-            const res = await window.fetchWithAuth.post(url, body);
-            const data = await window.fetchWithAuth.parseJson(res);
+
+            // 送信前モーダル（打刻修正申請モーダルのレイアウトに合わせる）
+            const escapeHtml = (value) => String(value ?? '').replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+            const formatDateForDialog = (v) => (v ? String(v).replace(/-/g, '/') : '-');
+            const reasonDisplay = (body.reason || '').trim() || '記載なし';
+
+            const modalMessageHtml = isTransfer
+                ? `
+                    <div class="text-start small">
+                        <p class="mb-2">振替申請の内容を確認してください。</p>
+                        <dl class="row g-1 mb-3 align-items-center">
+                            <dt class="col-4 text-muted text-nowrap mb-0">振替出勤日</dt>
+                            <dd class="col-8 text-end mb-0 fw-semibold">${formatDateForDialog(body.transferWorkDate)}</dd>
+                            <dt class="col-4 text-muted text-nowrap mb-0">振替休日</dt>
+                            <dd class="col-8 text-end mb-0 fw-semibold">${formatDateForDialog(body.transferHolidayDate)}</dd>
+                            <dt class="col-4 text-muted text-nowrap mb-0">理由</dt>
+                            <dd class="col-8 text-end mb-0">${escapeHtml(reasonDisplay)}</dd>
+                        </dl>
+                        <p class="mb-0">申請してよろしいですか？</p>
+                    </div>
+                `.trim()
+                : `
+                    <div class="text-start small">
+                        <p class="mb-2">休日出勤申請の内容を確認してください。</p>
+                        <dl class="row g-1 mb-3 align-items-center">
+                            <dt class="col-4 text-muted text-nowrap mb-0">休日出勤日</dt>
+                            <dd class="col-8 text-end mb-0 fw-semibold">${formatDateForDialog(body.workDate)}</dd>
+                            <dt class="col-4 text-muted text-nowrap mb-0">代休</dt>
+                            <dd class="col-8 text-end mb-0 fw-semibold">${body.takeComp ? (formatDateForDialog(body.compDate) || '取得') : '取得しない'}</dd>
+                            <dt class="col-4 text-muted text-nowrap mb-0">理由</dt>
+                            <dd class="col-8 text-end mb-0">${escapeHtml(reasonDisplay)}</dd>
+                        </dl>
+                        <p class="mb-0">申請してよろしいですか？</p>
+                    </div>
+                `.trim();
+
+            const confirmResult = await (window.employeeDialog?.confirm?.({
+                title: isTransfer ? '振替申請の送信' : '休日出勤申請の送信',
+                message: modalMessageHtml,
+                confirmLabel: '申請する',
+                cancelLabel: 'キャンセル',
+                requireReason: false
+            }) || Promise.resolve({ confirmed: true }));
+            if (!confirmResult.confirmed) {
+                return;
+            }
+
+            // 二重送信防止
+            const submitBtn = this.submitBtn;
+            if (submitBtn) submitBtn.disabled = true;
+
+            // 1st: /requests にPOST、失敗したら従来URLにフォールバック
+            let res = await window.fetchWithAuth.post(primaryUrl, body);
+            let data = await window.fetchWithAuth.parseJson(res);
+            if (!(res.ok && data && data.success)) {
+                res = await window.fetchWithAuth.post(altUrl, body);
+                data = await window.fetchWithAuth.parseJson(res);
+            }
+
             if (res.ok && data && data.success) {
                 this.showAlert(data.message || '申請しました', 'success');
                 this.resetForm();
+                // 休暇/打刻修正と同様、他画面のカレンダーを即時反映
+                await this.refreshAllScreens();
             } else {
                 const msg = data?.message || '申請に失敗しました';
                 this.showAlert(msg, 'danger');
@@ -344,6 +419,9 @@ class HolidayScreen {
         } catch (err) {
             console.error(err);
             this.showAlert('申請に失敗しました', 'danger');
+        } finally {
+            const submitBtn = this.submitBtn;
+            if (submitBtn) submitBtn.disabled = false;
         }
     }
 
@@ -351,14 +429,12 @@ class HolidayScreen {
         const isTransfer = this.typeTransferRadio?.checked === true;
         if (isTransfer) {
             return {
-                type: 'TRANSFER',
                 transferWorkDate: this.transferWorkDate?.value || null,
                 transferHolidayDate: this.transferHolidayDate?.value || null,
                 reason: (this.reason?.value || '').trim()
             };
         } else {
             return {
-                type: 'HOLIDAY_WORK',
                 workDate: this.workDate?.value || null,
                 takeComp: this.compSwitch?.checked === true,
                 compDate: this.compSwitch?.checked ? (this.compDate?.value || null) : null,
@@ -380,6 +456,41 @@ class HolidayScreen {
         setTimeout(() => {
             document.getElementById(id)?.remove();
         }, 5000);
+    }
+
+    // 休暇/打刻修正の実装を踏襲: 申請成功時に他画面を更新
+    async refreshAllScreens() {
+        try {
+            if (window.historyScreen) {
+                try {
+                    if (typeof window.historyScreen.loadCalendarData === 'function') {
+                        await window.historyScreen.loadCalendarData(true);
+                        if (typeof window.historyScreen.generateCalendar === 'function') {
+                            window.historyScreen.generateCalendar();
+                        }
+                    } else if (typeof window.historyScreen.loadAttendanceHistory === 'function') {
+                        await window.historyScreen.loadAttendanceHistory();
+                    }
+                } catch (error) {
+                    console.warn('勤怠履歴画面の更新に失敗:', error);
+                }
+            }
+
+            if (window.calendarScreen) {
+                try {
+                    if (typeof window.calendarScreen.loadCalendarData === 'function') {
+                        await window.calendarScreen.loadCalendarData();
+                        if (typeof window.calendarScreen.generateCalendar === 'function') {
+                            window.calendarScreen.generateCalendar();
+                        }
+                    }
+                } catch (error) {
+                    console.warn('カレンダー画面の更新に失敗:', error);
+                }
+            }
+        } catch (e) {
+            // noop
+        }
     }
 }
 

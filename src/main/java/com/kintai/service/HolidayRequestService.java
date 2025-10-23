@@ -24,6 +24,9 @@ public class HolidayRequestService {
     @Autowired
     private BusinessDayCalculator businessDayCalculator;
 
+    @Autowired
+    private CustomHolidayService customHolidayService;
+
     public HolidayRequestDto createHolidayWork(Long employeeId, LocalDate workDate, boolean takeComp, LocalDate compDate, String reason) {
         validateHoliday(workDate, true); // 休日のみ
         if (takeComp) {
@@ -75,6 +78,10 @@ public class HolidayRequestService {
         req.setStatus(Status.APPROVED);
         req.setApproverId(approverId);
         HolidayRequest saved = repository.save(req);
+        
+        // 承認時のカレンダー表示更新処理
+        updateCalendarDisplayOnApproval(saved);
+        
         HolidayRequestDto dto = HolidayRequestDto.from(saved);
         dto.setMessage("承認しました");
         return dto;
@@ -90,6 +97,69 @@ public class HolidayRequestService {
         HolidayRequestDto dto = HolidayRequestDto.from(saved);
         dto.setMessage("却下しました");
         return dto;
+    }
+
+    /**
+     * 承認時のカレンダー表示更新処理
+     * 休日出勤・振替出勤が承認されたら、カレンダーの休日表記を削除
+     * 代休・振替休日は新たに休日としてカレンダーに表記
+     */
+    private void updateCalendarDisplayOnApproval(HolidayRequest approvedRequest) {
+        Long employeeId = approvedRequest.getEmployeeId();
+        Long approverId = approvedRequest.getApproverId();
+        
+        if (approvedRequest.getRequestType() == RequestType.HOLIDAY_WORK) {
+            // 休日出勤承認時
+            // 出勤日（元々の休日）の休日表記を削除
+            removeHolidayDisplay(employeeId, approvedRequest.getWorkDate());
+            
+            // 代休取得の場合、代休日を新たに休日として登録
+            if (approvedRequest.getTakeComp() && approvedRequest.getCompDate() != null) {
+                addHolidayDisplay(employeeId, approvedRequest.getCompDate(), "代休", 
+                    "休日出勤の代休", approvedRequest.getId(), approverId);
+            }
+        } else if (approvedRequest.getRequestType() == RequestType.TRANSFER) {
+            // 振替出勤承認時
+            // 出勤日（元々の休日）の休日表記を削除
+            removeHolidayDisplay(employeeId, approvedRequest.getWorkDate());
+            
+            // 振替休日を新たに休日として登録
+            if (approvedRequest.getTransferHolidayDate() != null) {
+                addHolidayDisplay(employeeId, approvedRequest.getTransferHolidayDate(), "振替休日", 
+                    "振替出勤の振替休日", approvedRequest.getId(), approverId);
+            }
+        }
+    }
+    
+    /**
+     * 指定日の休日表記を削除
+     */
+    private void removeHolidayDisplay(Long employeeId, LocalDate date) {
+        try {
+            // 該当従業員の指定日のカスタム休日を削除
+            customHolidayService.removeCustomHoliday(employeeId, date);
+            System.out.println("休日表記を削除: 従業員ID=" + employeeId + ", 日付=" + date);
+        } catch (Exception e) {
+            System.err.println("休日表記の削除に失敗: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * 指定日を新たに休日として登録
+     */
+    private void addHolidayDisplay(Long employeeId, LocalDate date, String holidayType, String description, Long relatedRequestId, Long createdBy) {
+        try {
+            if ("代休".equals(holidayType)) {
+                customHolidayService.createCompensatoryHoliday(employeeId, date, description, relatedRequestId, createdBy);
+            } else if ("振替休日".equals(holidayType)) {
+                customHolidayService.createTransferHoliday(employeeId, date, description, relatedRequestId, createdBy);
+            } else {
+                customHolidayService.createCustomHoliday(employeeId, date, holidayType, description, relatedRequestId, createdBy);
+            }
+            System.out.println("新たな休日を追加: 従業員ID=" + employeeId + ", 日付=" + date + ", 種別=" + holidayType);
+        } catch (Exception e) {
+            System.err.println("新たな休日の追加に失敗: " + e.getMessage());
+        }
     }
 
     private void validateHoliday(LocalDate date, boolean expectHoliday) {

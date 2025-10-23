@@ -23,6 +23,8 @@ class CalendarScreen {
         this.attendanceData = [];
         this.vacationRequests = [];
         this.adjustmentRequests = [];
+        this.holidayRequests = [];
+        this.customHolidays = [];
     }
 
     /**
@@ -83,6 +85,10 @@ class CalendarScreen {
             await this.loadVacationRequests();
             // 打刻修正申請データ読み込み
             await this.loadAdjustmentRequests();
+            // 休日出勤・振替出勤申請データ読み込み
+            await this.loadHolidayRequests();
+            // カスタム休日データ読み込み
+            await this.loadCustomHolidays();
         } catch (error) {
             console.error('カレンダーデータ読み込みエラー:', error);
         }
@@ -210,6 +216,58 @@ class CalendarScreen {
     }
 
     /**
+     * 休日出勤・振替出勤申請データ読み込み
+     */
+    async loadHolidayRequests() {
+        if (!window.currentEmployeeId) return;
+
+        try {
+            const response = await fetch(`/api/holiday/requests/${window.currentEmployeeId}`, {
+                credentials: 'include'
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                const requests = (data && data.success && Array.isArray(data.data)) ? data.data : [];
+
+                // 当月分の申請データのみをフィルタリング（workDate or transferWorkDate or transferHolidayDate）
+                this.holidayRequests = requests.filter(req => {
+                    const raw = req.workDate || req.transferWorkDate || req.transferHolidayDate;
+                    if (!raw) return false;
+                    const d = this.parseDateString(String(raw));
+                    return d && d.getFullYear() === this.currentYear && d.getMonth() === this.currentMonth;
+                });
+            } else {
+                this.holidayRequests = [];
+            }
+        } catch (error) {
+            console.error('休日出勤・振替出勤申請データ読み込みエラー:', error);
+            this.holidayRequests = [];
+        }
+    }
+
+    /**
+     * カスタム休日データ読み込み
+     */
+    async loadCustomHolidays() {
+        if (!window.currentEmployeeId) return;
+
+        try {
+            const response = await fetch(`/api/custom-holidays/employee/${window.currentEmployeeId}`, {
+                credentials: 'include'
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                this.customHolidays = data.data || [];
+            }
+        } catch (error) {
+            console.error('カスタム休日データ読み込みエラー:', error);
+            this.customHolidays = [];
+        }
+    }
+
+    /**
      * カレンダー生成
      */
     generateCalendar() {
@@ -257,6 +315,8 @@ class CalendarScreen {
                 const attendance = this.getAttendanceForDate(dateString);
                 const vacationRequest = this.getVacationRequestForDate(dateString);
                 const adjustmentRequest = this.getAdjustmentRequestForDate(dateString);
+                const holidayRequest = this.getHolidayRequestForDate(dateString);
+                const customHoliday = this.getCustomHolidayForDate(dateString);
 
                 // 日付のクラス設定
                 let dayClasses = ['calendar-day'];
@@ -328,12 +388,50 @@ class CalendarScreen {
                     }
                     badges += `<span class="badge ${statusClass} badge-sm adjustment-badge" data-adjustment-id="${adjustmentRequest.adjustmentRequestId}" data-rejection-comment="${adjustmentRequest.rejectionComment || ''}">${statusText}</span>`;
                 }
+                if (holidayRequest) {
+                    let statusClass, statusText, requestTypeLabel;
+                    if ((holidayRequest.status || '').toUpperCase() === 'APPROVED') {
+                        statusClass = 'bg-success';
+                        statusText = '承認済';
+                    } else if ((holidayRequest.status || '').toUpperCase() === 'REJECTED') {
+                        statusClass = 'bg-danger';
+                        statusText = '却下';
+                    } else {
+                        statusClass = 'bg-warning';
+                        statusText = '申請中';
+                    }
 
-                const holidayLabel = isNonWorkingDay ? '<div class="holiday-label text-danger fw-semibold">休日</div>' : '';
+                    if (holidayRequest.requestType === 'HOLIDAY_WORK') {
+                        requestTypeLabel = '休日出勤';
+                    } else if (holidayRequest.requestType === 'TRANSFER') {
+                        requestTypeLabel = '振替';
+                    } else {
+                        requestTypeLabel = '休日関連';
+                    }
+
+                    badges += `<span class="badge ${statusClass} badge-sm">${requestTypeLabel}${statusText}</span>`;
+                }
+
+                // カスタム休日の表示
+                let customHolidayLabel = '';
+                if (customHoliday) {
+                    customHolidayLabel = `<div class="holiday-label text-info fw-semibold">${customHoliday.holidayType}</div>`;
+                }
+                
+                // 休日出勤・振替出勤が承認されている場合は休日表記を削除
+                let holidayLabel = '';
+                if (isNonWorkingDay) {
+                    // 承認済みの休日出勤・振替出勤申請があるかチェック
+                    const approvedHolidayRequest = this.getApprovedHolidayRequestForDate(dateString);
+                    if (!approvedHolidayRequest) {
+                        holidayLabel = '<div class="holiday-label text-danger fw-semibold">休日</div>';
+                    }
+                }
 
                 calendarHtml += `
                     <div class="${dayClasses.join(' ')}" data-date="${dateString}">
                         <div class="day-number">${dayNumber}</div>
+                        ${customHolidayLabel}
                         ${holidayLabel}
                         <div class="day-badges">${badges}</div>
                         ${attendance ? this.renderAttendanceInfo(attendance) : ''}
@@ -442,6 +540,43 @@ class CalendarScreen {
      */
     getAdjustmentRequestForDate(dateString) {
         return this.adjustmentRequests.find(request => request.date === dateString);
+    }
+
+    /**
+     * 指定日のカスタム休日取得
+     */
+    getCustomHolidayForDate(dateString) {
+        return this.customHolidays.find(holiday => {
+            const holidayDate = new Date(holiday.holidayDate);
+            const formattedDate = this.formatDateString(holidayDate);
+            return formattedDate === dateString;
+        });
+    }
+
+    /**
+     * 指定日の休日出勤・振替出勤申請取得
+     */
+    getHolidayRequestForDate(dateString) {
+        return this.holidayRequests.find(request => {
+            const raw = request.workDate || request.transferWorkDate || request.transferHolidayDate;
+            if (!raw) return false;
+            const d = this.parseDateString(String(raw));
+            return d && this.formatDateString(d) === dateString;
+        });
+    }
+
+    /**
+     * 指定日の承認済み休日出勤・振替出勤申請取得
+     */
+    getApprovedHolidayRequestForDate(dateString) {
+        return this.holidayRequests.find(request => {
+            const raw = request.workDate || request.transferWorkDate || request.transferHolidayDate;
+            if (!raw) return false;
+            const d = this.parseDateString(String(raw));
+            const isDateMatch = d && this.formatDateString(d) === dateString;
+            const isApproved = (request.status || '').toUpperCase() === 'APPROVED';
+            return isDateMatch && isApproved;
+        });
     }
 
     /**

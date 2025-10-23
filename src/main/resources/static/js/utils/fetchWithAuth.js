@@ -17,6 +17,7 @@ class FetchWithAuth {
             const endpoints = [
                 '/api/attendance/csrf-token',
                 '/api/leave/csrf-token',
+                '/api/holiday/csrf-token',
                 '/api/admin/csrf-token'
             ];
             

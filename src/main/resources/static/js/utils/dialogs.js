@@ -92,6 +92,12 @@
             } else {
                 messageElement.textContent = message || '';
             }
+            // 余白最小化（既存モーダルの見た目を踏襲）
+            messageElement.style.minHeight = '0';
+            messageElement.classList.remove('mb-3');
+            if (!messageElement.classList.contains('mb-2')) {
+                messageElement.classList.add('mb-2');
+            }
         }
         if (confirmButton) confirmButton.textContent = confirmLabel || '実行する';
         if (cancelButton) cancelButton.textContent = cancelLabel || 'キャンセル';
