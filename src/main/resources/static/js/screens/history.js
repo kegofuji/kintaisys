@@ -20,12 +20,34 @@ class HistoryScreen {
             try {
                 if (!date) return null;
                 const d = new Date(date);
-                // 直近にロード済みの承認済み勤務パターンがある場合はそれを利用
                 const isWeekend = d.getDay() === 0 || d.getDay() === 6;
                 const isHoliday = this.isHoliday(d);
+
+                // 当月読み込み済みの勤務パターンから日付に対応するものを優先的に使用
+                if (typeof this.getWorkPatternRequestForDate === 'function' && typeof this.formatDateString === 'function') {
+                    const dateKey = this.formatDateString(d);
+                    let entry = this.getWorkPatternRequestForDate(dateKey);
+                    // 履歴画面未初期化時でも holiday 側の共有キャッシュから参照
+                    if ((!entry || !entry.request) && Array.isArray(window._workPatternForHoliday)) {
+                        entry = window._workPatternForHoliday.find(it => it.date === dateKey);
+                    }
+                    if (entry && entry.request && typeof this.isDateInWorkPattern === 'function') {
+                        // 祝日かつ applyHoliday=false は非勤務日（バックエンドの規約に合わせる）
+                        if (isHoliday && entry.request.applyHoliday === false) {
+                            return false;
+                        }
+                        const inPattern = this.isDateInWorkPattern(d, entry.request, isWeekend, isHoliday);
+                        return !!inPattern; // true=勤務日, false=休日
+                    }
+                }
+
+                // 後方互換: 単一の currentWorkPattern が設定されている場合
                 if (this.currentWorkPattern && typeof this.isDateInWorkPattern === 'function') {
+                    if (isHoliday && this.currentWorkPattern.request && this.currentWorkPattern.request.applyHoliday === false) {
+                        return false;
+                    }
                     const inPattern = this.isDateInWorkPattern(d, this.currentWorkPattern.request, isWeekend, isHoliday);
-                    return !!inPattern; // true=勤務日, false=休日
+                    return !!inPattern;
                 }
             } catch (_) {}
             return null; // 判定できない場合
@@ -66,6 +88,16 @@ class HistoryScreen {
         this.setupModalActions();
         this.generateMonthOptions();
         await this.loadCalendarData(true); // 初回読み込み時はカレンダーを生成
+        // 休日画面用の勤務パターンキャッシュを先に用意（初期表示の同期用）
+        try {
+            if (typeof this.loadWorkPatternRequests === 'function') {
+                await this.loadWorkPatternRequests();
+                // holiday.js が先に初期化されているケースも考慮し、共有キャッシュへコピー
+                if (Array.isArray(this.workPatternRequests)) {
+                    window._workPatternForHoliday = this.workPatternRequests.slice();
+                }
+            }
+        } catch (_) {}
         this.currentSnapshot = this.calculateSnapshot();
         this.startRealtimePolling(true);
         // 初期の月末申請ボタン状態を反映（関数が存在する場合のみ）
@@ -2019,6 +2051,11 @@ class HistoryScreen {
         const weekday = date.getDay();
         let shouldApply = false;
         
+        // 祝日かつ applyHoliday=false は勤務しない
+        if (isHoliday && request.applyHoliday === false) {
+            return false;
+        }
+
         // 曜日別の適用判定
         switch (weekday) {
             case 1: shouldApply = request.applyMonday; break;

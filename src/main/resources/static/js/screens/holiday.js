@@ -6,16 +6,19 @@ class HolidayScreen {
         this.initialized = false;
     }
 
-    init() {
+    async init() {
         if (this.initialized) return;
         this.initialized = true;
         this.initializeElements();
+        // 勤務パターンの事前取得（履歴画面のローダーを流用）
+        await this.prefetchWorkPatterns();
         this.setupEventListeners();
         this.resetForm();
     }
 
     initializeElements() {
         this.holidayForm = document.getElementById('holidayForm');
+        this.refreshBtn = document.getElementById('holidayRefreshBtn');
         this.typeWorkRadio = document.getElementById('holidayTypeWork');
         this.typeTransferRadio = document.getElementById('holidayTypeTransfer');
         this.transferRow = document.getElementById('transferRow');
@@ -104,6 +107,19 @@ class HolidayScreen {
         this.holidayForm.addEventListener('submit', (e) => this.handleSubmit(e));
         this.resetBtn?.addEventListener('click', () => this.resetForm());
 
+        // 更新ボタン: 勤務パターンの再取得と予定日の再描画
+        this.refreshBtn?.addEventListener('click', async () => {
+            try {
+                await this.prefetchWorkPatterns();
+                this.updateHolidayWorkHints();
+                this.updateUpcomingHolidaysHint();
+                this.updateTransferHints();
+                this.showAlert('休日予定日を更新しました', 'info');
+            } catch (e) {
+                this.showAlert('更新に失敗しました', 'danger');
+            }
+        });
+
         updateMode();
         this.updateHolidayWorkHints();
         this.updateUpcomingHolidaysHint();
@@ -125,11 +141,9 @@ class HolidayScreen {
         const d = this.parseDate(dateStr);
         if (!d) return false;
         // 勤務時間変更の休日適用を最優先
-        if (typeof window.isWorkingDayByPattern === 'function') {
-            const patternWork = window.isWorkingDayByPattern(d);
-            if (patternWork !== null && patternWork !== undefined) {
-                return !patternWork;
-            }
+        const patternWork = this.resolveWorkingByPattern(d);
+        if (patternWork !== null && patternWork !== undefined) {
+            return !patternWork;
         }
         const isWeekend = d.getDay() === 0 || d.getDay() === 6;
         const isHoliday = window.BusinessDayUtils && typeof window.BusinessDayUtils.isHoliday === 'function'
@@ -142,11 +156,9 @@ class HolidayScreen {
     isBusinessDay(dateStr) {
         const d = this.parseDate(dateStr);
         if (!d) return false;
-        if (typeof window.isWorkingDayByPattern === 'function') {
-            const patternWork = window.isWorkingDayByPattern(d);
-            if (patternWork !== null && patternWork !== undefined) {
-                return !!patternWork;
-            }
+        const patternWork = this.resolveWorkingByPattern(d);
+        if (patternWork !== null && patternWork !== undefined) {
+            return !!patternWork;
         }
         const isWeekend = d.getDay() === 0 || d.getDay() === 6;
         const isHoliday = window.BusinessDayUtils && typeof window.BusinessDayUtils.isHoliday === 'function'
@@ -272,7 +284,7 @@ class HolidayScreen {
             for (let i = 0; list.length < 10 && i < 90; i++) {
                 const d = new Date(today);
                 d.setDate(today.getDate() + i);
-                const patternWork = typeof window.isWorkingDayByPattern === 'function' ? window.isWorkingDayByPattern(d) : null;
+                const patternWork = this.resolveWorkingByPattern(d);
                 const isWeekend = d.getDay() === 0 || d.getDay() === 6;
                 const isHolidayCal = window.BusinessDayUtils && typeof window.BusinessDayUtils.isHoliday === 'function' ? window.BusinessDayUtils.isHoliday(d) : false;
                 const isHoliday = patternWork === null ? (isWeekend || isHolidayCal) : !patternWork;
@@ -297,6 +309,85 @@ class HolidayScreen {
             }
         } catch (e) {
             // noop
+        }
+    }
+
+    // 勤務パターンに基づく勤務日判定の解決
+    resolveWorkingByPattern(dateObj) {
+        try {
+            if (typeof window.isWorkingDayByPattern === 'function') {
+                const r = window.isWorkingDayByPattern(dateObj);
+                if (r !== null && r !== undefined) return r;
+            }
+            // 代替: holiday用にロードしたキャッシュがあれば利用
+            if (Array.isArray(window._workPatternForHoliday)) {
+                const y = dateObj.getFullYear();
+                const m = dateObj.getMonth();
+                const key = `${y}-${String(m + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
+                const entry = window._workPatternForHoliday.find(it => it.date === key);
+                if (entry && entry.request) {
+                    const isWeekend = dateObj.getDay() === 0 || dateObj.getDay() === 6;
+                    const isHoliday = window.BusinessDayUtils && typeof window.BusinessDayUtils.isHoliday === 'function' ? window.BusinessDayUtils.isHoliday(dateObj) : false;
+                    return this.isDateInWorkPatternLocal(dateObj, entry.request, isWeekend, isHoliday);
+                }
+            }
+        } catch (_) {}
+        return null;
+    }
+
+    // holiday.js 内部用の簡易 isDateInWorkPattern
+    isDateInWorkPatternLocal(date, request, isWeekend, isHoliday) {
+        if (!request) return false;
+        if (isHoliday && request.applyHoliday === false) return false;
+        const weekday = date.getDay();
+        switch (weekday) {
+            case 1: return !!request.applyMonday;
+            case 2: return !!request.applyTuesday;
+            case 3: return !!request.applyWednesday;
+            case 4: return !!request.applyThursday;
+            case 5: return !!request.applyFriday;
+            case 6: return !!request.applySaturday;
+            case 0: return !!request.applySunday;
+        }
+        return false;
+    }
+
+    async prefetchWorkPatterns() {
+        try {
+            // 代替: 自前で直近90日分の勤務パターンをロード（初期表示の精度を担保）
+            if (!window.currentEmployeeId) return;
+            const res = await window.fetchWithAuth.get(`/api/work-pattern-change/requests/${window.currentEmployeeId}`);
+            const data = await window.fetchWithAuth.parseJson(res);
+            const list = (data && data.data) || [];
+
+            const today = new Date();
+            const horizonDays = 120; // 余裕を持って120日先まで
+            const endHorizon = new Date(today);
+            endHorizon.setDate(today.getDate() + horizonDays);
+
+            const filtered = [];
+            list.forEach(req => {
+                if ((req.status || '').toUpperCase() !== 'APPROVED') return;
+                if (!req.startDate || !req.endDate) return;
+                const start = this.parseDate(req.startDate);
+                const end = this.parseDate(req.endDate);
+                if (!start || !end) return;
+
+                // 交差区間のみを展開
+                const from = start.getTime() > today.getTime() ? start : today;
+                const to = end.getTime() < endHorizon.getTime() ? end : endHorizon;
+                if (from.getTime() > to.getTime()) return;
+
+                for (let d = new Date(from); d.getTime() <= to.getTime(); d.setDate(d.getDate() + 1)) {
+                    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+                    const idx = filtered.findIndex(it => it.date === key);
+                    const payload = { date: key, request: req, status: 'APPROVED', requestId: req.requestId || req.id };
+                    if (idx >= 0) filtered[idx] = payload; else filtered.push(payload);
+                }
+            });
+            window._workPatternForHoliday = filtered;
+        } catch (_) {
+            // ignore
         }
     }
 
