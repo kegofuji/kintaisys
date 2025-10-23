@@ -16,6 +16,13 @@ class AdjustmentScreen {
         this.listenersBound = false;
         this.breakManuallyEdited = false;
         this.autoCalculatedBreakMinutes = 0;
+        // 選択日の打刻情報表示用
+        this.summaryContainer = null;
+        this.summaryClockInEl = null;
+        this.summaryClockOutEl = null;
+        this.summaryStatusEl = null;
+        this.lastFetchedYearMonth = null; // 'YYYY-MM'
+        this.monthCache = new Map();
     }
 
     prefillForm({ clockInDate, clockInTime, clockOutDate, clockOutTime, clockIn, clockOut, date, reason, breakMinutes }) {
@@ -105,6 +112,8 @@ class AdjustmentScreen {
                 this.clearPrefillState();
             };
         }
+        // 選択日の打刻情報を更新
+        this.updateSelectedDaySummaryFromInputs();
     }
 
     /**
@@ -137,6 +146,16 @@ class AdjustmentScreen {
         this.formTitle = document.getElementById('adjustmentFormTitle');
         this.cancelPrefillButton = document.getElementById('adjustmentFormCancel');
 
+        // サマリー用要素
+        this.summaryContainer = document.getElementById('adjustmentSelectedDaySummary');
+        if (this.summaryContainer) {
+            this.summaryClockInEl = this.summaryContainer.querySelector('[data-adj-sum-clock-in]');
+            this.summaryClockOutEl = this.summaryContainer.querySelector('[data-adj-sum-clock-out]');
+            this.summaryStatusEl = this.summaryContainer.querySelector('[data-adj-sum-status]');
+            this.renderSelectedDaySummary('', '');
+            this.setSummaryStatus('');
+        }
+
         // 要素が取得できた直後に空白を設定（ブラウザのデフォルト値を上書き）
         if (this.clockInDateInput) {
             this.clockInDateInput.value = '';
@@ -168,6 +187,7 @@ class AdjustmentScreen {
             this.clockInDateInput.addEventListener('change', () => {
                 this.validateDateFields();
                 this.onTimeFieldUpdated();
+                this.updateSelectedDaySummaryFromInputs();
             });
         }
         if (this.clockOutDateInput) {
@@ -224,6 +244,8 @@ class AdjustmentScreen {
         this.breakManuallyEdited = false;
         this.autoCalculatedBreakMinutes = 0;
         this.updateWorkingPreview();
+        this.renderSelectedDaySummary('', '');
+        this.setSummaryStatus('');
     }
 
     clearPrefillState() {
@@ -236,6 +258,8 @@ class AdjustmentScreen {
         }
         this.breakManuallyEdited = false;
         this.autoCalculatedBreakMinutes = 0;
+        this.renderSelectedDaySummary('', '');
+        this.setSummaryStatus('');
     }
 
     /**
@@ -573,6 +597,145 @@ class AdjustmentScreen {
         breakMinutes = Math.min(Math.max(breakMinutes, 0), totalMinutes);
         const workingMinutes = Math.max(totalMinutes - breakMinutes, 0);
         this.workingPreviewInput.value = TimeUtils.formatMinutesToTime(workingMinutes);
+    }
+
+    // ===== 選択日の打刻情報（サマリー） =====
+    renderSelectedDaySummary(clockInText, clockOutText) {
+        if (!this.summaryContainer) {
+            return;
+        }
+        const inText = typeof clockInText === 'string' ? clockInText : '';
+        const outText = typeof clockOutText === 'string' ? clockOutText : '';
+        if (this.summaryClockInEl) this.summaryClockInEl.textContent = inText;
+        if (this.summaryClockOutEl) this.summaryClockOutEl.textContent = outText;
+    }
+
+    setSummaryStatus(message, isError = false) {
+        if (!this.summaryStatusEl) return;
+        const text = (message || '').trim();
+        this.summaryStatusEl.textContent = text;
+        this.summaryStatusEl.hidden = text.length === 0;
+        this.summaryStatusEl.classList.toggle('text-danger', Boolean(isError) && text.length > 0);
+        this.summaryStatusEl.classList.toggle('text-muted', !Boolean(isError) && text.length > 0);
+    }
+
+    updateSelectedDaySummaryFromInputs() {
+        const dateStr = this.clockInDateInput?.value || '';
+        this.updateSelectedDaySummary(dateStr);
+    }
+
+    async updateSelectedDaySummary(dateStr) {
+        if (!this.summaryContainer) {
+            return;
+        }
+        const normalized = (dateStr || '').trim();
+        if (!normalized) {
+            this.renderSelectedDaySummary('', '');
+            this.setSummaryStatus('');
+            return;
+        }
+        if (!window.currentEmployeeId) {
+            this.renderSelectedDaySummary('', '');
+            this.setSummaryStatus('従業員情報の取得に失敗しました', true);
+            return;
+        }
+
+        // 今日の場合は最新の状態を都度取得
+        try {
+            const todayStr = this.formatDateString(new Date());
+            if (normalized === todayStr) {
+                this.setSummaryStatus('選択日の打刻情報を読み込み中です...', false);
+                const respToday = await fetchWithAuth.handleApiCall(
+                    () => fetchWithAuth.get(`/api/attendance/today/${window.currentEmployeeId}`),
+                    '今日の打刻情報の取得に失敗しました'
+                );
+                const dataToday = respToday?.data ?? (respToday?.success === undefined ? respToday : null);
+                if (dataToday) {
+                    const inTextToday = dataToday.clockInTime ? new Date(dataToday.clockInTime).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }) : '打刻なし';
+                    const outTextToday = dataToday.clockOutTime ? new Date(dataToday.clockOutTime).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }) : '打刻なし';
+                    this.renderSelectedDaySummary(inTextToday, outTextToday);
+                    this.setSummaryStatus('');
+                    // 月次キャッシュも更新しておく（同日の要素を入れ替え／追加）
+                    const yyyy = todayStr.slice(0, 4);
+                    const mm = todayStr.slice(5, 7);
+                    const ymKeyTmp = `${yyyy}-${mm}`;
+                    const arr = Array.isArray(this.monthCache.get(ymKeyTmp)) ? this.monthCache.get(ymKeyTmp).slice() : [];
+                    const idx = arr.findIndex(r => (r?.attendanceDate || '').slice(0, 10) === todayStr);
+                    const merged = {
+                        attendanceDate: dataToday.attendanceDate || todayStr,
+                        clockInTime: dataToday.clockInTime || null,
+                        clockOutTime: dataToday.clockOutTime || null,
+                        breakMinutes: dataToday.breakMinutes ?? null
+                    };
+                    if (idx >= 0) arr[idx] = { ...arr[idx], ...merged }; else arr.push(merged);
+                    this.monthCache.set(ymKeyTmp, arr);
+                    return; // ここで終了
+                }
+            }
+        } catch (e) {
+            console.warn('今日の打刻情報取得で警告:', e);
+            // 続行して月次データでフォールバック
+        }
+
+        // 月別取得 -> 対象日を抽出（今日以外、または今日取得が失敗した場合）
+        let yyyy = '', mm = '';
+        try {
+            const d = new Date(normalized);
+            if (Number.isNaN(d.getTime())) {
+                this.renderSelectedDaySummary('', '');
+                this.setSummaryStatus('');
+                return;
+            }
+            yyyy = String(d.getFullYear());
+            mm = String(d.getMonth() + 1).padStart(2, '0');
+        } catch (_) {
+            this.renderSelectedDaySummary('', '');
+            this.setSummaryStatus('');
+            return;
+        }
+
+        const ymKey = `${yyyy}-${mm}`;
+        let monthData = this.monthCache.get(ymKey);
+        if (!monthData) {
+            try {
+                this.setSummaryStatus('選択日の打刻情報を読み込み中です...', false);
+                const resp = await fetchWithAuth.handleApiCall(
+                    () => fetchWithAuth.get(`/api/attendance/history/${window.currentEmployeeId}?year=${yyyy}&month=${mm}`),
+                    '勤怠履歴の取得に失敗しました'
+                );
+                monthData = Array.isArray(resp?.data) ? resp.data : Array.isArray(resp) ? resp : [];
+                this.monthCache.set(ymKey, monthData);
+                this.lastFetchedYearMonth = ymKey;
+            } catch (error) {
+                console.error('選択日打刻情報の読み込み失敗:', error);
+                this.renderSelectedDaySummary('', '');
+                this.setSummaryStatus('選択日の打刻情報の取得に失敗しました', true);
+                return;
+            }
+        }
+
+        const record = Array.isArray(monthData)
+            ? monthData.find(r => (r?.attendanceDate || '').slice(0, 10) === normalized)
+            : null;
+
+        const formatTime = (value) => {
+            if (!value) return '';
+            try {
+                const t = new Date(value);
+                if (!Number.isNaN(t.getTime())) {
+                    return t.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
+                }
+            } catch (_) {}
+            if (typeof value === 'string' && /^\d{2}:\d{2}(:\d{2})?$/.test(value)) {
+                return value.slice(0, 5);
+            }
+            return '';
+        };
+
+        const inText = record?.clockInTime ? formatTime(record.clockInTime) : '打刻なし';
+        const outText = record?.clockOutTime ? formatTime(record.clockOutTime) : '打刻なし';
+        this.renderSelectedDaySummary(inText, outText);
+        this.setSummaryStatus('');
     }
 
     /**

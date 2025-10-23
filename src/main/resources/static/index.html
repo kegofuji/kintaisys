@@ -672,6 +672,14 @@
                         <h5 class="mb-0" id="adjustmentFormTitle">打刻修正申請</h5>
                     </div>
                     <div class="card-body">
+                        <!-- 選択日の打刻情報（勤務時間変更の現在の勤務時間表示を踏襲） -->
+                        <div class="mb-3">
+                            <div id="adjustmentSelectedDaySummary" class="bg-light border rounded p-3 d-inline-block" role="status" aria-live="polite" style="font-size: 0.9rem; max-width: 500px;">
+                                <div class="fw-semibold text-body mb-1">選択日の打刻情報</div>
+                                <div>出勤: <span class="fw-semibold text-body" data-adj-sum-clock-in></span>　退勤: <span class="fw-semibold text-body" data-adj-sum-clock-out></span></div>
+                                <div class="mt-1 small text-muted" data-adj-sum-status hidden></div>
+                            </div>
+                        </div>
                         <form id="adjustmentForm">
                             <div class="row g-3">
                                 <div class="col-md-6">
@@ -727,13 +735,12 @@
                     </div>
                     <div class="card-body">
                         <div class="mb-3">
-                            <div id="workPatternCurrentSummary" class="bg-light border rounded p-3 small" role="status" aria-live="polite">
-                                <div class="fw-semibold text-body">現在の標準勤務パターン</div>
-                                <div class="mt-1">定時: <span class="fw-semibold text-body">09:00 〜 18:00</span></div>
-                                <div>休憩: <span class="fw-semibold text-body">1:00</span> / 実働: <span class="fw-semibold text-body">8:00</span></div>
+                            <div id="workPatternCurrentSummary" class="bg-light border rounded p-3 d-inline-block" role="status" aria-live="polite" style="font-size: 0.9rem; max-width: 500px;">
+                                <div class="fw-semibold text-body mb-1">現在の勤務時間</div>
+                                <div>定時: <span class="fw-semibold text-body">09:00~18:00</span> / 休憩: <span class="fw-semibold text-body">1:00</span> / 実働: <span class="fw-semibold text-body">8:00</span></div>
                                 <div>勤務日: <span class="text-body text-success fw-semibold">月・火・水・木・金</span> | 休日: <span class="text-body text-danger fw-semibold">土・日・祝</span></div>
-                                <div class="mt-1">適用期間: <span class="text-body">指定なし（標準勤務）</span></div>
-                                <div class="mt-2 small text-muted" data-summary-status hidden></div>
+                                <div>適用期間: <span class="text-body">指定なし（標準勤務）</span></div>
+                                <div class="mt-1 small text-muted" data-summary-status hidden></div>
                             </div>
                         </div>
                         <form id="workPatternForm" class="needs-validation" novalidate>
