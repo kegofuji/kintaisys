@@ -604,19 +604,38 @@ class VacationScreen {
             </div>
         `.trim();
 
+        // 見た目を2枚目（共通ダイアログ）に統一: 共通ダイアログ優先 → 専用モーダル → confirm
         const confirmHandler = window.employeeDialog?.confirm;
         if (confirmHandler) {
             const { confirmed } = await confirmHandler({
-                title: '休暇申請',
+                title: '休暇申請の送信',
                 message: modalMessageHtml,
                 confirmLabel: '申請する',
                 cancelLabel: 'キャンセル'
             });
-            if (!confirmed) {
+            if (!confirmed) return;
+        } else {
+            const modalEl = document.getElementById('vacationSubmitConfirmModal');
+            const messageEl = document.getElementById('vacationSubmitConfirmMessage');
+            const confirmBtn = document.getElementById('vacationSubmitConfirmButton');
+            if (modalEl && messageEl && confirmBtn && typeof bootstrap !== 'undefined') {
+                messageEl.innerHTML = modalMessageHtml;
+                const modalInstance = bootstrap.Modal.getOrCreateInstance(modalEl);
+                const confirmed = await new Promise((resolve) => {
+                    const onConfirm = () => { cleanup(); resolve(true); };
+                    const onHidden = () => { cleanup(); resolve(false); };
+                    const cleanup = () => {
+                        confirmBtn.removeEventListener('click', onConfirm);
+                        modalEl.removeEventListener('hidden.bs.modal', onHidden);
+                    };
+                    confirmBtn.addEventListener('click', onConfirm);
+                    modalEl.addEventListener('hidden.bs.modal', onHidden);
+                    modalInstance.show();
+                });
+                if (!confirmed) return;
+            } else if (!window.confirm(modalMessageText)) {
                 return;
             }
-        } else if (!window.confirm(modalMessageText)) {
-            return;
         }
 
         try {

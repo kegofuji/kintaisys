@@ -1847,17 +1847,36 @@ class AdminScreen {
             </div>
         `;
         
-        const confirmOptions = {
-            title: '休暇付与の確認',
-            message: message,
-            confirmLabel: '付与を実行する',
-            requireReason: false
-        };
-
-        const dialogResult = await this.promptApprovalDialog(confirmOptions);
-        if (!dialogResult.confirmed) {
-            return;
+        // 専用の休暇付与確認モーダルを優先して使用（フォールバックは既存の承認モーダル/confirm）
+        let confirmed = false;
+        const modalEl = document.getElementById('leaveGrantConfirmModal');
+        const messageEl = document.getElementById('leaveGrantConfirmMessage');
+        const confirmBtn = document.getElementById('leaveGrantConfirmButton');
+        if (modalEl && messageEl && confirmBtn && typeof bootstrap !== 'undefined') {
+            messageEl.innerHTML = message;
+            const modalInstance = bootstrap.Modal.getOrCreateInstance(modalEl);
+            confirmed = await new Promise((resolve) => {
+                const onConfirm = () => { cleanup(); resolve(true); };
+                const onHidden = () => { cleanup(); resolve(false); };
+                const cleanup = () => {
+                    confirmBtn.removeEventListener('click', onConfirm);
+                    modalEl.removeEventListener('hidden.bs.modal', onHidden);
+                };
+                confirmBtn.addEventListener('click', onConfirm);
+                modalEl.addEventListener('hidden.bs.modal', onHidden);
+                modalInstance.show();
+            });
+        } else {
+            const dialogResult = await this.promptApprovalDialog({
+                title: '休暇付与の確認',
+                message: message,
+                confirmLabel: '付与を実行する',
+                requireReason: false
+            });
+            confirmed = !!dialogResult.confirmed;
         }
+
+        if (!confirmed) return;
 
         const payload = {
             leaveType: type,

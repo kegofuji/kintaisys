@@ -1292,6 +1292,44 @@
         </div>
     </div>
 
+    <!-- 休暇申請 確認モーダル（共通ダイアログの見た目に合わせる） -->
+    <div class="modal fade" id="vacationSubmitConfirmModal" tabindex="-1" aria-labelledby="vacationSubmitConfirmTitle" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="vacationSubmitConfirmTitle">休暇申請の送信</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="text-start small" id="vacationSubmitConfirmMessage"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                    <button type="button" class="btn btn-primary" id="vacationSubmitConfirmButton">申請する</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 休暇付与 確認モーダル（打刻修正申請モーダルの構成に準拠） -->
+    <div class="modal fade" id="leaveGrantConfirmModal" tabindex="-1" aria-labelledby="leaveGrantConfirmTitle" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="leaveGrantConfirmTitle">休暇付与の確認</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="text-start small" id="leaveGrantConfirmMessage"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                    <button type="button" class="btn btn-primary" id="leaveGrantConfirmButton">付与を実行する</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- 管理者 承認確認モーダル -->
     <div class="modal fade" id="adminApprovalConfirmModal" tabindex="-1" aria-labelledby="adminApprovalConfirmTitle" aria-hidden="true">
         <div class="modal-dialog">

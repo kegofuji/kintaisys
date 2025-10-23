@@ -821,13 +821,21 @@ class HistoryScreen {
                 badges += `<span class="badge ${statusClass} badge-sm holiday-badge clickable" ${dataAttrs} title="${title}">${requestTypeLabel}${label}</span>`;
             }
 
-            // カスタム休日の表示
+            // カスタム休日の表示（代休/振替休日など）。承認時はバックエンドでCustomHolidayが作成される
             let customHolidayLabel = '';
             if (customHoliday) {
-                customHolidayLabel = `<div class="holiday-label text-info fw-semibold">${customHoliday.holidayType}</div>`;
+                customHolidayLabel = `<div class="holiday-label text-danger fw-semibold">${customHoliday.holidayType}</div>`;
             }
             
-            const holidayLabel = isNonWorkingDay ? '<div class="holiday-label text-danger fw-semibold">休日</div>' : '';
+            // 通常の土日祝の「休日」表記。
+            // ただし、承認済みの休日出勤/振替出勤がある日は「休日」を表示しない。
+            let holidayLabel = '';
+            if (isNonWorkingDay && !customHoliday) {
+                const approvedHolidayReq = this.holidayRequests.find(r => r.date === dateString && (r.status || '').toUpperCase() === 'APPROVED');
+                if (!approvedHolidayReq) {
+                    holidayLabel = '<div class="holiday-label text-danger fw-semibold">休日</div>';
+                }
+            }
 
             // 勤務時間変更申請で承認済の場合は緑背景を避ける
             let styleAttr = 'cursor: pointer;';

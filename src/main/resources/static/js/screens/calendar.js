@@ -412,16 +412,19 @@ class CalendarScreen {
                     badges += `<span class="badge ${statusClass} badge-sm">${requestTypeLabel}${statusText}</span>`;
                 }
 
-                // カスタム休日の表示
+                // カスタム休日・代休/振替休日の表示
+                // バックエンドは承認時に CustomHoliday を作成/削除するため
+                // ここでは customHoliday があれば休日扱いとして赤字で表示する
                 let customHolidayLabel = '';
                 if (customHoliday) {
-                    customHolidayLabel = `<div class="holiday-label text-info fw-semibold">${customHoliday.holidayType}</div>`;
+                    const typeText = customHoliday.holidayType || '休日';
+                    customHolidayLabel = `<div class="holiday-label text-danger fw-semibold">${typeText}</div>`;
                 }
-                
-                // 休日出勤・振替出勤が承認されている場合は休日表記を削除
+
+                // 通常の土日祝の「休日」表記
+                // ただし、承認済みの休日出勤/振替出勤がある日は赤字「休日」を消す
                 let holidayLabel = '';
-                if (isNonWorkingDay) {
-                    // 承認済みの休日出勤・振替出勤申請があるかチェック
+                if (isNonWorkingDay && !customHoliday) {
                     const approvedHolidayRequest = this.getApprovedHolidayRequestForDate(dateString);
                     if (!approvedHolidayRequest) {
                         holidayLabel = '<div class="holiday-label text-danger fw-semibold">休日</div>';
