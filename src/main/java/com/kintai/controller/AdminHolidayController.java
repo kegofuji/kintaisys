@@ -28,6 +28,25 @@ public class AdminHolidayController {
         return ResponseEntity.ok(body);
     }
 
+    @GetMapping("/requests/status/{status}")
+    public ResponseEntity<Map<String, Object>> listByStatus(@PathVariable("status") String status) {
+        HolidayRequest.Status st;
+        try {
+            st = HolidayRequest.Status.valueOf(status.toUpperCase());
+        } catch (Exception e) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("success", false);
+            error.put("message", "不正なステータスです");
+            return ResponseEntity.badRequest().body(error);
+        }
+        List<HolidayRequest> list = service.listByStatus(st);
+        Map<String, Object> body = new HashMap<>();
+        body.put("success", true);
+        body.put("data", list);
+        body.put("count", list.size());
+        return ResponseEntity.ok(body);
+    }
+
     @PostMapping("/requests/{id}/approve")
     public ResponseEntity<Map<String, Object>> approve(@PathVariable Long id, @RequestParam Long approverId) {
         try {

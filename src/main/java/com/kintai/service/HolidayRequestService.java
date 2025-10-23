@@ -72,6 +72,10 @@ public class HolidayRequestService {
         return repository.findByStatusOrderByCreatedAtDesc(Status.PENDING);
     }
 
+    public List<HolidayRequest> listByStatus(Status status) {
+        return repository.findByStatusOrderByCreatedAtDesc(status);
+    }
+
     public HolidayRequestDto approve(Long id, Long approverId) {
         HolidayRequest req = repository.findById(id).orElseThrow(() -> new IllegalArgumentException("申請が見つかりません"));
         if (req.getStatus() != Status.PENDING) throw new IllegalStateException("承認できない状態です");

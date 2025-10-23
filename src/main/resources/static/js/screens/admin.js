@@ -686,16 +686,25 @@ class AdminScreen {
 
     async loadHolidayPending() {
         if (!this.holidayTableBody) return;
-        this.holidayTableBody.innerHTML = `<tr><td colspan="6" class="text-center text-muted">読み込み中...</td></tr>`;
+        this.holidayTableBody.innerHTML = `<tr><td colspan="6" class="text-center text-muted">データを読み込み中...</td></tr>`;
         try {
-            const res = await fetch('/api/admin/holiday/requests/pending', { credentials: 'include' });
-            const data = await res.json().catch(() => null);
-            if (res.ok && data && data.success) {
-                const list = Array.isArray(data.data) ? data.data : [];
-                this.renderHolidayTable(list);
-            } else {
-                this.holidayTableBody.innerHTML = `<tr><td colspan="6" class="text-danger text-center">読み込みに失敗しました</td></tr>`;
-            }
+            const statuses = ['PENDING', 'APPROVED', 'REJECTED'];
+            const responses = await Promise.all(
+                statuses.map(status =>
+                    fetch(`/api/admin/holiday/requests/status/${status}`, { credentials: 'include' })
+                        .then(r => r.json().catch(() => ({ success: false, data: [] })))
+                        .catch(() => ({ success: false, data: [] }))
+                )
+            );
+
+            const list = [];
+            statuses.forEach((status, index) => {
+                const payload = responses[index];
+                if (!payload?.success || !Array.isArray(payload.data)) return;
+                payload.data.forEach(item => list.push(item));
+            });
+
+            this.renderHolidayTable(list);
         } catch (e) {
             console.error('休日関連読み込みエラー:', e);
             this.holidayTableBody.innerHTML = `<tr><td colspan="6" class="text-danger text-center">読み込みに失敗しました</td></tr>`;
@@ -705,7 +714,7 @@ class AdminScreen {
     renderHolidayTable(list) {
         if (!this.holidayTableBody) return;
         if (!Array.isArray(list) || list.length === 0) {
-            this.holidayTableBody.innerHTML = `<tr><td colspan="6" class="text-center text-muted">表示するデータがありません</td></tr>`;
+            this.holidayTableBody.innerHTML = `<tr><td colspan="6" class="text-center text-muted">現在処理すべき休日関連申請はありません</td></tr>`;
             return;
         }
 
@@ -760,7 +769,7 @@ class AdminScreen {
                 : '<span class="text-muted">処理済</span>';
 
             return `
-                <tr>
+                <tr${isPending ? '' : ' class="table-secondary"'}>
                     <td class="text-start">${employeeName}</td>
                     <td class="text-start">${workDate}</td>
                     <td class="text-start">${contentHtml}</td>
