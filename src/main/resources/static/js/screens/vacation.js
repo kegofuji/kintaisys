@@ -291,19 +291,16 @@ class VacationScreen {
      * 残数サマリ描画
      */
     renderBalanceSummary() {
-        console.log('renderBalanceSummary called, remainingByType:', this.remainingByType);
-        console.log('this.paidLeaveRemaining element:', this.paidLeaveRemaining);
-        console.log('this.summerLeaveRemaining element:', this.summerLeaveRemaining);
-        console.log('this.winterLeaveRemaining element:', this.winterLeaveRemaining);
-        console.log('this.specialLeaveRemaining element:', this.specialLeaveRemaining);
+        // 管理者画面など、残数表示用の要素が存在しない画面では何もしない
+        if (!this.paidLeaveRemaining && !this.summerLeaveRemaining && !this.winterLeaveRemaining && !this.specialLeaveRemaining) {
+            return;
+        }
         
         // 有休休暇の表示
         if (this.paidLeaveRemaining) {
             const paidLeaveDays = this.getRemainingDays('PAID_LEAVE');
             console.log('有休休暇残日数:', paidLeaveDays);
             this.paidLeaveRemaining.textContent = paidLeaveDays % 1 === 0 ? paidLeaveDays + '日' : paidLeaveDays.toFixed(1) + '日';
-        } else {
-            console.error('paidLeaveRemaining要素が見つかりません');
         }
 
         // 夏季休暇の表示

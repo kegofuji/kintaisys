@@ -1034,7 +1034,8 @@ class AdminScreen {
                         newClockIn: item.newClockIn,
                         newClockOut: item.newClockOut,
                         newBreakMinutes: item.newBreakMinutes ?? item.breakMinutes,
-                        status: status
+                        status: status,
+                        rejectionComment: item.rejectionComment
                     });
                 });
             });
@@ -1114,15 +1115,19 @@ class AdminScreen {
             if (workingDisplay !== '-') {
                 segments.push(`実働: ${workingDisplay}`);
             }
-
             const content = segments.length > 0 ? segments.join('<br>') : '-';
+
+            const isRejected = (entry.status || '').toUpperCase() === 'REJECTED';
+            const statusHtml = isRejected && entry.rejectionComment
+                ? `<div>${this.translateStatus(entry.status)}</div><div class="text-danger small mt-1">却下理由：${this.escapeHtml(entry.rejectionComment)}</div>`
+                : `<div>${this.translateStatus(entry.status)}</div>`;
 
             row.innerHTML = `
                 <td>${entry.employeeName}</td>
                 <td>${this.formatDate(entry.targetDate)}</td>
                 <td>${content}</td>
                 <td>${entry.reason || '-'}</td>
-                <td>${this.translateStatus(entry.status)}</td>
+                <td>${statusHtml}</td>
                 <td>${actionCell}</td>
             `;
 
@@ -1165,6 +1170,7 @@ class AdminScreen {
                         workingMinutes: item.workingMinutes,
                         reason: item.reason,
                         status: status,
+                        rejectionComment: item.rejectionComment,
                         createdAt: item.createdAt,
                         rejectionComment: item.rejectionComment,
                         applyMonday: item.applyMonday,
@@ -1241,12 +1247,15 @@ class AdminScreen {
             if (entry.reason) {
                 reasonSegments.push(`<div>${this.escapeHtml(entry.reason)}</div>`);
             }
-            if ((entry.status || '').toUpperCase() === 'REJECTED' && entry.rejectionComment) {
-                reasonSegments.push(`<div class="text-danger small">却下理由: ${this.escapeHtml(entry.rejectionComment)}</div>`);
-            }
+            // 管理者画面では理由列に却下理由は表示しない（状態欄のみで表示）
             const reasonContent = reasonSegments.length > 0 ? reasonSegments.join('') : '-';
 
             const dayDisplay = this.formatWorkPatternDays(entry);
+
+            const isRejected = (entry.status || '').toUpperCase() === 'REJECTED';
+            const statusHtml = isRejected && entry.rejectionComment
+                ? `<div>${this.translateStatus(entry.status)}</div><div class="text-danger small mt-1">却下理由：${this.escapeHtml(entry.rejectionComment)}</div>`
+                : `<div>${this.translateStatus(entry.status)}</div>`;
 
             row.innerHTML = `
                 <td class="text-start">${this.getDisplayEmployeeName(entry)}</td>
@@ -1256,7 +1265,7 @@ class AdminScreen {
                 <td class="text-start">${workingDisplay}</td>
                 <td class="text-start">${dayDisplay}</td>
                 <td class="text-start">${reasonContent}</td>
-                <td class="text-start">${this.translateStatus(entry.status)}</td>
+                <td class="text-start">${statusHtml}</td>
                 <td class="text-start">${actionCell}</td>
             `;
 
@@ -1327,13 +1336,52 @@ class AdminScreen {
         }
 
         try {
-            const response = await fetchWithAuth.handleApiCall(
-                () => fetchWithAuth.get('/api/admin/leave/requests/pending'),
-                '休暇申請の取得に失敗しました'
+            // PENDING/APPROVED/REJECTED を打刻修正と同様にまとめて取得
+            const statuses = ['PENDING', 'APPROVED', 'REJECTED'];
+            const responses = await Promise.all(
+                statuses.map(status =>
+                    fetchWithAuth
+                        .handleApiCall(
+                            () => fetchWithAuth.get(`/api/admin/leave/requests/status/${status}`),
+                            `休暇申請（${status}）の取得に失敗しました`
+                        )
+                        .catch(() => ({ success: false, data: [] }))
+                )
             );
 
-            const list = Array.isArray(response?.data) ? response.data : [];
-            const entries = list.map((item) => ({
+            // 互換のため旧エンドポイント（PENDINGのみ）も取得し、マージする
+            const pendingFallback = await fetchWithAuth
+                .handleApiCall(
+                    () => fetchWithAuth.get('/api/admin/leave/requests/pending'),
+                    '休暇申請（PENDING）の取得に失敗しました'
+                )
+                .catch(() => ({ success: false, data: [] }));
+
+            const list = [];
+            statuses.forEach((status, index) => {
+                const payload = responses[index];
+                console.log(`休暇申請 ${status} 取得結果:`, payload);
+                if (!payload?.success || !Array.isArray(payload.data)) return;
+                payload.data.forEach(item => list.push({ ...item, status }));
+            });
+
+            console.log('旧エンドポイント PENDING 結果:', pendingFallback);
+            if (pendingFallback?.success && Array.isArray(pendingFallback.data)) {
+                pendingFallback.data.forEach(item => list.push({ ...item, status: 'PENDING' }));
+            }
+
+            // IDで重複除去
+            const dedupedMap = new Map();
+            list.forEach(item => {
+                const id = item.leaveRequestId ?? item.id ?? item.vacationId;
+                if (id != null && !dedupedMap.has(id)) {
+                    dedupedMap.set(id, item);
+                }
+            });
+            const mergedList = Array.from(dedupedMap.values());
+            console.log('マージ後の休暇申請一覧:', mergedList);
+
+            const entries = mergedList.map((item) => ({
                 vacationId: item.leaveRequestId ?? item.id ?? item.vacationId,
                 employeeName: this.getDisplayEmployeeName(item),
                 startDate: item.startDate,
@@ -1342,7 +1390,8 @@ class AdminScreen {
                 leaveType: item.leaveType || 'PAID_LEAVE',
                 timeUnit: item.timeUnit || 'FULL_DAY',
                 status: item.status || 'PENDING',
-                createdAt: item.createdAt || item.requestDate || item.submittedAt // 申請日
+                createdAt: item.createdAt || item.requestDate || item.submittedAt, // 申請日
+                rejectionComment: item.rejectionComment
             }));
 
             // サイレント更新の場合は、データが変更されていない場合は再描画しない
@@ -1411,13 +1460,25 @@ class AdminScreen {
             const typeLabel = this.getLeaveTypeLabel(entry.leaveType);
             const unitLabel = LEAVE_TIME_UNIT_LABELS[entry.timeUnit] || '';
 
+            const reasonHtml = (() => {
+                const parts = [];
+                if (entry.reason) parts.push(`<div>${this.escapeHtml(entry.reason)}</div>`);
+                // 管理者画面では理由列に却下理由は表示しない（状態欄のみで表示）
+                return parts.join('') || '-';
+            })();
+
+            const isRejected = (entry.status || '').toUpperCase() === 'REJECTED';
+            const statusHtml = isRejected && entry.rejectionComment
+                ? `<div>${this.translateStatus(entry.status)}</div><div class="text-danger small mt-1">却下理由：${this.escapeHtml(entry.rejectionComment)}</div>`
+                : `<div>${this.translateStatus(entry.status)}</div>`;
+
             row.innerHTML = `
                 <td>${entry.employeeName}</td>
                 <td>${typeLabel}</td>
                 <td>${this.formatDateRange(entry.startDate, entry.endDate)}</td>
                 <td>${unitLabel}</td>
-                <td>${entry.reason || ''}</td>
-                <td>${this.translateStatus(entry.status)}</td>
+                <td>${reasonHtml}</td>
+                <td>${statusHtml}</td>
                 <td>${actionCell}</td>
             `;
 
@@ -1570,6 +1631,8 @@ class AdminScreen {
                 this.showAlert(response.message || '休暇を付与しました', 'success');
                 this.leaveGrantForm.reset();
                 this.handleLeaveGrantTypeChange();
+                // キャッシュをクリアして一覧を更新
+                this.lastVacationManagementData = null;
                 await this.loadVacationManagementData(false); // 通常更新
                 await this.loadLeaveBalances();
             } else {
@@ -1863,6 +1926,8 @@ class AdminScreen {
             if (requestType === 'adjustment') {
                 await this.loadPendingApprovals();
             } else if (requestType === 'vacation' || requestType === 'leave') {
+                // 却下処理後は必ず一覧を更新（キャッシュをクリア）
+                this.lastVacationManagementData = null;
                 await this.loadVacationManagementData(false); // 通常更新
                 // 休暇承認の場合は休暇残数も自動更新
                 if (isApprove) {
@@ -1955,6 +2020,9 @@ class AdminScreen {
                     <dd class="col-8 text-end mb-0 fw-semibold">${workingDisplay}</dd>
                     <dt class="col-4 text-muted text-nowrap mb-0">理由</dt>
                     <dd class="col-8 text-end mb-0">${this.escapeHtml(entry.reason || '（理由なし）')}</dd>
+                    ${((entry.status || '').toUpperCase() === 'REJECTED' && entry.rejectionComment)
+                        ? `<dt class=\"col-4 text-muted text-nowrap mb-0\">却下理由</dt><dd class=\"col-8 text-end mb-0 text-danger\">${this.escapeHtml(entry.rejectionComment)}</dd>`
+                        : ''}
                 </dl>
                 <p class="mb-0">${actionText}してよろしいですか？</p>
             </div>
@@ -2503,6 +2571,8 @@ class AdminScreen {
                 const alertType = isApprove ? 'success' : 'warning';
                 this.showAlert(`休暇申請を${actionText}しました`, alertType);
 
+                // 却下処理後は必ず一覧を更新（キャッシュをクリア）
+                this.lastVacationManagementData = null;
                 await this.loadVacationManagementData(false); // 通常更新
                 
                 // 休暇承認の場合は休暇残数も自動更新

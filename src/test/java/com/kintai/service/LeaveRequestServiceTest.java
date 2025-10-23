@@ -51,7 +51,7 @@ class LeaveRequestServiceTest {
 
     @Test
     void approvePaidLeaveReducesRemainingDaysByOne() {
-        LocalDate start = LocalDate.now().plusDays(1);
+        LocalDate start = nextBusinessDay(1);
         LeaveRequestDto dto = leaveRequestService.createLeaveRequest(
                 employee.getEmployeeId(),
                 LeaveType.PAID_LEAVE,
@@ -69,7 +69,7 @@ class LeaveRequestServiceTest {
 
     @Test
     void approveHalfDayReducesRemainingDaysByPointFive() {
-        LocalDate start = LocalDate.now().plusDays(2);
+        LocalDate start = nextBusinessDay(2);
         LeaveRequestDto dto = leaveRequestService.createLeaveRequest(
                 employee.getEmployeeId(),
                 LeaveType.PAID_LEAVE,
@@ -87,7 +87,7 @@ class LeaveRequestServiceTest {
 
     @Test
     void paidLeaveWithoutReasonIsRejected() {
-        LocalDate start = LocalDate.now().plusDays(3);
+        LocalDate start = nextBusinessDay(3);
         assertThatThrownBy(() -> leaveRequestService.createLeaveRequest(
                 employee.getEmployeeId(),
                 LeaveType.PAID_LEAVE,
@@ -115,7 +115,7 @@ class LeaveRequestServiceTest {
 
     @Test
     void specialLeaveWithGrantIsAccepted() {
-        LocalDate specialDate = LocalDate.now().plusDays(5);
+        LocalDate specialDate = nextBusinessDay(5);
         leaveRequestService.applyGrant(
                 employee.getEmployeeId(),
                 LeaveType.SPECIAL,
@@ -164,7 +164,7 @@ class LeaveRequestServiceTest {
 
     @Test
     void duplicateHalfDayOnSameDateIsRejected() {
-        LocalDate target = LocalDate.now().plusDays(6);
+        LocalDate target = nextBusinessDay(6);
         leaveRequestService.createLeaveRequest(
                 employee.getEmployeeId(),
                 LeaveType.PAID_LEAVE,
@@ -186,7 +186,7 @@ class LeaveRequestServiceTest {
 
     @Test
     void summerLeaveAllowsOptionalReason() {
-        LocalDate target = LocalDate.now().plusDays(7);
+        LocalDate target = nextBusinessDay(7);
         leaveRequestService.applyGrant(
                 employee.getEmployeeId(),
                 LeaveType.SUMMER,
@@ -210,7 +210,7 @@ class LeaveRequestServiceTest {
 
     @Test
     void cancellingApprovedLeaveRestoresBalance() {
-        LocalDate target = LocalDate.now().plusDays(8);
+        LocalDate target = nextBusinessDay(8);
         LeaveRequestDto dto = leaveRequestService.createLeaveRequest(
                 employee.getEmployeeId(),
                 LeaveType.PAID_LEAVE,
@@ -233,5 +233,12 @@ class LeaveRequestServiceTest {
         LeaveBalance balance = leaveBalanceRepository.findByEmployeeIdAndLeaveType(employee.getEmployeeId(), LeaveType.PAID_LEAVE)
                 .orElseThrow();
         assertThat(balance.getRemainingDays()).isEqualByComparingTo("10");
+    }
+    private LocalDate nextBusinessDay(int plusDays) {
+        LocalDate date = LocalDate.now().plusDays(plusDays);
+        while (date.getDayOfWeek().getValue() >= 6) { // 6=SAT,7=SUN
+            date = date.plusDays(1);
+        }
+        return date;
     }
 }

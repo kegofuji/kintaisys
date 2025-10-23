@@ -76,6 +76,31 @@ public class AdminLeaveController {
         return ResponseEntity.ok(body);
     }
 
+    /**
+     * 状態別の休暇申請一覧（管理者用）
+     */
+    @GetMapping("/requests/status/{status}")
+    public ResponseEntity<Map<String, Object>> requestsByStatus(@PathVariable String status) {
+        LeaveStatus parsed;
+        try {
+            parsed = LeaveStatus.valueOf(status.toUpperCase());
+        } catch (IllegalArgumentException e) {
+            Map<String, Object> body = new HashMap<>();
+            body.put("success", false);
+            body.put("errorCode", "INVALID_STATUS");
+            body.put("message", "無効な状態です: " + status);
+            return ResponseEntity.badRequest().body(body);
+        }
+
+        List<LeaveRequest> list = leaveRequestRepository.findByStatusOrderByCreatedAtDesc(parsed);
+        Map<String, Object> body = new HashMap<>();
+        body.put("success", true);
+        body.put("data", list);
+        body.put("count", list.size());
+        body.put("status", parsed.name());
+        return ResponseEntity.ok(body);
+    }
+
     @PostMapping("/grants")
     public ResponseEntity<Map<String, Object>> grantLeave(@Valid @RequestBody GrantRequest request) {
         try {

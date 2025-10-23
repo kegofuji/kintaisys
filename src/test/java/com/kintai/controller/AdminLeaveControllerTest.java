@@ -101,13 +101,13 @@ class AdminLeaveControllerTest {
 
     @Test
     void pendingRequestsEndpointReturnsCreatedLeave() throws Exception {
-        LocalDate start = LocalDate.now().plusDays(3);
+        LocalDate start = nextBusinessDay(3);
         LeaveRequestDto dto = leaveRequestService.createLeaveRequest(
                 employee.getEmployeeId(),
                 LeaveType.PAID_LEAVE,
                 LeaveTimeUnit.FULL_DAY,
                 start,
-                start.plusDays(1),
+                nextBusinessDayFrom(start, 1),
                 "夏季前休暇");
 
         mockMvc.perform(get("/api/admin/leave/requests/pending"))
@@ -120,7 +120,7 @@ class AdminLeaveControllerTest {
 
     @Test
     void decisionEndpointApprovesLeaveRequest() throws Exception {
-        LocalDate start = LocalDate.now().plusDays(2);
+        LocalDate start = nextBusinessDay(2);
         LeaveRequestDto dto = leaveRequestService.createLeaveRequest(
                 employee.getEmployeeId(),
                 LeaveType.PAID_LEAVE,
@@ -147,4 +147,20 @@ class AdminLeaveControllerTest {
     }
 
     // adjustBalanceEndpointIncrementsPaidLeaveAdjustment テストは廃止（有休調整機能の廃止により）
+
+    private LocalDate nextBusinessDay(int plusDays) {
+        LocalDate date = LocalDate.now().plusDays(plusDays);
+        while (date.getDayOfWeek().getValue() >= 6) { // 6=SAT, 7=SUN
+            date = date.plusDays(1);
+        }
+        return date;
+    }
+
+    private LocalDate nextBusinessDayFrom(LocalDate base, int plusDays) {
+        LocalDate date = base.plusDays(plusDays);
+        while (date.getDayOfWeek().getValue() >= 6) {
+            date = date.plusDays(1);
+        }
+        return date;
+    }
 }
