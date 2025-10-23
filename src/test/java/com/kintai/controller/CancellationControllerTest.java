@@ -10,6 +10,7 @@ import com.kintai.entity.LeaveRequest;
 import com.kintai.entity.LeaveStatus;
 import com.kintai.entity.LeaveTimeUnit;
 import com.kintai.entity.LeaveType;
+import com.kintai.exception.VacationException;
 import com.kintai.repository.AdjustmentRequestRepository;
 import com.kintai.repository.AttendanceRecordRepository;
 import com.kintai.repository.EmployeeRepository;
@@ -30,6 +31,7 @@ import java.time.LocalDateTime;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.hamcrest.Matchers.startsWith;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -221,22 +223,19 @@ class CancellationControllerTest {
     }
 
     @Test
-    void canCreateLeaveRequestOnWeekend() {
+    void cannotCreateLeaveRequestOnWeekend() {
         LocalDate sunday = LocalDate.of(2025, 9, 7);
 
-        LeaveRequestDto response = leaveRequestService.createLeaveRequest(
-                employee.getEmployeeId(),
-                LeaveType.PAID_LEAVE,
-                LeaveTimeUnit.FULL_DAY,
-                sunday,
-                sunday,
-                "休日申請");
-
-        assertThat(response.isSuccess()).isTrue();
-        LeaveRequestDto.LeaveData data = (LeaveRequestDto.LeaveData) response.getData();
-        assertThat(data.getDays().intValue()).isEqualTo(1);
-        assertThat(data.getStartDate()).isEqualTo(sunday);
-        assertThat(data.getEndDate()).isEqualTo(sunday);
+        assertThatThrownBy(() -> {
+            leaveRequestService.createLeaveRequest(
+                    employee.getEmployeeId(),
+                    LeaveType.PAID_LEAVE,
+                    LeaveTimeUnit.FULL_DAY,
+                    sunday,
+                    sunday,
+                    "休日申請");
+        }).isInstanceOf(VacationException.class)
+          .hasMessageContaining("休日に休暇申請はできません");
     }
 
     @Test
@@ -253,7 +252,7 @@ class CancellationControllerTest {
                 "長期休暇");
 
         LeaveRequestDto.LeaveData data = (LeaveRequestDto.LeaveData) response.getData();
-        assertThat(data.getDays().intValue()).isEqualTo(4);
+        assertThat(data.getDays().intValue()).isEqualTo(2);
         assertThat(data.getStartDate()).isEqualTo(start);
         assertThat(data.getEndDate()).isEqualTo(end);
     }

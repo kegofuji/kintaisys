@@ -82,8 +82,8 @@ class AttendanceServiceTest {
                 ReflectionTestUtils.invokeMethod(attendanceService, "toClockData", record);
 
         assertNotNull(data);
-        assertEquals(null, data.getLateMinutes());
-        assertEquals(null, data.getEarlyLeaveMinutes());
+        assertEquals(0, data.getLateMinutes());
+        assertEquals(0, data.getEarlyLeaveMinutes());
         assertEquals(476, data.getWorkingMinutes());
         assertEquals(65, data.getBreakMinutes());
         assertEquals(Boolean.TRUE, data.getHasApprovedAdjustment());
