@@ -295,12 +295,18 @@
                         <li class="nav-item">
                             <a class="nav-link" href="/work-pattern" id="workPatternNavLink">勤務時間変更</a>
                         </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="/holiday" id="holidayNavLink">休日関連</a>
+                        </li>
                         <!-- 管理者メニュー -->
                         <li class="nav-item" id="adminApprovalsNavItem" style="display: none;">
                             <a class="nav-link" href="/admin/approvals" id="adminApprovalsNavLink">打刻修正</a>
                         </li>
                         <li class="nav-item" id="adminWorkPatternNavItem" style="display: none;">
                             <a class="nav-link" href="/admin/work-pattern-change" id="adminWorkPatternNavLink">勤務時間変更</a>
+                        </li>
+                        <li class="nav-item" id="adminHolidayNavItem" style="display: none;">
+                            <a class="nav-link" href="/admin/holiday" id="adminHolidayNavLink">休日関連</a>
                         </li>
                         <li class="nav-item" id="adminVacationManagementNavItem" style="display: none;">
                             <a class="nav-link" href="/admin/vacation-management" id="adminVacationManagementNavLink">休暇管理</a>
@@ -665,6 +671,81 @@
                 </div>
             </div>
 
+            <!-- 休日関連（社員） -->
+            <div id="holidayScreen" class="screen-container">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">休日関連</h5>
+                        <div class="small text-muted">休日出勤 / 振替</div>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <div id="holidaySelectedDaySummary" class="bg-light border rounded p-3 d-inline-block" role="status" aria-live="polite" style="font-size: 0.9rem; max-width: 700px;">
+                                <div class="fw-semibold text-body mb-1">選択日の打刻情報</div>
+                                <div><span class="fw-semibold text-body" data-hol-sum-clock-in></span> <span class="fw-semibold text-body" data-hol-sum-clock-out></span></div>
+                                <div class="mt-1 small text-muted" data-hol-sum-status hidden></div>
+                                <div class="mt-2 small text-muted" id="upcomingHolidaysHint"></div>
+                            </div>
+                        </div>
+
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label">申請区分 <span class="text-danger">*</span></label>
+                                <div class="btn-group" role="group" aria-label="休日関連種別">
+                                    <input type="radio" class="btn-check" name="holidayType" id="holidayTypeWork" value="HOLIDAY_WORK" checked>
+                                    <label class="btn btn-outline-primary" for="holidayTypeWork">休日出勤</label>
+                                    <input type="radio" class="btn-check" name="holidayType" id="holidayTypeTransfer" value="TRANSFER">
+                                    <label class="btn btn-outline-primary" for="holidayTypeTransfer">振替</label>
+                                </div>
+                            </div>
+                            <div class="col-md-6 d-flex align-items-end">
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" role="switch" id="compensatoryOffSwitch">
+                                    <label class="form-check-label" for="compensatoryOffSwitch">代休を取得する</label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <form id="holidayForm" class="mt-3">
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <label for="holidayWorkDate" class="form-label">休日出勤日 <span class="text-danger">*</span></label>
+                                    <input type="date" class="form-control" id="holidayWorkDate" required>
+                                    <div class="form-text" id="holidayWorkHelp">休日のみ選択可能</div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="compensatoryDate" class="form-label">代休日</label>
+                                    <input type="date" class="form-control" id="compensatoryDate" disabled>
+                                    <div class="form-text" id="compensatoryHelp">勤務日のみ選択可能</div>
+                                </div>
+                            </div>
+
+                            <div class="row g-3" id="transferRow" style="display: none;">
+                                <div class="col-md-6">
+                                    <label for="transferWorkDate" class="form-label">振替出勤日 <span class="text-danger">*</span></label>
+                                    <input type="date" class="form-control" id="transferWorkDate">
+                                    <div class="form-text" id="transferWorkHelp">休日のみ選択可能</div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="transferHolidayDate" class="form-label">振替休日 <span class="text-danger">*</span></label>
+                                    <input type="date" class="form-control" id="transferHolidayDate">
+                                    <div class="form-text" id="transferHolidayHelp">勤務日のみ選択可能</div>
+                                </div>
+                            </div>
+
+                            <div class="mb-3 mt-2">
+                                <label for="holidayReason" class="form-label">理由</label>
+                                <textarea id="holidayReason" class="form-control" rows="3" placeholder="申請理由を入力"></textarea>
+                            </div>
+                            <div class="d-flex gap-2">
+                                <button type="submit" class="btn btn-primary" id="holidaySubmitBtn">申請する</button>
+                                <button type="button" class="btn btn-outline-secondary" id="holidayFormResetBtn">リセット</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
             <!-- 打刻修正申請画面 -->
             <div id="adjustmentScreen" class="screen-container">
                 <div class="card">
@@ -977,6 +1058,35 @@
                                     <tr>
                                         <td colspan="9" class="text-center text-muted">データを読み込んでいます...</td>
                                     </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 休日関連（管理者） -->
+            <div id="adminHolidayScreen" class="screen-container">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">休日関連</h5>
+                        <button class="btn btn-outline-primary btn-sm" id="adminHolidayRefreshBtn"><i class="fas fa-sync-alt me-1"></i>更新</button>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-striped table-hover align-middle">
+                                <thead>
+                                    <tr>
+                                        <th>社員ID</th>
+                                        <th>種別</th>
+                                        <th>対象日</th>
+                                        <th>代休/振替</th>
+                                        <th>理由</th>
+                                        <th>操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="adminHolidayTableBody">
+                                    <tr><td colspan="6" class="text-center text-muted">データを読み込み中...</td></tr>
                                 </tbody>
                             </table>
                         </div>
@@ -1374,6 +1484,7 @@
     <script src="/js/screens/history.js?v=202510122025"></script>
     <script src="/js/screens/calendar.js?v=202510122025"></script>
     <script src="/js/screens/vacation.js"></script>
+    <script src="/js/screens/holiday.js?v=202510231115"></script>
     <script src="/js/screens/adjustment.js"></script>
     <script src="/js/screens/work-pattern.js"></script>
     <script src="/js/screens/admin.js?v=202510231110"></script>

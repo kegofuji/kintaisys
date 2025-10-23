@@ -59,6 +59,8 @@ class Router {
         this.routes.set('/vacation', { screen: 'vacationScreen', title: '休暇申請' });
         this.routes.set('/adjustment', { screen: 'adjustmentScreen', title: '打刻修正' });
         this.routes.set('/work-pattern', { screen: 'workPatternScreen', title: '勤務時間変更' });
+        // 休日関連（休日出勤/振替）
+        this.routes.set('/holiday', { screen: 'holidayScreen', title: '休日関連' });
         
         // 管理者向けルート
         this.routes.set('/admin', { screen: 'adminDashboardScreen', title: '管理者TOP', admin: true });
@@ -67,6 +69,8 @@ class Router {
         this.routes.set('/admin/approvals', { screen: 'adminApprovalsScreen', title: '打刻修正', admin: true });
         this.routes.set('/admin/work-pattern-change', { screen: 'adminWorkPatternScreen', title: '勤務時間変更', admin: true });
         this.routes.set('/admin/vacation-management', { screen: 'adminVacationManagementScreen', title: '休暇管理', admin: true });
+        // 管理者: 休日関連
+        this.routes.set('/admin/holiday', { screen: 'adminHolidayScreen', title: '休日関連', admin: true });
     }
 
     /**
@@ -272,6 +276,11 @@ class Router {
                     window.vacationScreen.init();
                 }
                 break;
+            case 'holidayScreen':
+                if (window.holidayScreen) {
+                    window.holidayScreen.init();
+                }
+                break;
             case 'adjustmentScreen':
                 if (window.adjustmentScreen) {
                     window.adjustmentScreen.init();
@@ -317,6 +326,11 @@ class Router {
             case 'adminVacationManagementScreen':
                 if (window.adminScreen) {
                     window.adminScreen.initVacationManagement();
+                }
+                break;
+            case 'adminHolidayScreen':
+                if (window.adminScreen) {
+                    window.adminScreen.initHoliday();
                 }
                 break;
         }

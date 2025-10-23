@@ -15,6 +15,21 @@ class HistoryScreen {
         this.monthlySubmitHistoryBtn = null;
         this.historyTableBody = null;
         this.calendarGrid = null;
+        // 休日参照のために、勤務パターンに基づく勤務日判定関数を公開
+        window.isWorkingDayByPattern = (date) => {
+            try {
+                if (!date) return null;
+                const d = new Date(date);
+                // 直近にロード済みの承認済み勤務パターンがある場合はそれを利用
+                const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+                const isHoliday = this.isHoliday(d);
+                if (this.currentWorkPattern && typeof this.isDateInWorkPattern === 'function') {
+                    const inPattern = this.isDateInWorkPattern(d, this.currentWorkPattern.request, isWeekend, isHoliday);
+                    return !!inPattern; // true=勤務日, false=休日
+                }
+            } catch (_) {}
+            return null; // 判定できない場合
+        };
         const initial = this.clampDateToRange(new Date());
         this.currentYear = initial.year;
         this.currentMonth = initial.month;

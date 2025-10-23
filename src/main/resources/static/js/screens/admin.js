@@ -666,6 +666,174 @@ class AdminScreen {
     }
 
     /**
+     * 休日関連（管理者）初期化
+     */
+    initHoliday() {
+        this.initializeHolidayElements();
+        this.loadHolidayPending();
+        const refreshBtn = document.getElementById('adminHolidayRefreshBtn');
+        if (refreshBtn) {
+            refreshBtn.addEventListener('click', () => this.loadHolidayPending());
+        }
+    }
+
+    initializeHolidayElements() {
+        this.holidayTableBody = document.getElementById('adminHolidayTableBody');
+    }
+
+    async loadHolidayPending() {
+        if (!this.holidayTableBody) return;
+        this.holidayTableBody.innerHTML = `<tr><td colspan="6" class="text-center text-muted">読み込み中...</td></tr>`;
+        try {
+            const res = await fetch('/api/admin/holiday/requests/pending', { credentials: 'include' });
+            const data = await res.json().catch(() => null);
+            if (res.ok && data && data.success) {
+                const list = Array.isArray(data.data) ? data.data : [];
+                this.renderHolidayTable(list);
+            } else {
+                this.holidayTableBody.innerHTML = `<tr><td colspan="6" class="text-danger text-center">読み込みに失敗しました</td></tr>`;
+            }
+        } catch (e) {
+            console.error('休日関連読み込みエラー:', e);
+            this.holidayTableBody.innerHTML = `<tr><td colspan="6" class="text-danger text-center">読み込みに失敗しました</td></tr>`;
+        }
+    }
+
+    renderHolidayTable(list) {
+        if (!this.holidayTableBody) return;
+        if (!list || list.length === 0) {
+            this.holidayTableBody.innerHTML = `<tr><td colspan="6" class="text-center text-muted">表示するデータがありません</td></tr>`;
+            return;
+        }
+        const rows = list.map(item => {
+            const type = (item.requestType || '').toUpperCase();
+            const typeLabel = type === 'HOLIDAY_WORK' ? '休日出勤' : '振替';
+            const target = type === 'HOLIDAY_WORK' ? (item.workDate || '-') : (item.workDate || '-');
+            const extra = type === 'HOLIDAY_WORK'
+                ? (item.takeComp ? (item.compDate || '-') : '-')
+                : (item.transferHolidayDate || '-');
+            const reason = item.reason || '';
+            const id = item.id;
+            return `
+                <tr>
+                    <td>${item.employeeId}</td>
+                    <td>${typeLabel}</td>
+                    <td>${target}</td>
+                    <td>${extra}</td>
+                    <td class="text-truncate" style="max-width: 240px;">${reason}</td>
+                    <td>
+                        <div class="btn-group btn-group-sm">
+                            <button class="btn btn-success" data-action="approve" data-id="${id}">承認</button>
+                            <button class="btn btn-outline-danger" data-action="reject" data-id="${id}">却下</button>
+                        </div>
+                    </td>
+                </tr>`;
+        }).join('');
+        this.holidayTableBody.innerHTML = rows;
+        this.holidayTableBody.querySelectorAll('button[data-action]')
+            .forEach(btn => btn.addEventListener('click', (e) => this.handleHolidayAction(e)));
+    }
+
+    async handleHolidayAction(e) {
+        const button = e.currentTarget;
+        const id = button.getAttribute('data-id');
+        const action = button.getAttribute('data-action');
+        // 元データを行から復元（簡易: 再読込せずテーブルのセルから）
+        const row = button.closest('tr');
+        const cells = row ? row.querySelectorAll('td') : [];
+        const entry = {
+            id,
+            employeeId: cells?.[0]?.textContent?.trim(),
+            requestType: (cells?.[1]?.textContent?.trim() === '休日出勤') ? 'HOLIDAY_WORK' : 'TRANSFER',
+            workDate: cells?.[2]?.textContent?.trim(),
+            compDate: cells?.[3]?.textContent?.trim(),
+            transferHolidayDate: cells?.[3]?.textContent?.trim(),
+            reason: cells?.[4]?.textContent?.trim()
+        };
+
+        const isApprove = action === 'approve';
+        this.showHolidayApprovalModal(entry, isApprove, [button]);
+    }
+
+    showHolidayApprovalModal(entry, isApprove, buttons) {
+        if (!entry) return;
+        const type = (entry.requestType || '').toUpperCase();
+        const actionText = isApprove ? '承認' : '却下';
+        let detailsHtml = '';
+        if (type === 'HOLIDAY_WORK') {
+            const compText = entry.compDate && entry.compDate !== '-' ? entry.compDate : '（なし）';
+            detailsHtml = `
+                <dt class="col-4 text-muted text-nowrap mb-0">申請種別</dt>
+                <dd class="col-8 text-end mb-0 fw-semibold">休日出勤</dd>
+                <dt class="col-4 text-muted text-nowrap mb-0">休日出勤日</dt>
+                <dd class="col-8 text-end mb-0 fw-semibold">${entry.workDate || '-'}</dd>
+                <dt class="col-4 text-muted text-nowrap mb-0">代休日</dt>
+                <dd class="col-8 text-end mb-0 fw-semibold">${compText}</dd>`;
+        } else {
+            detailsHtml = `
+                <dt class="col-4 text-muted text-nowrap mb-0">申請種別</dt>
+                <dd class="col-8 text-end mb-0 fw-semibold">振替</dd>
+                <dt class="col-4 text-muted text-nowrap mb-0">振替出勤日</dt>
+                <dd class="col-8 text-end mb-0 fw-semibold">${entry.workDate || '-'}</dd>
+                <dt class="col-4 text-muted text-nowrap mb-0">振替休日</dt>
+                <dd class="col-8 text-end mb-0 fw-semibold">${entry.transferHolidayDate || '-'}</dd>`;
+        }
+        const reasonText = entry.reason || '（理由なし）';
+        const message = `
+            <div class="text-start small">
+                <p class="mb-2">休日関連申請の内容を確認してください。</p>
+                <dl class="row g-1 mb-3 align-items-center">
+                    <dt class="col-4 text-muted text-nowrap mb-0">申請者</dt>
+                    <dd class="col-8 text-end mb-0 fw-semibold">ID: ${entry.employeeId}</dd>
+                    ${detailsHtml}
+                    <dt class="col-4 text-muted text-nowrap mb-0">理由</dt>
+                    <dd class="col-8 text-end mb-0">${reasonText}</dd>
+                </dl>
+                <p class="mb-0">${actionText}してよろしいですか？</p>
+            </div>`;
+
+        if (Array.isArray(buttons)) {
+            this.setButtonsDisabled(buttons, true);
+        }
+
+        this.promptApprovalDialog({
+            title: `休日関連申請の${actionText}`,
+            message,
+            confirmLabel: isApprove ? '承認する' : '却下する',
+            requireReason: !isApprove
+        }).then(async (dialogResult) => {
+            try {
+                if (!dialogResult.confirmed) return;
+                const reason = dialogResult.reason || '';
+                await this.executeHolidayAction(isApprove, entry.id, reason);
+                const alertType = isApprove ? 'success' : 'warning';
+                this.showAlert(`休日関連申請を${actionText}しました`, alertType);
+                await this.loadHolidayPending();
+            } catch (err) {
+                console.error('休日関連申請処理エラー:', err);
+                this.showAlert('処理に失敗しました', 'danger');
+            } finally {
+                if (Array.isArray(buttons)) {
+                    this.setButtonsDisabled(buttons, false);
+                }
+            }
+        });
+    }
+
+    async executeHolidayAction(isApprove, id, reason) {
+        const approverId = 1; // TODO: サーバ側で解決する場合は削除
+        const url = isApprove
+            ? `/api/admin/holiday/requests/${id}/approve?approverId=${approverId}`
+            : `/api/admin/holiday/requests/${id}/reject?approverId=${approverId}&comment=${encodeURIComponent(reason || '')}`;
+        const res = await fetch(url, { method: 'POST', credentials: 'include' });
+        const data = await res.json().catch(() => null);
+        if (!(res.ok && data && data.success)) {
+            throw new Error((data && data.message) || '処理に失敗しました');
+        }
+        return data;
+    }
+
+    /**
      * 月末申請管理要素の初期化
      */
     initializeMonthlySubmissionElements() {

@@ -979,6 +979,24 @@ function setupNavigationListeners() {
         });
     }
     
+    // 管理者: 休日関連
+    const adminHolidayNavLink = document.getElementById('adminHolidayNavLink');
+    if (adminHolidayNavLink) {
+        adminHolidayNavLink.addEventListener('click', (e) => {
+            console.log('休日関連（管理者）リンクがクリックされました');
+            handleNavigationClick(e, {
+                path: '/admin/holiday',
+                fallbackScreenId: 'adminHolidayScreen',
+                fallbackActiveLink: adminHolidayNavLink,
+                fallbackInit: () => {
+                    if (window.adminScreen) {
+                        window.adminScreen.initHoliday();
+                    }
+                }
+            });
+        });
+    }
+
     console.log('ナビゲーションリスナーの設定完了');
 }
 
@@ -1968,18 +1986,22 @@ async function checkAdminPermissions() {
                 const dashboardNavLink = document.getElementById('dashboardNavLink');
                 const historyNavLink = document.getElementById('historyNavLink');
                 const vacationNavLink = document.getElementById('vacationNavLink');
+                const holidayNavLink = document.getElementById('holidayNavLink');
                 const adjustmentNavLink = document.getElementById('adjustmentNavLink');
                 const workPatternNavLink = document.getElementById('workPatternNavLink');
                 dashboardNavLink?.parentElement && (dashboardNavLink.parentElement.style.display = 'none');
                 historyNavLink?.parentElement && (historyNavLink.parentElement.style.display = 'none');
                 vacationNavLink?.parentElement && (vacationNavLink.parentElement.style.display = 'none');
                 adjustmentNavLink?.parentElement && (adjustmentNavLink.parentElement.style.display = 'none');
+                holidayNavLink?.parentElement && (holidayNavLink.parentElement.style.display = 'none');
                 workPatternNavLink?.parentElement && (workPatternNavLink.parentElement.style.display = 'none');
 
                 // 管理者: 勤怠管理は非表示のまま、申請承認は常時表示
                 if (adminAttendanceNavItem) adminAttendanceNavItem.style.display = 'none';
                 if (adminApprovalsNavItem) adminApprovalsNavItem.style.display = 'block';
                 if (adminWorkPatternNavItem) adminWorkPatternNavItem.style.display = 'block';
+                const adminHolidayNavItem = document.getElementById('adminHolidayNavItem');
+                if (adminHolidayNavItem) adminHolidayNavItem.style.display = 'block';
 
                 // 残りの管理メニューは表示（必要に応じて）
                 const adminMonthlySubmissionsNavItem = document.getElementById('adminMonthlySubmissionsNavItem');
@@ -1998,17 +2020,21 @@ async function checkAdminPermissions() {
                 if (adminAttendanceNavItem) adminAttendanceNavItem.style.display = 'none';
                 if (adminApprovalsNavItem) adminApprovalsNavItem.style.display = 'none';
                 if (adminWorkPatternNavItem) adminWorkPatternNavItem.style.display = 'none';
+                const adminHolidayNavItem2 = document.getElementById('adminHolidayNavItem');
+                if (adminHolidayNavItem2) adminHolidayNavItem2.style.display = 'none';
                 if (adminReportsNavItem) adminReportsNavItem.style.display = 'none';
                 // 一般メニューは表示
                 const dashboardNavLink = document.getElementById('dashboardNavLink');
                 const historyNavLink = document.getElementById('historyNavLink');
                 const vacationNavLink = document.getElementById('vacationNavLink');
                 const adjustmentNavLink = document.getElementById('adjustmentNavLink');
+                const holidayNavLink2 = document.getElementById('holidayNavLink');
                 const workPatternNavLink = document.getElementById('workPatternNavLink');
                 dashboardNavLink?.parentElement && (dashboardNavLink.parentElement.style.display = 'block');
                 historyNavLink?.parentElement && (historyNavLink.parentElement.style.display = 'block');
                 vacationNavLink?.parentElement && (vacationNavLink.parentElement.style.display = 'block');
                 adjustmentNavLink?.parentElement && (adjustmentNavLink.parentElement.style.display = 'block');
+                holidayNavLink2?.parentElement && (holidayNavLink2.parentElement.style.display = 'block');
                 workPatternNavLink?.parentElement && (workPatternNavLink.parentElement.style.display = 'block');
             }
         }
