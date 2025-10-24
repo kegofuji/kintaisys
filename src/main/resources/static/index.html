@@ -1029,18 +1029,22 @@
                         </div>
                         <div class="modal-body">
                             <form id="addEmployeeForm">
-                                <div class="mb-3">
-                                    <label for="employeeUsername" class="form-label">ユーザー名 <span class="text-danger">*</span></label>
-                                    <div class="input-group">
-                                        <span class="input-group-text">emp</span>
-                                        <input type="text" class="form-control" id="employeeUsername" name="username" placeholder="番号（自動採番）" readonly>
-                                    </div>
-                                    <div class="form-text">社員IDは自動で採番されます（emp1, emp2, emp3...）</div>
-                                </div>
-                                <div class="mb-3">
-                                    <label for="employeePassword" class="form-label">パスワード <span class="text-danger">*</span></label>
-                                    <input type="password" class="form-control" id="employeePassword" name="password" required>
-                                    <div class="form-text">4文字以上のパスワードを入力してください</div>
+                                <div class="text-start small">
+                                    <dl class="row g-2 align-items-center mb-0">
+                                        <dt class="col-4 text-muted text-nowrap mb-0">ユーザー名 <span class="text-danger">*</span></dt>
+                                        <dd class="col-8 mb-0">
+                                            <div class="input-group">
+                                                <span class="input-group-text">emp</span>
+                                                <input type="text" class="form-control" id="employeeUsername" name="username" placeholder="番号（自動採番）" readonly>
+                                            </div>
+                                            <div class="form-text">社員IDは自動で採番されます</div>
+                                        </dd>
+                                        <dt class="col-4 text-muted text-nowrap mb-0">パスワード <span class="text-danger">*</span></dt>
+                                        <dd class="col-8 mb-0">
+                                            <input type="password" class="form-control" id="employeePassword" name="password" required>
+                                            <div class="form-text">4文字以上のパスワードを入力してください</div>
+                                        </dd>
+                                    </dl>
                                 </div>
                             </form>
                         </div>
@@ -1202,7 +1206,7 @@
                                     </div>
                                     <div class="mb-3" id="leaveGrantDaysGroup">
                                         <label for="leaveGrantDays" class="form-label">付与日数 <span class="text-danger">*</span></label>
-                                        <input type="number" step="0.5" min="0.5" class="form-control" id="leaveGrantDays" autocomplete="off" required>
+                                        <input type="number" step="0.5" class="form-control" id="leaveGrantDays" autocomplete="off" required>
                                     </div>
                                     <!-- 夏季・冬季・特別休暇の有効期限範囲 -->
                                     <div class="mb-3" id="leaveGrantDateRangeGroup" style="display: none;">
@@ -1330,7 +1334,7 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
-                    <button type="button" class="btn btn-primary" id="leaveGrantConfirmButton">付与を実行する</button>
+                    <button type="button" class="btn btn-primary" id="leaveGrantConfirmButton">付与する</button>
                 </div>
             </div>
         </div>

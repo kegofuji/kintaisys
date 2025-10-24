@@ -244,6 +244,14 @@ public class LeaveRequestService {
         if (days == null || days.signum() == 0) {
             throw new VacationException(VacationException.INVALID_REQUEST, "付与日数が不正です");
         }
+        // 0.5刻みの検証（負数も可）
+        days = days.setScale(2, RoundingMode.HALF_UP);
+        if (!isHalfStep(days)) {
+            throw new VacationException(VacationException.INVALID_REQUEST, "付与日数は0.5単位で入力してください");
+        }
+        if (grantedAt == null) {
+            grantedAt = LocalDate.now();
+        }
         LeaveGrant grant = new LeaveGrant(employeeId, leaveType, days, grantedAt, expiresAt, grantedBy);
         leaveGrantRepository.save(grant);
 
@@ -252,6 +260,12 @@ public class LeaveRequestService {
                 leaveType);
         balance.addToTotal(days);
         leaveBalanceRepository.save(balance);
+    }
+
+    private boolean isHalfStep(BigDecimal value) {
+        // value * 2 が整数なら 0.5 刻み
+        BigDecimal doubled = value.multiply(new BigDecimal("2"));
+        return doubled.stripTrailingZeros().scale() <= 0;
     }
 
     /**

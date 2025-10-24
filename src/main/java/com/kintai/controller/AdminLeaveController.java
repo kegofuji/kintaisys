@@ -124,6 +124,11 @@ public class AdminLeaveController {
                 throw new VacationException(VacationException.INVALID_REQUEST, "付与対象の従業員が見つかりません");
             }
 
+            // 有休の場合は grantedOn が必須（NOT NULL 制約のため）
+            if (leaveType == LeaveType.PAID_LEAVE && grantedOn == null) {
+                grantedOn = LocalDate.now();
+            }
+
             // 全ての休暇種別で同じ処理を行う
             for (Long employeeId : targetEmployees) {
                 leaveRequestService.applyGrant(

@@ -1766,7 +1766,14 @@ class AdminScreen {
             this.leaveGrantDaysInput?.focus();
             return;
         }
-        grantedDays = parsed;
+        // 0.5刻みチェック（負数可）
+        const doubled = Math.round(parsed * 2);
+        if (Math.abs(parsed * 2 - doubled) > 1e-9) {
+            this.showAlert('付与日数は0.5単位で入力してください', 'warning');
+            this.leaveGrantDaysInput?.focus();
+            return;
+        }
+        grantedDays = Number(parsed.toFixed(2));
         
         // 夏季・冬季・特別休暇の場合は有効期限の開始日と終了日を取得
         if (type === 'SUMMER' || type === 'WINTER' || type === 'SPECIAL') {
@@ -1813,46 +1820,33 @@ class AdminScreen {
         const typeLabel = this.getLeaveTypeLabel(type);
         const scopeLabel = scope === 'ALL' ? '全社員' : '指定社員';
         const daysText = `${grantedDays}日`;
-        
+
         let message = `
-            <div style="font-size: 14px; line-height: 1.6;">
-                <p class="mb-3">以下の内容で休暇を付与しますか？</p>
-                <div class="card border-0 bg-light p-3 mb-3">
-                    <div class="mb-2">
-                        <strong style="color: #495057; min-width: 140px; display: inline-block;">休暇種別:</strong>
-                        <span style="color: #212529;">${typeLabel}</span>
-                    </div>
-                    <div class="mb-2">
-                        <strong style="color: #495057; min-width: 140px; display: inline-block;">付与日数:</strong>
-                        <span style="color: #212529; font-weight: 600;">${daysText}</span>
-                    </div>`;
+            <div class="text-start small">
+                <p class="mb-2">休暇付与の内容を確認してください。</p>
+                <dl class="row g-1 mb-3 align-items-center">
+                    <dt class="col-4 text-muted text-nowrap mb-0">休暇種別</dt>
+                    <dd class="col-8 text-end mb-0 fw-semibold">${typeLabel}</dd>
+                    <dt class="col-4 text-muted text-nowrap mb-0">付与日数</dt>
+                    <dd class="col-8 text-end mb-0 fw-semibold">${daysText}</dd>
+                    <dt class="col-4 text-muted text-nowrap mb-0">付与対象</dt>
+                    <dd class="col-8 text-end mb-0">${scopeLabel}</dd>`;
         
         if (grantedDate && !expiresAt) {
             message += `
-                    <div class="mb-2">
-                        <strong style="color: #495057; min-width: 140px; display: inline-block;">付与日:</strong>
-                        <span style="color: #212529;">${this.formatDate(grantedDate)}</span>
-                    </div>`;
+                    <dt class="col-4 text-muted text-nowrap mb-0">付与日</dt>
+                    <dd class="col-8 text-end mb-0">${this.formatDate(grantedDate)}</dd>`;
         }
         
         if (expiresAt) {
             message += `
-                    <div class="mb-2">
-                        <strong style="color: #495057; min-width: 140px; display: inline-block;">有効期限:</strong>
-                        <span style="color: #212529;">${this.formatDate(grantedDate)} ～ ${this.formatDate(expiresAt)}</span>
-                    </div>`;
+                    <dt class="col-4 text-muted text-nowrap mb-0">有効期限</dt>
+                    <dd class="col-8 text-end mb-0">${this.formatDate(grantedDate)} ～ ${this.formatDate(expiresAt)}</dd>`;
         }
         
         message += `
-                    <div>
-                        <strong style="color: #495057; min-width: 140px; display: inline-block;">付与対象:</strong>
-                        <span style="color: #212529;">${scopeLabel}</span>
-                    </div>
-                </div>
-                <div class="alert alert-warning mb-0 py-2 px-3" style="font-size: 13px;">
-                    <i class="bi bi-exclamation-triangle-fill me-2"></i>
-                    この操作は取り消せません
-                </div>
+                </dl>
+                <div class="alert alert-warning mb-0 py-2 px-3" role="alert" style="font-size: 15px; display: inline-flex; width: fit-content; white-space: nowrap;">この処理は取り消せません</div>
             </div>
         `;
         
@@ -1865,7 +1859,7 @@ class AdminScreen {
             messageEl.innerHTML = message;
             const modalInstance = bootstrap.Modal.getOrCreateInstance(modalEl);
             confirmed = await new Promise((resolve) => {
-                const onConfirm = () => { cleanup(); resolve(true); };
+                const onConfirm = () => { modalInstance.hide(); cleanup(); resolve(true); };
                 const onHidden = () => { cleanup(); resolve(false); };
                 const cleanup = () => {
                     confirmBtn.removeEventListener('click', onConfirm);
@@ -1879,7 +1873,7 @@ class AdminScreen {
             const dialogResult = await this.promptApprovalDialog({
                 title: '休暇付与の確認',
                 message: message,
-                confirmLabel: '付与を実行する',
+                confirmLabel: '付与する',
                 requireReason: false
             });
             confirmed = !!dialogResult.confirmed;
@@ -1976,7 +1970,9 @@ class AdminScreen {
                 }
             } else {
                 if (this.leaveGrantEmployeeSelect) {
-                    Array.from(this.leaveGrantEmployeeSelect.options).forEach(opt => opt.selected = false);
+                    // select.options は想定しないUIのため、チェックボックスをクエリで解除
+                    const boxes = this.leaveGrantEmployeeSelect.querySelectorAll('input[type="checkbox"]');
+                    boxes.forEach(box => { box.checked = false; });
                     this.leaveGrantEmployeeSelect.required = false;
                     this.leaveGrantEmployeeSelect.removeAttribute('data-required');
                 }
