@@ -582,7 +582,6 @@ class VacationScreen {
         const rangeTextHtml = escapeHtml(rangeText);
         const reasonDisplayHtml = escapeHtml(reasonDisplay);
         const modalMessageText = [
-            '休暇申請の内容を確認してください。',
             `休暇種別 ${summaryLabel}`,
             `対象日 ${rangeText}`,
             `理由 ${reasonDisplay}`,
@@ -591,7 +590,6 @@ class VacationScreen {
 
         const modalMessageHtml = `
             <div class="text-start small">
-                <p class="mb-2">休暇申請の内容を確認してください。</p>
                 <dl class="row g-1 mb-3 align-items-center">
                     <dt class="col-4 text-muted text-nowrap mb-0">休暇種別</dt>
                     <dd class="col-8 text-end mb-0 fw-semibold">${summaryLabelHtml}</dd>

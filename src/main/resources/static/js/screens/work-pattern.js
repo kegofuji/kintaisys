@@ -634,7 +634,6 @@ class WorkPatternScreen {
         const hideDaysRow = diffDays <= 7;
 
         const plainLines = [
-            '勤務時間変更申請の内容を確認してください。',
             `適用期間 ${dateRange}`,
             `勤務時間 ${timeRange}`,
             `休憩 ${breakDisplay}`,
@@ -648,7 +647,6 @@ class WorkPatternScreen {
 
         const htmlMessage = `
             <div class="text-start small">
-                <p class="mb-2">勤務時間変更申請の内容を確認してください。</p>
                 <dl class="row g-1 mb-3 align-items-center">
                     <dt class="col-4 text-muted text-nowrap mb-0">適用期間</dt>
                     <dd class="col-8 text-end mb-0 fw-semibold">${this.escapeHtml(dateRange)}</dd>

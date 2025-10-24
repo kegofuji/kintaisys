@@ -448,7 +448,6 @@ class HolidayScreen {
             const modalMessageHtml = isTransfer
                 ? `
                     <div class="text-start small">
-                        <p class="mb-2">振替申請の内容を確認してください。</p>
                         <dl class="row g-1 mb-3 align-items-center">
                             <dt class="col-4 text-muted text-nowrap mb-0">振替出勤日</dt>
                             <dd class="col-8 text-end mb-0 fw-semibold">${formatDateForDialog(body.transferWorkDate)}</dd>
@@ -462,7 +461,6 @@ class HolidayScreen {
                 `.trim()
                 : `
                     <div class="text-start small">
-                        <p class="mb-2">休日出勤申請の内容を確認してください。</p>
                         <dl class="row g-1 mb-3 align-items-center">
                             <dt class="col-4 text-muted text-nowrap mb-0">休日出勤日</dt>
                             <dd class="col-8 text-end mb-0 fw-semibold">${formatDateForDialog(body.workDate)}</dd>

@@ -378,7 +378,6 @@ class AdjustmentScreen {
             .replace(/"/g, '&quot;')
             .replace(/'/g, '&#39;');
         const modalMessageText = [
-            '打刻修正申請の内容を確認してください。',
             `出勤 ${formatDateForDialog(clockInDate)} ${clockInTime}`,
             `退勤 ${formatDateForDialog(clockOutDate)} ${clockOutTime}`,
             `休憩 ${readableBreak}`,
@@ -388,7 +387,6 @@ class AdjustmentScreen {
         ].join('\n');
         const modalMessageHtml = `
             <div class="text-start small">
-                <p class="mb-2">打刻修正申請の内容を確認してください。</p>
                 <dl class="row g-1 mb-3 align-items-center">
                     <dt class="col-4 text-muted text-nowrap mb-0">出勤</dt>
                     <dd class="col-8 text-end mb-0 fw-semibold">${formatDateForDialog(clockInDate)} ${clockInTime}</dd>

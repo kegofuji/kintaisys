@@ -849,7 +849,6 @@ class AdminScreen {
         const reasonText = entry.reason || '（理由なし）';
         const message = `
             <div class="text-start small">
-                <p class="mb-2">休日関連申請の内容を確認してください。</p>
                 <dl class="row g-1 mb-3 align-items-center">
                     ${detailsHtml}
                     <dt class="col-4 text-muted text-nowrap mb-0">理由</dt>
@@ -1823,7 +1822,6 @@ class AdminScreen {
 
         let message = `
             <div class="text-start small">
-                <p class="mb-2">休暇付与の内容を確認してください。</p>
                 <dl class="row g-1 mb-3 align-items-center">
                     <dt class="col-4 text-muted text-nowrap mb-0">休暇種別</dt>
                     <dd class="col-8 text-end mb-0 fw-semibold">${typeLabel}</dd>
@@ -1846,7 +1844,7 @@ class AdminScreen {
         
         message += `
                 </dl>
-                <div class="alert alert-warning mb-0 py-2 px-3" role="alert" style="font-size: 15px; display: inline-flex; width: fit-content; white-space: nowrap;">この処理は取り消せません</div>
+                <div class="alert alert-warning mb-0 py-2 px-3" role="alert" style="font-size: 1rem; display: inline-flex; width: fit-content; white-space: nowrap;">この処理は取り消せません</div>
             </div>
         `;
         
@@ -2179,7 +2177,7 @@ class AdminScreen {
         }
 
         const message = `
-            <div style="font-size: 14px; line-height: 1.6;">
+            <div style="font-size: 1rem; line-height: 1.6;">
                 <p class="mb-3">${typeLabel}を${actionText}しますか？</p>
             </div>
         `;
@@ -2295,7 +2293,6 @@ class AdminScreen {
         const actionText = isApprove ? '承認' : '却下';
         const message = `
             <div class="text-start small">
-                <p class="mb-2">打刻修正申請の内容を確認してください。</p>
                 <dl class="row g-1 mb-3 align-items-center">
                     <dt class="col-4 text-muted text-nowrap mb-0">申請者</dt>
                     <dd class="col-8 text-end mb-0 fw-semibold">${this.escapeHtml(entry.employeeName)}</dd>
@@ -2821,7 +2818,6 @@ class AdminScreen {
         // 打刻修正承認モーダルと同じフォーマットで詳細情報を表示
         const message = `
             <div class="text-start small">
-                <p class="mb-2">休暇申請の内容を確認してください。</p>
                 <dl class="row g-1 mb-3 align-items-center">
                     <dt class="col-4 text-muted text-nowrap mb-0">申請者</dt>
                     <dd class="col-8 text-end mb-0 fw-semibold">${entry.employeeName}</dd>
