@@ -95,8 +95,8 @@ public class AttendanceReportService {
         html.append("<div class='report-title'>勤怠レポート</div>");
         html.append("<div class='employee-info'>");
         html.append("対象年月: ").append(formattedYearMonth).append("<br>");
-        // 社員名の表示ロジック（employeeCodeを使用）
-        html.append("社員名: ").append(employee.getEmployeeCode()).append("<br>");
+        // 社員IDの表示（employeeCodeを使用）
+        html.append("社員ID: ").append(employee.getEmployeeCode()).append("<br>");
         html.append("社員コード: ").append(employee.getEmployeeCode());
         html.append("</div>");
         html.append("</div>");
