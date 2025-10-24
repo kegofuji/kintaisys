@@ -43,6 +43,9 @@ public class AdminEmployeeController {
     @Autowired
     private AuthService authService;
 
+    @Autowired
+    private com.kintai.service.LeaveRequestService leaveRequestService;
+
     @GetMapping
     public ResponseEntity<Map<String, Object>> listEmployees() {
         List<Employee> list = employeeRepository.findAll();
@@ -210,6 +213,13 @@ public class AdminEmployeeController {
                                 userAccount.setEnabled(isActive);
                                 userAccountRepository.save(userAccount);
                             });
+                    // 退職(非アクティブ化)時は全休暇残数を0日にリセット
+                    if (!isActive) {
+                        try {
+                            leaveRequestService.resetAllLeaveBalancesToZero(employeeId);
+                        } catch (Exception ignored) {
+                        }
+                    }
                     
                     Map<String, Object> body = new HashMap<>();
                     body.put("success", true);

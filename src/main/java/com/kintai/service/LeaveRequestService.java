@@ -186,16 +186,26 @@ public class LeaveRequestService {
     public Map<LeaveType, BigDecimal> getRemainingLeaveSummary(Long employeeId) {
         Map<LeaveType, BigDecimal> summary = new EnumMap<>(LeaveType.class);
         Employee employee = employeeRepository.findByEmployeeId(employeeId).orElse(null);
+        boolean isRetired = employee != null && employee.isRetired();
         for (LeaveType type : LeaveType.values()) {
             BigDecimal remaining;
             // すべての休暇種別について残数レコードを確保
             LeaveBalance balance = leaveBalanceRepository.findByEmployeeIdAndLeaveType(employeeId, type)
                     .orElse(null);
-            if (balance == null && employee != null) {
-                // 残数レコードが存在しない場合は作成
-                balance = ensureBalance(employee, type);
+            if (balance == null) {
+                if (isRetired) {
+                    // 退職者は自動作成せず常に0を返す
+                    remaining = BigDecimal.ZERO;
+                } else if (employee != null) {
+                    // 残数レコードが存在しない場合は作成
+                    balance = ensureBalance(employee, type);
+                    remaining = balance != null ? balance.getRemainingDays() : BigDecimal.ZERO;
+                } else {
+                    remaining = BigDecimal.ZERO;
+                }
+            } else {
+                remaining = balance.getRemainingDays();
             }
-            remaining = balance != null ? balance.getRemainingDays() : BigDecimal.ZERO;
             summary.put(type, remaining);
         }
         return summary;
@@ -231,7 +241,7 @@ public class LeaveRequestService {
                            LocalDate grantedAt,
                            LocalDate expiresAt,
                            Long grantedBy) {
-        if (days == null || days.signum() <= 0) {
+        if (days == null || days.signum() == 0) {
             throw new VacationException(VacationException.INVALID_REQUEST, "付与日数が不正です");
         }
         LeaveGrant grant = new LeaveGrant(employeeId, leaveType, days, grantedAt, expiresAt, grantedBy);
@@ -242,6 +252,29 @@ public class LeaveRequestService {
                 leaveType);
         balance.addToTotal(days);
         leaveBalanceRepository.save(balance);
+    }
+
+    /**
+     * 退職時に全休暇残数を0にリセットする。
+     * レコードが存在しない場合は0で作成する。
+     */
+    public void resetAllLeaveBalancesToZero(Long employeeId) {
+        for (LeaveType type : LeaveType.values()) {
+            LeaveBalance balance = leaveBalanceRepository
+                    .findByEmployeeIdAndLeaveType(employeeId, type)
+                    .orElse(null);
+            if (balance == null) {
+                Employee employee = employeeRepository.findByEmployeeId(employeeId).orElse(null);
+                if (employee == null) {
+                    continue;
+                }
+                balance = new LeaveBalance(employeeId, type);
+            }
+            balance.setTotalDays(BigDecimal.ZERO);
+            balance.setUsedDays(BigDecimal.ZERO);
+            balance.setRemainingDays(BigDecimal.ZERO);
+            leaveBalanceRepository.save(balance);
+        }
     }
 
 

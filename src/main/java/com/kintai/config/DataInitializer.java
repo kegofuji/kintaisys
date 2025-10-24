@@ -84,55 +84,7 @@ public class DataInitializer {
             System.out.println("emp1 user already exists");
         }
         
-        // emp2用の従業員データを作成（employeeId=2、退職済み）
-        if (!employeeRepository.existsById(2L)) {
-            Employee emp2Employee = new Employee("EMP002");
-            emp2Employee.setEmployeeId(2L);
-            emp2Employee.setIsActive(false); // 退職済み
-            Employee savedEmp2 = employeeRepository.save(emp2Employee);
-            System.out.println("Created emp2 employee with ID: " + savedEmp2.getEmployeeId());
-        } else {
-            System.out.println("emp2 employee already exists");
-        }
-        
-        // emp2ユーザーアカウントを作成
-        if (!userAccountRepository.findByUsername("emp2").isPresent()) {
-            UserAccount emp2 = new UserAccount();
-            emp2.setUsername("emp2");
-            emp2.setPassword(passwordEncoder.encode("pass"));
-            emp2.setRole(UserAccount.UserRole.EMPLOYEE);
-            emp2.setEmployeeId(2L);
-            emp2.setEnabled(true); // 認証は可能だが、退職者チェックで拒否される
-            userAccountRepository.save(emp2);
-            System.out.println("Created emp2 user with employeeId: 2");
-        } else {
-            System.out.println("emp2 user already exists");
-        }
-        
-        // emp3用の従業員データを作成（employeeId=3、在籍）
-        if (!employeeRepository.existsById(3L)) {
-            Employee emp3Employee = new Employee("EMP003");
-            emp3Employee.setEmployeeId(3L);
-            emp3Employee.setIsActive(true); // 在籍
-            Employee savedEmp3 = employeeRepository.save(emp3Employee);
-            System.out.println("Created emp3 employee with ID: " + savedEmp3.getEmployeeId());
-        } else {
-            System.out.println("emp3 employee already exists");
-        }
-        
-        // emp3ユーザーアカウントを作成
-        if (!userAccountRepository.findByUsername("emp3").isPresent()) {
-            UserAccount emp3 = new UserAccount();
-            emp3.setUsername("emp3");
-            emp3.setPassword(passwordEncoder.encode("pass"));
-            emp3.setRole(UserAccount.UserRole.EMPLOYEE);
-            emp3.setEmployeeId(3L);
-            emp3.setEnabled(true);
-            userAccountRepository.save(emp3);
-            System.out.println("Created emp3 user with employeeId: 3");
-        } else {
-            System.out.println("emp3 user already exists");
-        }
+        // emp2/emp3 は生成しない（サンプルデータは emp1 のみ）
         
         // admin用の管理者データを作成（adminId=1）
         Admin adminData = new Admin("ADM001");
@@ -168,8 +120,8 @@ public class DataInitializer {
         try {
             System.out.println("DataInitializer: Initializing leave balances...");
             
-            // emp1、emp2、emp3の全てに対して休暇残数を初期化
-            Long[] employeeIds = {1L, 2L, 3L};
+            // サンプル従業員（emp1 のみ）に対して休暇残数を初期化
+            Long[] employeeIds = {1L};
             
             for (Long employeeId : employeeIds) {
                 // 各従業員に対してすべての休暇種別の残数レコードを作成（既存のものも更新）

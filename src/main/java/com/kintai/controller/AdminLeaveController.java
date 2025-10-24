@@ -9,7 +9,6 @@ import com.kintai.repository.EmployeeRepository;
 import com.kintai.repository.LeaveRequestRepository;
 import com.kintai.service.LeaveRequestService;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -223,7 +222,6 @@ public class AdminLeaveController {
         @NotBlank(message = "休暇種別は必須です")
         private String leaveType;
         @NotNull(message = "付与日数は必須です")
-        @DecimalMin(value = "0.5", message = "0.5日以上で指定してください")
         private BigDecimal grantedDays;
         private LocalDate grantedDate;
         private LocalDate expiresAt;

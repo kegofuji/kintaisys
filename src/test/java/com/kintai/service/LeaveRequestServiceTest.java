@@ -40,6 +40,9 @@ class LeaveRequestServiceTest {
     @Autowired
     private LeaveBalanceRepository leaveBalanceRepository;
 
+    @Autowired
+    private com.kintai.util.BusinessDayCalculator businessDayCalculator;
+
     private Employee employee;
     private Employee approver;
 
@@ -150,7 +153,7 @@ class LeaveRequestServiceTest {
                 expires,
                 approver.getEmployeeId());
 
-        LocalDate requestDate = LocalDate.now().plusDays(1);
+        LocalDate requestDate = nextWorkingDay(1);
         assertThatThrownBy(() -> leaveRequestService.createLeaveRequest(
                 employee.getEmployeeId(),
                 LeaveType.SUMMER,
@@ -210,7 +213,7 @@ class LeaveRequestServiceTest {
 
     @Test
     void cancellingApprovedLeaveRestoresBalance() {
-        LocalDate target = nextBusinessDay(8);
+        LocalDate target = nextWorkingDay(8);
         LeaveRequestDto dto = leaveRequestService.createLeaveRequest(
                 employee.getEmployeeId(),
                 LeaveType.PAID_LEAVE,
@@ -237,6 +240,14 @@ class LeaveRequestServiceTest {
     private LocalDate nextBusinessDay(int plusDays) {
         LocalDate date = LocalDate.now().plusDays(plusDays);
         while (date.getDayOfWeek().getValue() >= 6) { // 6=SAT,7=SUN
+            date = date.plusDays(1);
+        }
+        return date;
+    }
+
+    private LocalDate nextWorkingDay(int plusDays) {
+        LocalDate date = LocalDate.now().plusDays(plusDays);
+        while (!businessDayCalculator.isBusinessDay(date)) {
             date = date.plusDays(1);
         }
         return date;

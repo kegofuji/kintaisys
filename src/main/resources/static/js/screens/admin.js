@@ -1761,8 +1761,8 @@ class AdminScreen {
 
         // 通常の休暇の場合
         const parsed = parseFloat(this.leaveGrantDaysInput?.value ?? '0');
-        if (!Number.isFinite(parsed) || parsed <= 0) {
-            this.showAlert('付与日数を入力してください', 'warning');
+        if (!Number.isFinite(parsed) || parsed === 0) {
+            this.showAlert('付与日数は0以外で入力してください（マイナス可）', 'warning');
             this.leaveGrantDaysInput?.focus();
             return;
         }
