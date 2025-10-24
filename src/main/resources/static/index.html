@@ -1005,7 +1005,9 @@
                             <table class="table table-hover">
                                 <thead>
                                     <tr>
-                                        <th>ユーザー名</th>
+                                        <th>社員ID</th>
+                                        <th>社員名</th>
+                                        <th>誕生日</th>
                                         <th>状態</th>
                                         <th>操作</th>
                                     </tr>
@@ -1023,7 +1025,7 @@
                     <div class="modal-content">
                         <div class="modal-header">
                             <h5 class="modal-title" id="addEmployeeModalLabel">
-                                <i class="fas fa-user-plus"></i> 新規社員追加
+                                <i class="fas fa-user-plus"></i> 社員追加
                             </h5>
                             <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                         </div>
@@ -1039,6 +1041,24 @@
                                             </div>
                                             <div class="form-text">社員IDは自動で採番されます</div>
                                         </dd>
+                                        <!-- 必須: 名前 -->
+                                        <dt class="col-4 text-muted text-nowrap mb-0">名前 <span class="text-danger">*</span></dt>
+                                        <dd class="col-8 mb-0">
+                                            <div class="row g-2">
+                                                <div class="col-6">
+                                                    <input type="text" class="form-control" id="employeeLastName" name="lastName" placeholder="姓" required>
+                                                </div>
+                                                <div class="col-6">
+                                                    <input type="text" class="form-control" id="employeeFirstName" name="firstName" placeholder="名" required>
+                                                </div>
+                                            </div>
+                                        </dd>
+                                        
+                                        <!-- 任意: 誕生日 -->
+                                        <dt class="col-4 text-muted text-nowrap mb-0">誕生日（任意）</dt>
+                                        <dd class="col-8 mb-0">
+                                            <input type="date" class="form-control" id="employeeBirthday" name="birthday">
+                                        </dd>
                                         <dt class="col-4 text-muted text-nowrap mb-0">パスワード <span class="text-danger">*</span></dt>
                                         <dd class="col-8 mb-0">
                                             <input type="password" class="form-control" id="employeePassword" name="password" required>
@@ -1052,6 +1072,48 @@
                             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
                             <button type="button" class="btn btn-primary" id="submitAddEmployee">
                                 <i class="fas fa-save"></i> 社員を追加
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 社員編集モーダル -->
+            <div class="modal fade" id="editEmployeeModal" tabindex="-1" aria-labelledby="editEmployeeModalLabel" aria-hidden="true">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title" id="editEmployeeModalLabel">
+                                <i class="fas fa-edit"></i> 社員編集
+                            </h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <form id="editEmployeeForm">
+                                <input type="hidden" id="editEmployeeId">
+                                <div class="text-start">
+                                    <dl class="row g-1 align-items-center mb-0">
+                                        
+                                        <dt class="col-4 text-muted text-nowrap mb-0">名前 <span class="text-danger">*</span></dt>
+                                        <dd class="col-8 mb-0">
+                                            <div class="row g-2">
+                                                <div class="col-6"><input type="text" class="form-control" id="editLastName" placeholder="姓" required></div>
+                                                <div class="col-6"><input type="text" class="form-control" id="editFirstName" placeholder="名" required></div>
+                                            </div>
+                                        </dd>
+                                        
+                                        <dt class="col-4 text-muted text-nowrap mb-0">誕生日（任意）</dt>
+                                        <dd class="col-8 mb-0">
+                                            <input type="date" class="form-control" id="editBirthday">
+                                        </dd>
+                                    </dl>
+                                </div>
+                            </form>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                            <button type="button" class="btn btn-primary" id="saveEditEmployee">
+                                <i class="fas fa-save"></i> 保存
                             </button>
                         </div>
                     </div>
@@ -1649,8 +1711,8 @@
     <script src="/js/screens/holiday.js?v=202510231115"></script>
     <script src="/js/screens/adjustment.js"></script>
     <script src="/js/screens/work-pattern.js"></script>
-    <script src="/js/screens/admin.js?v=202510231110"></script>
+    <script src="/js/screens/admin.js?v=202510241430"></script>
     <script src="/js/utils/router.js"></script>
-    <script src="/app.js"></script>
+    <script src="/app.js?v=202510241546"></script>
 </body>
 </html>

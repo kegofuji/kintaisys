@@ -166,6 +166,8 @@ async function checkSession() {
                     window.isAdmin = false;
                 }
                 
+                // 右上表示名を先に更新（画面表示前でも反映）
+                await updateTopRightDisplayName(currentEmployeeId, currentUser);
                 await showMainInterface();
                 await loadCSRFToken();
                 await loadAttendanceHistory();
@@ -219,6 +221,7 @@ async function handleLogin(e) {
             }
             
             showAlert('ログインしました', 'success');
+            await updateTopRightDisplayName(currentEmployeeId, currentUser);
             await showMainInterface();
             await loadCSRFToken();
             await loadAttendanceHistory();
@@ -657,7 +660,8 @@ async function showMainInterface() {
     loginContainer.style.display = 'none';
     mainContainer.style.display = 'block';
     
-    currentUserSpan.textContent = currentUser;
+    // 右上の表示名を氏名優先に更新
+    await updateTopRightDisplayName(currentEmployeeId, currentUser);
     
     // 管理者権限チェック（セッション情報からroleを取得）
     await checkAdminPermissions();
@@ -693,6 +697,36 @@ async function showMainInterface() {
     }
     
     console.log('メイン画面表示完了');
+}
+
+// 右上表示名を氏名に更新（API失敗時はフォールバック）
+async function updateTopRightDisplayName(employeeId, username) {
+    try {
+        if (!currentUserSpan) return;
+        // 管理者は常に固定表示
+        if (window.isAdmin === true || username === 'admin') {
+            currentUserSpan.textContent = '管理者';
+            return;
+        }
+        if (employeeId != null) {
+            const resp = await fetch(`/api/employee/${employeeId}`, { credentials: 'include' });
+            if (resp.ok) {
+                const data = await resp.json().catch(() => null);
+                let displayName = data?.data?.displayName || '';
+                if (!displayName) {
+                    displayName = `emp${employeeId}`;
+                }
+                currentUserSpan.textContent = displayName || `emp${employeeId}` || username || 'ユーザー';
+                return;
+            }
+        }
+        // フォールバック
+        const fallback = employeeId != null ? `emp${employeeId}` : (username || 'ユーザー');
+        currentUserSpan.textContent = fallback || 'ユーザー';
+    } catch (e) {
+        const fallback = employeeId != null ? `emp${employeeId}` : (username || 'ユーザー');
+        currentUserSpan.textContent = fallback || 'ユーザー';
+    }
 }
 
 // アラート表示

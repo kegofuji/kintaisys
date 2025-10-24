@@ -276,13 +276,32 @@ class App {
         window.currentEmployeeId = employeeId;
         this.updateAdminMenu();
         
-        // ユーザー名表示を更新
+        // 右上表示を氏名に変更（取得できない場合はユーザー名）
         const currentUserDisplay = document.getElementById('currentUserDisplay');
-        if (currentUserDisplay) {
-            currentUserDisplay.textContent = username || 'ユーザー名';
-            console.log('ユーザー名表示を更新:', username);
-        } else {
-            console.error('currentUserDisplay要素が見つかりません');
+        if (currentUserDisplay && employeeId != null) {
+            // 管理者は常に固定表示
+            if (window.isAdmin === true || username === 'admin') {
+                currentUserDisplay.textContent = '管理者';
+                return;
+            }
+            try {
+                fetchWithAuth.handleApiCall(
+                    () => fetchWithAuth.get(`/api/employee/${employeeId}`),
+                    'ユーザー情報の取得に失敗しました'
+                ).then((data) => {
+                    let displayName = data?.data?.displayName || '';
+                    if (!displayName) {
+                        displayName = `emp${employeeId}`;
+                    }
+                    currentUserDisplay.textContent = displayName || `emp${employeeId}` || username || 'ユーザー';
+                }).catch(() => {
+                    const fallback = employeeId != null ? `emp${employeeId}` : (username || 'ユーザー');
+                    currentUserDisplay.textContent = fallback || 'ユーザー';
+                });
+            } catch (e) {
+                const fallback = employeeId != null ? `emp${employeeId}` : (username || 'ユーザー');
+                currentUserDisplay.textContent = fallback || 'ユーザー';
+            }
         }
     }
 

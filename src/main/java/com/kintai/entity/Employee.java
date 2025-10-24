@@ -2,6 +2,7 @@ package com.kintai.entity;
 
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
+import java.time.LocalDate;
 
 /**
  * 従業員エンティティ
@@ -18,6 +19,21 @@ public class Employee {
     @Column(name = "employee_code", nullable = false, unique = true)
     private String employeeCode;
     
+    // プロフィール項目
+    @Column(name = "last_name")
+    private String lastName;
+
+    @Column(name = "first_name")
+    private String firstName;
+
+    @Column(name = "last_kana")
+    private String lastKana;
+
+    @Column(name = "first_kana")
+    private String firstKana;
+
+    @Column(name = "birthday")
+    private LocalDate birthday;
     
     @Column(name = "is_active", nullable = false, columnDefinition = "BOOLEAN DEFAULT TRUE")
     private Boolean isActive = true;
@@ -111,6 +127,21 @@ public class Employee {
         this.updatedAt = updatedAt;
     }
     
+    public String getLastName() { return lastName; }
+    public void setLastName(String lastName) { this.lastName = lastName; }
+
+    public String getFirstName() { return firstName; }
+    public void setFirstName(String firstName) { this.firstName = firstName; }
+
+    public String getLastKana() { return lastKana; }
+    public void setLastKana(String lastKana) { this.lastKana = lastKana; }
+
+    public String getFirstKana() { return firstKana; }
+    public void setFirstKana(String firstKana) { this.firstKana = firstKana; }
+
+    public LocalDate getBirthday() { return birthday; }
+    public void setBirthday(LocalDate birthday) { this.birthday = birthday; }
+
     /**
      * 退職済みかどうかを判定
      * @return 退職済みの場合true

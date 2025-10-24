@@ -64,6 +64,9 @@ public class DataInitializer {
             Employee emp1Employee = new Employee("EMP001");
             emp1Employee.setEmployeeId(1L);
             emp1Employee.setIsActive(true);
+            // 表示名が emp1 にフォールバックしないよう、氏名を初期設定（テスト仕様）
+            emp1Employee.setLastName("テスト");
+            emp1Employee.setFirstName("");
             Employee savedEmp1 = employeeRepository.save(emp1Employee);
             System.out.println("Created emp1 employee with ID: " + savedEmp1.getEmployeeId());
         } else {

@@ -186,7 +186,31 @@ class LoginScreen {
         }
 
         if (currentUserDisplay) {
-            currentUserDisplay.textContent = window.currentUser || 'ユーザー名';
+            const username = window.currentUser;
+            const employeeId = window.currentEmployeeId;
+            // 管理者は常に固定表示
+            if (window.isAdmin === true || username === 'admin') {
+                currentUserDisplay.textContent = '管理者';
+                return;
+            }
+            if (employeeId != null) {
+                fetchWithAuth.handleApiCall(
+                    () => fetchWithAuth.get(`/api/employee/${employeeId}`),
+                    'ユーザー情報の取得に失敗しました'
+                ).then((data) => {
+                    let displayName = data?.data?.displayName || '';
+                    if (!displayName) {
+                        displayName = `emp${employeeId}`;
+                    }
+                    currentUserDisplay.textContent = displayName || `emp${employeeId}` || username || 'ユーザー';
+                }).catch(() => {
+                    const fallback = employeeId != null ? `emp${employeeId}` : (username || 'ユーザー');
+                    currentUserDisplay.textContent = fallback || 'ユーザー';
+                });
+            } else {
+                const fallback = employeeId != null ? `emp${employeeId}` : (username || 'ユーザー');
+                currentUserDisplay.textContent = fallback || 'ユーザー';
+            }
         }
 
         // 管理者メニューの表示/非表示を制御

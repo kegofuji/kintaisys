@@ -123,6 +123,15 @@ public class AdminEmployeeController {
             // 社員作成
             System.out.println("社員作成開始...");
             Employee emp = new Employee(employeeCode);
+            // 任意項目を保存
+            if (req.lastName != null) emp.setLastName(req.lastName);
+            if (req.firstName != null) emp.setFirstName(req.firstName);
+            // ふりがな項目は廃止
+            if (req.birthday != null && !req.birthday.isBlank()) {
+                try {
+                    emp.setBirthday(java.time.LocalDate.parse(req.birthday));
+                } catch (Exception ignored) {}
+            }
             emp = employeeRepository.save(emp);
             System.out.println("社員作成完了: ID=" + emp.getEmployeeId());
 
@@ -293,6 +302,9 @@ public class AdminEmployeeController {
         public String employeeCode;
         public String username; // ログインID（必須）
         public String password; // 平文→エンコード（必須）
+        public String lastName;
+        public String firstName;
+        public String birthday; // YYYY-MM-DD
         
         @Override
         public String toString() {
@@ -300,8 +312,62 @@ public class AdminEmployeeController {
                     "employeeCode='" + employeeCode + '\'' +
                     ", username='" + username + '\'' +
                     ", password='[設定済み]'" +
+                    ", lastName='" + lastName + '\'' +
+                    ", firstName='" + firstName + '\'' +
+                    ", birthday='" + birthday + '\'' +
                     '}';
         }
+    }
+
+    /**
+     * 社員プロフィール更新
+     */
+    @PutMapping(value = "/{employeeId}", consumes = "application/json", produces = "application/json")
+    public ResponseEntity<Map<String, Object>> updateEmployeeProfile(@PathVariable Long employeeId, @RequestBody UpdateEmployeeRequest req) {
+        return employeeRepository.findById(employeeId)
+                .map(emp -> {
+                    if (req.lastName == null || req.firstName == null) {
+                        Map<String, Object> body = new HashMap<>();
+                        body.put("success", false);
+                        body.put("message", "名前は必須です");
+                        return ResponseEntity.badRequest().body(body);
+                    }
+
+                    emp.setLastName(req.lastName);
+                    emp.setFirstName(req.firstName);
+                    // ふりがなは更新対象外（廃止）
+                    if (req.birthday != null && !req.birthday.isBlank()) {
+                        try { emp.setBirthday(java.time.LocalDate.parse(req.birthday)); } catch (Exception ignored) {}
+                    } else {
+                        emp.setBirthday(null);
+                    }
+                    employeeRepository.save(emp);
+
+                    Map<String, Object> body = new HashMap<>();
+                    body.put("success", true);
+                    body.put("message", "社員情報を更新しました");
+                    return ResponseEntity.ok(body);
+                })
+                .orElseGet(() -> {
+                    Map<String, Object> body = new HashMap<>();
+                    body.put("success", false);
+                    body.put("message", "従業員が見つかりません");
+                    return ResponseEntity.status(HttpStatus.NOT_FOUND).body(body);
+                });
+    }
+
+    /**
+     * 互換: 一部環境でPUTがブロックされる場合のフォールバック
+     */
+    @PostMapping(value = "/{employeeId}", consumes = "application/json", produces = "application/json")
+    public ResponseEntity<Map<String, Object>> updateEmployeeProfilePost(@PathVariable Long employeeId, @RequestBody UpdateEmployeeRequest req) {
+        return updateEmployeeProfile(employeeId, req);
+    }
+
+    public static class UpdateEmployeeRequest {
+        public String lastName;
+        public String firstName;
+        public String birthday; // YYYY-MM-DD or null
     }
 }
 

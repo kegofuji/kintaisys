@@ -1215,9 +1215,13 @@ class AdminScreen {
                 row.classList.add('table-secondary');
             }
             
-            // ユーザー名を取得（UserAccountから取得するか、デフォルト値を使用）
-            const username = employee.username || `emp${employee.employeeId}`;
-            const displayName = `${employee.lastName || 'ユーザー'} ${employee.firstName || username}`;
+            // 表示値: 社員IDと社員名
+            const username = employee.username || `emp${employee.employeeId}`; // 既存フォールバックは維持
+            const employeeIdDisplay = `emp${employee.employeeId}`;
+            let displayName = `${employee.lastName || ''} ${employee.firstName || ''}`.trim();
+            if (!displayName) {
+                displayName = employeeIdDisplay; // 氏名未設定時は社員IDで表示
+            }
             const email = employee.email || `${username}@example.com`;
             const hireDate = employee.hireDate ? new Date(employee.hireDate).toLocaleDateString('ja-JP') : '-';
 
@@ -1225,16 +1229,27 @@ class AdminScreen {
             const vacationAdjustButton = '';
 
             // 退職済み社員には復職処理ボタンも表示しない（通常の業務フローでは復職は稀）
+            const editButton = `<button class="btn btn-sm btn-outline-primary me-1 edit-employee-btn" data-employee-id="${employee.employeeId}">
+                     <i class="fas fa-edit"></i> 編集
+                   </button>`;
             const deactivateButton = employee.isActive 
                 ? `<button class="btn btn-sm ${deactivateClass} deactivate-employee-btn" data-employee-id="${employee.employeeId}">
                      <i class="fas fa-user-times"></i> ${deactivateText}
                    </button>`
                 : '';
 
+            // ふりがなは廃止
+            const birthday = employee.birthday || employee.birthDate || employee.dateOfBirth;
+            const birthdayDisplay = birthday ? new Date(birthday).toLocaleDateString('ja-JP') : '-';
+
             row.innerHTML = `
-                <td>${username}</td>
+                <td>${employeeIdDisplay}</td>
+                <td>${displayName}</td>
+                
+                <td>${birthdayDisplay}</td>
                 <td><span class="${statusClass}">${statusText}</span></td>
                 <td>
+                    ${editButton}
                     ${vacationAdjustButton}
                     ${deactivateButton}
                 </td>
@@ -2891,8 +2906,100 @@ class AdminScreen {
      * @param {number} employeeId - 社員ID
      */
     async editEmployee(employeeId) {
-        // 有休調整機能は廃止
-        this.showAlert('有休調整機能は廃止されました', 'info');
+        // 対象社員をキャッシュから取得
+        const employee = (this.employeeCache || []).find(emp => emp.employeeId === employeeId);
+        if (!employee) {
+            this.showAlert('社員情報が見つかりません', 'danger');
+            return;
+        }
+
+        // モーダル要素
+        const modalEl = document.getElementById('editEmployeeModal');
+        const idEl = document.getElementById('editEmployeeId');
+        const lastNameEl = document.getElementById('editLastName');
+        const firstNameEl = document.getElementById('editFirstName');
+        // ふりがな入力は廃止
+        const birthdayEl = document.getElementById('editBirthday');
+        const saveBtn = document.getElementById('saveEditEmployee');
+
+        if (!modalEl || !idEl || !lastNameEl || !firstNameEl || !birthdayEl || !saveBtn) {
+            this.showAlert('編集モーダルの初期化に失敗しました', 'danger');
+            return;
+        }
+
+        // 値をセット
+        idEl.value = String(employee.employeeId);
+        lastNameEl.value = employee.lastName || '';
+        firstNameEl.value = employee.firstName || '';
+        if (employee.birthday) {
+            // YYYY-MM-DD形式に整形
+            const d = new Date(employee.birthday);
+            if (!isNaN(d)) {
+                const y = d.getFullYear();
+                const m = String(d.getMonth() + 1).padStart(2, '0');
+                const day = String(d.getDate()).padStart(2, '0');
+                birthdayEl.value = `${y}-${m}-${day}`;
+            } else {
+                birthdayEl.value = '';
+            }
+        } else {
+            birthdayEl.value = '';
+        }
+
+        // 保存ボタンの既存リスナーを一旦解除してから登録
+        if (this._boundSaveEditHandler) {
+            saveBtn.removeEventListener('click', this._boundSaveEditHandler);
+        }
+        this._boundSaveEditHandler = async () => {
+            const update = {
+                lastName: lastNameEl.value.trim(),
+                firstName: firstNameEl.value.trim(),
+                birthday: birthdayEl.value.trim() || null
+            };
+
+            // 必須チェック: 名前
+            if (!update.lastName || !update.firstName) {
+                this.showAlert('名前（姓・名）は必須です', 'warning');
+                return;
+            }
+
+            try {
+                const payload = { ...update };
+                let data;
+                try {
+                    data = await fetchWithAuth.handleApiCall(
+                        () => fetchWithAuth.put(`/api/admin/employee-management/${employee.employeeId}`, payload),
+                        '社員情報の更新に失敗しました'
+                    );
+                } catch (e) {
+                    // 一部環境でPUTがブロックされる場合にPOSTフォールバック
+                    data = await fetchWithAuth.handleApiCall(
+                        () => fetchWithAuth.post(`/api/admin/employee-management/${employee.employeeId}`, payload),
+                        '社員情報の更新に失敗しました'
+                    );
+                }
+
+                if (data?.success) {
+                    // キャッシュ更新
+                    const idx = (this.employeeCache || []).findIndex(e => e.employeeId === employee.employeeId);
+                    if (idx >= 0) {
+                        this.employeeCache[idx] = { ...this.employeeCache[idx], ...update };
+                    }
+                    this.displayEmployees(this.employeeCache);
+                    bootstrap.Modal.getOrCreateInstance(modalEl).hide();
+                    this.showAlert(data.message || '社員情報を更新しました', 'success');
+                } else {
+                    this.showAlert(data?.message || '社員情報の更新に失敗しました', 'danger');
+                }
+            } catch (error) {
+                console.error('社員編集エラー:', error);
+                this.showAlert(error.message || '社員情報の更新に失敗しました', 'danger');
+            }
+        };
+        saveBtn.addEventListener('click', this._boundSaveEditHandler);
+
+        // モーダル表示
+        bootstrap.Modal.getOrCreateInstance(modalEl).show();
     }
 
     /**
@@ -3444,7 +3551,10 @@ class AdminScreen {
         const formData = new FormData(form);
         const employeeData = {
             username: 'emp', // ユーザー名はempで固定（バックエンドで自動採番）
-            password: formData.get('password')?.trim()
+            password: formData.get('password')?.trim(),
+            lastName: formData.get('lastName')?.trim(),
+            firstName: formData.get('firstName')?.trim(),
+            birthday: formData.get('birthday')?.trim() || null
         };
 
         // バリデーション
@@ -3457,7 +3567,12 @@ class AdminScreen {
             return;
         }
         
-        // パスワード強度チェックは撤廃
+        // 必須チェック
+        if (!employeeData.lastName || !employeeData.firstName) {
+            this.showAlert('名前（姓・名）は必須です', 'warning');
+            return;
+        }
+        // ふりがな必須チェックは廃止
 
         // 送信ボタンを無効化
         const submitBtn = document.getElementById('submitAddEmployee');
