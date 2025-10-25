@@ -32,6 +32,7 @@ class VacationScreen {
         this.listenersBound = false;
         this.remainingByType = {};
         this.activeGrantsByType = new Map();
+        this.workPatternData = null; // 勤務時間変更申請データ
 
         this.leaveTypeDisplayMap = {
             PAID_LEAVE: '有休',
@@ -249,10 +250,33 @@ class VacationScreen {
         }
         await Promise.all([
             this.loadRemainingVacationDays(),
-            this.loadActiveGrants()
+            this.loadActiveGrants(),
+            this.loadWorkPatternData()
         ]);
         this.updateLeaveTypeAvailability();
         this.handleLeaveTypeChange();
+    }
+
+    /**
+     * 勤務時間変更申請データの読み込み
+     */
+    async loadWorkPatternData() {
+        if (!window.currentEmployeeId) {
+            return;
+        }
+
+        try {
+            const response = await fetchWithAuth.handleApiCall(
+                () => fetchWithAuth.get(`/api/work-pattern-change/requests/${window.currentEmployeeId}`),
+                '勤務時間変更申請の取得に失敗しました'
+            );
+            
+            this.workPatternData = Array.isArray(response?.data) ? response.data : [];
+            console.log('勤務時間変更申請データを読み込みました:', this.workPatternData);
+        } catch (error) {
+            console.error('勤務時間変更申請データの読み込みエラー:', error);
+            this.workPatternData = [];
+        }
     }
 
     /**
@@ -858,7 +882,7 @@ class VacationScreen {
     }
 
     /**
-     * 申請日数計算
+     * 申請日数計算（勤務日のみをカウント）
      */
     calculateRequestedDays(start, end, timeUnit) {
         if (!start || !end || Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
@@ -871,10 +895,100 @@ class VacationScreen {
         let count = 0;
         const cursor = new Date(start.getTime());
         while (cursor <= end) {
-            count += 1;
+            if (this.isWorkingDay(cursor)) {
+                count += 1;
+            }
             cursor.setDate(cursor.getDate() + 1);
         }
         return count;
+    }
+
+    /**
+     * 指定日が勤務日かどうかを判定（勤務時間変更の休日を考慮）
+     */
+    isWorkingDay(date) {
+        if (!date || Number.isNaN(date.getTime())) {
+            return false;
+        }
+
+        // 土日祝日の基本判定
+        const dayOfWeek = date.getDay();
+        const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+        const isHoliday = BusinessDayUtils.isHoliday(date);
+
+        // 勤務時間変更申請がない場合は基本判定のみ
+        if (!this.workPatternData) {
+            return !isWeekend && !isHoliday;
+        }
+
+        // 勤務時間変更申請がある場合は、その申請の勤務パターンに基づいて判定
+        const applicablePattern = this.findApplicableWorkPattern(date);
+        if (applicablePattern) {
+            return applicablePattern.appliesTo(date, isHoliday);
+        }
+
+        // 勤務時間変更申請がない場合は基本判定
+        return !isWeekend && !isHoliday;
+    }
+
+    /**
+     * 指定日に適用される勤務時間変更申請を検索
+     */
+    findApplicableWorkPattern(date) {
+        if (!this.workPatternData || !Array.isArray(this.workPatternData)) {
+            return null;
+        }
+
+        const dateString = this.formatDateString(date);
+        const targetDate = new Date(date);
+
+        for (const pattern of this.workPatternData) {
+            if (pattern.status !== 'APPROVED') {
+                continue;
+            }
+
+            const startDate = new Date(pattern.startDate);
+            const endDate = new Date(pattern.endDate);
+
+            if (targetDate >= startDate && targetDate <= endDate) {
+                return {
+                    appliesTo: (date, isHoliday) => {
+                        const dayOfWeek = date.getDay();
+                        const dayNames = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
+                        const dayName = dayNames[dayOfWeek];
+
+                        // 祝日かつ applyHoliday=false の場合は休日扱い
+                        if (isHoliday && !pattern.applyHoliday) {
+                            return false;
+                        }
+
+                        // 各曜日の適用判定
+                        switch (dayName) {
+                            case 'MONDAY': return pattern.applyMonday;
+                            case 'TUESDAY': return pattern.applyTuesday;
+                            case 'WEDNESDAY': return pattern.applyWednesday;
+                            case 'THURSDAY': return pattern.applyThursday;
+                            case 'FRIDAY': return pattern.applyFriday;
+                            case 'SATURDAY': return pattern.applySaturday;
+                            case 'SUNDAY': return pattern.applySunday;
+                            default: return false;
+                        }
+                    }
+                };
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * 日付を文字列形式に変換
+     */
+    formatDateString(date) {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
     }
 
     /**
