@@ -321,7 +321,6 @@ class AdminScreen {
         this.dashboardLeaveCount = document.getElementById('adminDashboardLeaveCount') || this.dashboardLeaveCount;
         this.dashboardHolidayCount = document.getElementById('adminDashboardHolidayCount') || this.dashboardHolidayCount;
         this.dashboardRefreshButton = document.getElementById('adminDashboardRefreshBtn') || this.dashboardRefreshButton;
-        this.dashboardUpdatedAt = document.getElementById('adminDashboardUpdatedAt') || this.dashboardUpdatedAt;
 
         this.dashboardLinks = [
             { element: document.getElementById('adminDashboardAdjustmentLink'), path: '/admin/approvals' },
@@ -336,9 +335,6 @@ class AdminScreen {
                     el.textContent = '--';
                 }
             });
-            if (this.dashboardUpdatedAt) {
-                this.dashboardUpdatedAt.textContent = '--';
-            }
             this.dashboardInitialized = true;
         }
     }
@@ -427,19 +423,12 @@ class AdminScreen {
             }
         }
 
-        if (isLoading) {
-            if (this.dashboardUpdatedAt) {
-                this.dashboardUpdatedAt.classList.remove('text-danger');
-                this.dashboardUpdatedAt.classList.add('text-muted');
-                this.dashboardUpdatedAt.textContent = '更新中...';
-            }
-            if (!this.dashboardHasData) {
-                this.getDashboardCountElements().forEach(el => {
-                    if (el) {
-                        el.textContent = '--';
-                    }
-                });
-            }
+        if (isLoading && !this.dashboardHasData) {
+            this.getDashboardCountElements().forEach(el => {
+                if (el) {
+                    el.textContent = '--';
+                }
+            });
         }
     }
 
@@ -448,20 +437,6 @@ class AdminScreen {
         this.setDashboardCount(this.dashboardWorkPatternCount, summary.workPatternPending);
         this.setDashboardCount(this.dashboardLeaveCount, summary.leavePending);
         this.setDashboardCount(this.dashboardHolidayCount, summary.holidayPending);
-
-        if (this.dashboardUpdatedAt) {
-            this.dashboardUpdatedAt.classList.remove('text-danger');
-            this.dashboardUpdatedAt.classList.add('text-muted');
-            const now = new Date();
-            const formatted = now.toLocaleString('ja-JP', {
-                year: 'numeric',
-                month: '2-digit',
-                day: '2-digit',
-                hour: '2-digit',
-                minute: '2-digit'
-            });
-            this.dashboardUpdatedAt.textContent = `最終更新: ${formatted}`;
-        }
 
         this.dashboardHasData = true;
     }
@@ -479,11 +454,6 @@ class AdminScreen {
                     el.textContent = '-';
                 }
             });
-        }
-        if (this.dashboardUpdatedAt) {
-            this.dashboardUpdatedAt.classList.remove('text-muted');
-            this.dashboardUpdatedAt.classList.add('text-danger');
-            this.dashboardUpdatedAt.textContent = '更新に失敗しました';
         }
     }
 

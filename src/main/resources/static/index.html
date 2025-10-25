@@ -241,6 +241,52 @@
             font-weight: 500;
         }
         
+        .balance-card {
+            border: 1px solid #e9ecef;
+            border-radius: 16px;
+            background-color: #fff;
+            padding: 1.5rem;
+            box-shadow: none;
+            transition: none;
+        }
+
+        .balance-card:hover {
+            transform: none;
+            box-shadow: none;
+        }
+
+        .balance-type {
+            font-size: 0.95rem;
+            color: #6c757d;
+            font-weight: 600;
+        }
+
+        .balance-count {
+            font-size: 2.4rem;
+            font-weight: 700;
+            color: #212529;
+            line-height: 1;
+        }
+
+        .balance-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background-color: #eef4ff;
+            color: #0d6efd;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+        }
+
+        .balance-validity {
+            font-size: 0.85rem;
+            color: #6c757d;
+            margin-top: 1.5rem;
+            min-height: 1.2rem;
+        }
+        
         .badge-sm {
             font-size: 0.7em;
             padding: 0.25em 0.4em;
@@ -686,42 +732,45 @@
                                     <i class="fas fa-sync-alt me-1"></i>更新
                                 </button>
                             </div>
-                            <div class="row g-2 mb-3">
-                                <div class="col-6">
-                                    <div class="card border-secondary h-100">
-                                        <div class="card-body text-center py-3">
-                                            <div class="h5 mb-1 text-dark" id="paidLeaveRemaining">--</div>
-                                            <small class="text-muted">有休休暇</small>
+                            <div class="row row-cols-1 row-cols-md-2 row-cols-xl-4 g-3">
+                                <div class="col">
+                                    <div class="balance-card h-100">
+                                        <div class="d-flex justify-content-between align-items-start mb-2">
+                                            <p class="balance-type mb-0">有休休暇</p>
+                                            <div class="balance-icon"><i class="fas fa-suitcase-rolling"></i></div>
                                         </div>
+                                        <p class="balance-count mb-0" id="paidLeaveRemaining">--</p>
+                                        <p class="balance-validity mb-0" id="paidLeaveValidity">&nbsp;</p>
                                     </div>
                                 </div>
-                                <div class="col-6">
-                                    <div class="card border-secondary h-100">
-                                        <div class="card-body text-center py-3">
-                                            <div class="h5 mb-1 text-dark" id="summerLeaveRemaining">--</div>
-                                            <small class="text-muted">夏季休暇</small>
-                                            <div class="small text-dark mt-1 fw-bold" id="summerValidity" style="display: none;"><i class="fas fa-calendar-alt me-1"></i>有効期限：未設定</div>
+                                <div class="col">
+                                    <div class="balance-card h-100">
+                                        <div class="d-flex justify-content-between align-items-start mb-2">
+                                            <p class="balance-type mb-0">夏季休暇</p>
+                                            <div class="balance-icon"><i class="fas fa-sun"></i></div>
                                         </div>
+                                        <p class="balance-count mb-0" id="summerLeaveRemaining">--</p>
+                                        <p class="balance-validity mb-0" id="summerValidity">&nbsp;</p>
                                     </div>
                                 </div>
-                            </div>
-                            <div class="row g-2">
-                                <div class="col-6">
-                                    <div class="card border-secondary h-100">
-                                        <div class="card-body text-center py-3">
-                                            <div class="h5 mb-1 text-dark" id="winterLeaveRemaining">--</div>
-                                            <small class="text-muted">冬季休暇</small>
-                                            <div class="small text-dark mt-1 fw-bold" id="winterValidity" style="display: none;"><i class="fas fa-calendar-alt me-1"></i>有効期限：未設定</div>
+                                <div class="col">
+                                    <div class="balance-card h-100">
+                                        <div class="d-flex justify-content-between align-items-start mb-2">
+                                            <p class="balance-type mb-0">冬季休暇</p>
+                                            <div class="balance-icon"><i class="fas fa-snowflake"></i></div>
                                         </div>
+                                        <p class="balance-count mb-0" id="winterLeaveRemaining">--</p>
+                                        <p class="balance-validity mb-0" id="winterValidity">&nbsp;</p>
                                     </div>
                                 </div>
-                                <div class="col-6">
-                                    <div class="card border-secondary h-100">
-                                        <div class="card-body text-center py-3">
-                                            <div class="h5 mb-1 text-dark" id="specialLeaveRemaining">--</div>
-                                            <small class="text-muted">特別休暇</small>
-                                            <div class="small text-dark mt-1 fw-bold" id="specialValidity" style="display: none;"><i class="fas fa-calendar-alt me-1"></i>有効期限：未設定</div>
+                                <div class="col">
+                                    <div class="balance-card h-100">
+                                        <div class="d-flex justify-content-between align-items-start mb-2">
+                                            <p class="balance-type mb-0">特別休暇</p>
+                                            <div class="balance-icon"><i class="fas fa-gift"></i></div>
                                         </div>
+                                        <p class="balance-count mb-0" id="specialLeaveRemaining">--</p>
+                                        <p class="balance-validity mb-0" id="specialValidity">&nbsp;</p>
                                     </div>
                                 </div>
                             </div>
@@ -1029,22 +1078,15 @@
                 </div>
             </div>
 
-            <!-- 管理者TOP画面 -->
             <div id="adminDashboardScreen" class="screen-container">
                 <div class="card shadow-sm">
                     <div class="card-header d-flex align-items-center justify-content-between">
-                        <h5 class="mb-0">管理者ダッシュボード</h5>
-                        <div class="d-flex align-items-center gap-2">
-                            <span class="text-muted small" id="adminDashboardUpdatedAt">--</span>
-                            <button class="btn btn-outline-secondary btn-sm" id="adminDashboardRefreshBtn">
-                                <i class="fas fa-rotate-right me-1"></i>更新
-                            </button>
-                        </div>
+                        <h5 class="mb-0">未処理申請件数</h5>
+                        <button class="btn btn-outline-primary btn-sm" id="adminDashboardRefreshBtn">
+                            <i class="fas fa-sync-alt me-1"></i>更新
+                        </button>
                     </div>
                     <div class="card-body py-4">
-                        <p class="text-muted mb-4 small">
-                            主要な申請の未承認件数を表示しています。詳細は各リンクから確認できます。
-                        </p>
                         <div class="row g-3">
                             <div class="col-12 col-md-6 col-xl-3">
                                 <div class="admin-dashboard-card h-100 position-relative p-3">
@@ -1057,7 +1099,7 @@
                                             <i class="fas fa-clock-rotate-left"></i>
                                         </div>
                                     </div>
-                                    <p class="text-muted small mb-3">打刻修正申請の承認待ち件数です。</p>
+                                    <p class="text-muted small mb-3">打刻修正申請の未処理件数です。</p>
                                     <a href="/admin/approvals" id="adminDashboardAdjustmentLink" class="stretched-link admin-dashboard-link text-decoration-none">
                                         詳細を見る
                                     </a>
@@ -1074,7 +1116,7 @@
                                             <i class="fas fa-business-time"></i>
                                         </div>
                                     </div>
-                                    <p class="text-muted small mb-3">勤務時間変更申請の承認待ち件数です。</p>
+                                    <p class="text-muted small mb-3">勤務時間変更申請の未処理件数です。</p>
                                     <a href="/admin/work-pattern-change" id="adminDashboardWorkPatternLink" class="stretched-link admin-dashboard-link text-decoration-none">
                                         詳細を見る
                                     </a>
@@ -1091,7 +1133,7 @@
                                             <i class="fas fa-umbrella-beach"></i>
                                         </div>
                                     </div>
-                                    <p class="text-muted small mb-3">休暇申請（有休等）の承認待ち件数です。</p>
+                                    <p class="text-muted small mb-3">休暇申請（有休等）の未処理件数です。</p>
                                     <a href="/admin/vacation-management" id="adminDashboardLeaveLink" class="stretched-link admin-dashboard-link text-decoration-none">
                                         詳細を見る
                                     </a>
@@ -1108,7 +1150,7 @@
                                             <i class="fas fa-calendar-day"></i>
                                         </div>
                                     </div>
-                                    <p class="text-muted small mb-3">休日出勤・振替申請の承認待ち件数です。</p>
+                                    <p class="text-muted small mb-3">休日出勤・振替申請の未処理件数です。</p>
                                     <a href="/admin/holiday" id="adminDashboardHolidayLink" class="stretched-link admin-dashboard-link text-decoration-none">
                                         詳細を見る
                                     </a>
@@ -1124,8 +1166,8 @@
                 <div class="card">
                     <div class="card-header d-flex justify-content-between align-items-center">
                         <h5 class="mb-0">社員管理</h5>
-                        <button class="btn btn-primary btn-sm" id="addEmployeeBtn">
-                            <i class="fas fa-user-plus"></i> 社員追加
+                        <button class="btn btn-outline-primary btn-sm" id="addEmployeeBtn">
+                            <i class="fas fa-user-plus me-1"></i>社員追加
                         </button>
                     </div>
                     <div class="card-body">
@@ -1822,6 +1864,22 @@
         .employee-row-retired {
             background-color: #f8f9fa !important;
             color: #6c757d !important;
+        }
+        
+        /* カレンダー内の各種申請バッジを塗りつぶしではなく外枠表示に */
+        #calendarContainer .badge {
+            color: #000000 !important;
+            background-color: transparent !important;
+            border: 2px solid #000000 !important;
+            border-radius: 0 !important;
+        }
+        #calendarContainer .badge.bg-success { border-color: #198754 !important; }
+        #calendarContainer .badge.bg-warning { border-color: #ffc107 !important; }
+        #calendarContainer .badge.bg-danger  { border-color: #dc3545 !important; }
+        
+        /* ホバー中のセルでは勤怠詳細の背景を白に固定 */
+        #calendarContainer .calendar-day:hover .attendance-info {
+            background-color: #ffffff !important;
         }
     </style>
 

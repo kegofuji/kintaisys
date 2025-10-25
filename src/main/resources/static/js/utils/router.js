@@ -63,7 +63,7 @@ class Router {
         this.routes.set('/holiday', { screen: 'holidayScreen', title: '休日関連' });
         
         // 管理者向けルート
-        this.routes.set('/admin', { screen: 'adminDashboardScreen', title: '管理者TOP', admin: true });
+        this.routes.set('/admin', { screen: 'adminDashboardScreen', title: '未処理申請件数', admin: true });
         this.routes.set('/admin/employees', { screen: 'adminEmployeesScreen', title: '社員管理', admin: true });
         // 勤怠管理画面は廃止
         this.routes.set('/admin/approvals', { screen: 'adminApprovalsScreen', title: '打刻修正', admin: true });

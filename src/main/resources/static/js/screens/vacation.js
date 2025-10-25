@@ -13,6 +13,7 @@ class VacationScreen {
         this.validityInfo = null;
         this.validityDetails = null;
         this.paidLeaveRemaining = null;
+        this.paidLeaveValidity = null;
         this.summerLeaveRemaining = null;
         this.winterLeaveRemaining = null;
         this.specialLeaveRemaining = null;
@@ -71,6 +72,7 @@ class VacationScreen {
         this.validityInfo = document.getElementById('vacationValidityInfo');
         this.validityDetails = document.getElementById('validityDetails');
         this.paidLeaveRemaining = document.getElementById('paidLeaveRemaining');
+        this.paidLeaveValidity = document.getElementById('paidLeaveValidity');
         this.summerLeaveRemaining = document.getElementById('summerLeaveRemaining');
         this.winterLeaveRemaining = document.getElementById('winterLeaveRemaining');
         this.specialLeaveRemaining = document.getElementById('specialLeaveRemaining');
@@ -299,28 +301,28 @@ class VacationScreen {
         // 有休休暇の表示
         if (this.paidLeaveRemaining) {
             const paidLeaveDays = this.getRemainingDays('PAID_LEAVE');
-            console.log('有休休暇残日数:', paidLeaveDays);
-            this.paidLeaveRemaining.textContent = paidLeaveDays % 1 === 0 ? paidLeaveDays + '日' : paidLeaveDays.toFixed(1) + '日';
+            this.paidLeaveRemaining.textContent = paidLeaveDays % 1 === 0 ? `${paidLeaveDays}日` : `${paidLeaveDays.toFixed(1)}日`;
+            if (this.paidLeaveValidity) {
+                const paidValidity = this.getValidityPeriod('PAID_LEAVE');
+                if (paidValidity) {
+                    this.paidLeaveValidity.textContent = `有効期限：${paidValidity}`;
+                } else {
+                    this.paidLeaveValidity.innerHTML = '&nbsp;';
+                }
+            }
         }
 
         // 夏季休暇の表示
         if (this.summerLeaveRemaining) {
             const summerDays = this.getRemainingDays('SUMMER');
-            this.summerLeaveRemaining.textContent = summerDays % 1 === 0 ? summerDays + '日' : summerDays.toFixed(1) + '日';
-            
-            // 夏季休暇の有効期限
+            this.summerLeaveRemaining.textContent = summerDays % 1 === 0 ? `${summerDays}日` : `${summerDays.toFixed(1)}日`;
+
             const summerValidity = this.getValidityPeriod('SUMMER');
-            console.log('夏季休暇の有効期限情報:', summerValidity);
-            console.log('this.summerValidity要素:', this.summerValidity);
             if (this.summerValidity) {
                 if (summerValidity) {
-                    this.summerValidity.innerHTML = `<i class="fas fa-calendar-alt me-1"></i>有効期限：${summerValidity}`;
-                    this.summerValidity.style.display = 'block';
-                    this.summerValidity.className = 'small text-dark mt-1 fw-bold';
-                    console.log('夏季休暇の有効期限を表示しました:', summerValidity);
+                    this.summerValidity.textContent = `有効期限：${summerValidity}`;
                 } else {
-                    this.summerValidity.style.display = 'none';
-                    console.log('夏季休暇の有効期限を非表示にしました（未設定）');
+                    this.summerValidity.innerHTML = '&nbsp;';
                 }
             }
         }
@@ -328,17 +330,14 @@ class VacationScreen {
         // 冬季休暇の表示
         if (this.winterLeaveRemaining) {
             const winterDays = this.getRemainingDays('WINTER');
-            this.winterLeaveRemaining.textContent = winterDays % 1 === 0 ? winterDays + '日' : winterDays.toFixed(1) + '日';
-            
-            // 冬季休暇の有効期限
+            this.winterLeaveRemaining.textContent = winterDays % 1 === 0 ? `${winterDays}日` : `${winterDays.toFixed(1)}日`;
+
             const winterValidity = this.getValidityPeriod('WINTER');
             if (this.winterValidity) {
                 if (winterValidity) {
-                    this.winterValidity.innerHTML = `<i class="fas fa-calendar-alt me-1"></i>有効期限：${winterValidity}`;
-                    this.winterValidity.style.display = 'block';
-                    this.winterValidity.className = 'small text-dark mt-1 fw-bold';
+                    this.winterValidity.textContent = `有効期限：${winterValidity}`;
                 } else {
-                    this.winterValidity.style.display = 'none';
+                    this.winterValidity.innerHTML = '&nbsp;';
                 }
             }
         }
@@ -346,17 +345,14 @@ class VacationScreen {
         // 特別休暇の表示
         if (this.specialLeaveRemaining) {
             const specialDays = this.getRemainingDays('SPECIAL');
-            this.specialLeaveRemaining.textContent = specialDays % 1 === 0 ? specialDays + '日' : specialDays.toFixed(1) + '日';
-            
-            // 特別休暇の有効期限
+            this.specialLeaveRemaining.textContent = specialDays % 1 === 0 ? `${specialDays}日` : `${specialDays.toFixed(1)}日`;
+
             const specialValidity = this.getValidityPeriod('SPECIAL');
             if (this.specialValidity) {
                 if (specialValidity) {
-                    this.specialValidity.innerHTML = `<i class="fas fa-calendar-alt me-1"></i>有効期限：${specialValidity}`;
-                    this.specialValidity.style.display = 'block';
-                    this.specialValidity.className = 'small text-dark mt-1 fw-bold';
+                    this.specialValidity.textContent = `有効期限：${specialValidity}`;
                 } else {
-                    this.specialValidity.style.display = 'none';
+                    this.specialValidity.innerHTML = '&nbsp;';
                 }
             }
         }
