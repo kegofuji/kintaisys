@@ -63,6 +63,16 @@ class AdminScreen {
         this.vacationManagementPoller = null;
         this.vacationManagementVisibilityHandler = null;
         this.lastVacationManagementData = null; // 最後に取得したデータを保存
+        this.dashboardAdjustmentCount = null;
+        this.dashboardWorkPatternCount = null;
+        this.dashboardLeaveCount = null;
+        this.dashboardHolidayCount = null;
+        this.dashboardRefreshButton = null;
+        this.dashboardUpdatedAt = null;
+        this.dashboardLinks = [];
+        this.dashboardInitialized = false;
+        this.dashboardHasData = false;
+        this.dashboardLoading = false;
     }
 
     /**
@@ -300,8 +310,304 @@ class AdminScreen {
      * 管理者TOP初期化
      */
     initDashboard() {
-        // 管理者TOPの初期化処理
-        console.log('管理者TOPを初期化しました');
+        this.initializeDashboardElements();
+        this.bindDashboardEvents();
+        this.refreshDashboardSummary();
+    }
+
+    initializeDashboardElements() {
+        this.dashboardAdjustmentCount = document.getElementById('adminDashboardAdjustmentCount') || this.dashboardAdjustmentCount;
+        this.dashboardWorkPatternCount = document.getElementById('adminDashboardWorkPatternCount') || this.dashboardWorkPatternCount;
+        this.dashboardLeaveCount = document.getElementById('adminDashboardLeaveCount') || this.dashboardLeaveCount;
+        this.dashboardHolidayCount = document.getElementById('adminDashboardHolidayCount') || this.dashboardHolidayCount;
+        this.dashboardRefreshButton = document.getElementById('adminDashboardRefreshBtn') || this.dashboardRefreshButton;
+        this.dashboardUpdatedAt = document.getElementById('adminDashboardUpdatedAt') || this.dashboardUpdatedAt;
+
+        this.dashboardLinks = [
+            { element: document.getElementById('adminDashboardAdjustmentLink'), path: '/admin/approvals' },
+            { element: document.getElementById('adminDashboardWorkPatternLink'), path: '/admin/work-pattern-change' },
+            { element: document.getElementById('adminDashboardLeaveLink'), path: '/admin/vacation-management' },
+            { element: document.getElementById('adminDashboardHolidayLink'), path: '/admin/holiday' }
+        ];
+
+        if (!this.dashboardInitialized) {
+            this.getDashboardCountElements().forEach(el => {
+                if (el) {
+                    el.textContent = '--';
+                }
+            });
+            if (this.dashboardUpdatedAt) {
+                this.dashboardUpdatedAt.textContent = '--';
+            }
+            this.dashboardInitialized = true;
+        }
+    }
+
+    bindDashboardEvents() {
+        if (this.dashboardRefreshButton && !this.dashboardRefreshButton.dataset.bound) {
+            this.dashboardRefreshButton.addEventListener('click', (event) => {
+                event.preventDefault();
+                this.refreshDashboardSummary();
+            });
+            this.dashboardRefreshButton.dataset.bound = 'true';
+        }
+
+        (this.dashboardLinks || []).forEach(({ element, path }) => {
+            if (!element || element.dataset.bound) {
+                return;
+            }
+            element.addEventListener('click', (event) => {
+                if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+                    return;
+                }
+                event.preventDefault();
+                if (window.router) {
+                    window.router.navigate(path);
+                } else {
+                    window.location.href = path;
+                }
+            });
+            element.dataset.bound = 'true';
+        });
+    }
+
+    async refreshDashboardSummary() {
+        if (this.dashboardLoading) {
+            return;
+        }
+
+        this.dashboardLoading = true;
+        this.setDashboardLoading(true);
+
+        try {
+            const response = await fetchWithAuth.handleApiCall(
+                () => fetchWithAuth.get('/api/admin/dashboard/summary'),
+                'ダッシュボード情報の取得に失敗しました'
+            );
+            let summary = this.normalizeDashboardSummary(response?.data ?? response);
+
+            if (!summary) {
+                summary = await this.fetchDashboardCountsFromExistingApis();
+            }
+
+            if (!summary) {
+                summary = this.createEmptyDashboardSummary();
+                console.warn('ダッシュボード情報を取得できなかったため、0件で表示します');
+            }
+
+            // すべて0の場合は既存APIからの再取得を試みる（まだ試行していない場合）
+            if (this.isZeroSummary(summary)) {
+                const fallback = await this.fetchDashboardCountsFromExistingApis(true);
+                if (fallback) {
+                    summary = fallback;
+                }
+            }
+
+            this.updateDashboardSummary(summary);
+        } catch (error) {
+            console.error('管理者ダッシュボード取得エラー:', error);
+            this.setDashboardError();
+            this.showAlert(error.message || 'ダッシュボード情報の取得に失敗しました', 'danger');
+        } finally {
+            this.dashboardLoading = false;
+            this.setDashboardLoading(false);
+        }
+    }
+
+    setDashboardLoading(isLoading) {
+        if (this.dashboardRefreshButton) {
+            this.dashboardRefreshButton.disabled = Boolean(isLoading);
+            if (isLoading) {
+                if (!this.dashboardRefreshButton.dataset.originalHtml) {
+                    this.dashboardRefreshButton.dataset.originalHtml = this.dashboardRefreshButton.innerHTML;
+                }
+                this.dashboardRefreshButton.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>更新中';
+            } else if (this.dashboardRefreshButton.dataset.originalHtml) {
+                this.dashboardRefreshButton.innerHTML = this.dashboardRefreshButton.dataset.originalHtml;
+            }
+        }
+
+        if (isLoading) {
+            if (this.dashboardUpdatedAt) {
+                this.dashboardUpdatedAt.classList.remove('text-danger');
+                this.dashboardUpdatedAt.classList.add('text-muted');
+                this.dashboardUpdatedAt.textContent = '更新中...';
+            }
+            if (!this.dashboardHasData) {
+                this.getDashboardCountElements().forEach(el => {
+                    if (el) {
+                        el.textContent = '--';
+                    }
+                });
+            }
+        }
+    }
+
+    updateDashboardSummary(summary) {
+        this.setDashboardCount(this.dashboardAdjustmentCount, summary.adjustmentPending);
+        this.setDashboardCount(this.dashboardWorkPatternCount, summary.workPatternPending);
+        this.setDashboardCount(this.dashboardLeaveCount, summary.leavePending);
+        this.setDashboardCount(this.dashboardHolidayCount, summary.holidayPending);
+
+        if (this.dashboardUpdatedAt) {
+            this.dashboardUpdatedAt.classList.remove('text-danger');
+            this.dashboardUpdatedAt.classList.add('text-muted');
+            const now = new Date();
+            const formatted = now.toLocaleString('ja-JP', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+            this.dashboardUpdatedAt.textContent = `最終更新: ${formatted}`;
+        }
+
+        this.dashboardHasData = true;
+    }
+
+    setDashboardCount(element, value) {
+        if (!element) return;
+        const normalized = this.normalizeDashboardCount(value);
+        element.textContent = normalized.toLocaleString('ja-JP');
+    }
+
+    setDashboardError() {
+        if (!this.dashboardHasData) {
+            this.getDashboardCountElements().forEach(el => {
+                if (el) {
+                    el.textContent = '-';
+                }
+            });
+        }
+        if (this.dashboardUpdatedAt) {
+            this.dashboardUpdatedAt.classList.remove('text-muted');
+            this.dashboardUpdatedAt.classList.add('text-danger');
+            this.dashboardUpdatedAt.textContent = '更新に失敗しました';
+        }
+    }
+
+    getDashboardCountElements() {
+        return [
+            this.dashboardAdjustmentCount,
+            this.dashboardWorkPatternCount,
+            this.dashboardLeaveCount,
+            this.dashboardHolidayCount
+        ];
+    }
+
+    normalizeDashboardCount(value) {
+        if (value === null || value === undefined) {
+            return 0;
+        }
+        const numeric = Number(value);
+        if (Number.isFinite(numeric)) {
+            return numeric;
+        }
+        return 0;
+    }
+
+    normalizeDashboardSummary(raw) {
+        if (!raw || typeof raw !== 'object') {
+            return null;
+        }
+        const resolve = (obj, key) => {
+            if (!obj) return undefined;
+            if (Object.prototype.hasOwnProperty.call(obj, key)) {
+                return obj[key];
+            }
+            const snake = key.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+            if (Object.prototype.hasOwnProperty.call(obj, snake)) {
+                return obj[snake];
+            }
+            return undefined;
+        };
+
+        const summary = {
+            adjustmentPending: this.normalizeDashboardCount(resolve(raw, 'adjustmentPending')),
+            workPatternPending: this.normalizeDashboardCount(resolve(raw, 'workPatternPending')),
+            leavePending: this.normalizeDashboardCount(resolve(raw, 'leavePending')),
+            holidayPending: this.normalizeDashboardCount(resolve(raw, 'holidayPending'))
+        };
+
+        // 全て0かつ元データにキーが無い場合はnullを返す
+        return summary;
+    }
+
+    isZeroSummary(summary) {
+        if (!summary) return true;
+        const values = [
+            summary.adjustmentPending,
+            summary.workPatternPending,
+            summary.leavePending,
+            summary.holidayPending
+        ];
+        return values.every(value => this.normalizeDashboardCount(value) === 0);
+    }
+
+    async fetchDashboardCountsFromExistingApis(force = false) {
+        try {
+            if (this._dashboardFallbackInProgress && !force) {
+                return null;
+            }
+            this._dashboardFallbackInProgress = true;
+
+            const [
+                adjustmentResp,
+                workPatternResp,
+                leaveResp,
+                holidayResp
+            ] = await Promise.all([
+                fetchWithAuth.handleApiCall(
+                    () => fetchWithAuth.get('/api/admin/attendance/adjustment/status/PENDING'),
+                    '打刻修正申請の件数取得に失敗しました'
+                ).catch(() => null),
+                fetchWithAuth.handleApiCall(
+                    () => fetchWithAuth.get('/api/admin/work-pattern-change/requests/status/PENDING'),
+                    '勤務時間変更申請の件数取得に失敗しました'
+                ).catch(() => null),
+                fetchWithAuth.handleApiCall(
+                    () => fetchWithAuth.get('/api/admin/leave/requests/pending'),
+                    '休暇申請の件数取得に失敗しました'
+                ).catch(() => null),
+                fetchWithAuth.handleApiCall(
+                    () => fetchWithAuth.get('/api/admin/holiday/requests/pending'),
+                    '休日関連申請の件数取得に失敗しました'
+                ).catch(() => null)
+            ]);
+
+            const extractCount = (payload) => {
+                if (!payload) return 0;
+                if (typeof payload.count === 'number') {
+                    return this.normalizeDashboardCount(payload.count);
+                }
+                if (payload.data && Array.isArray(payload.data)) {
+                    return this.normalizeDashboardCount(payload.data.length);
+                }
+                return 0;
+            };
+
+            return {
+                adjustmentPending: extractCount(adjustmentResp),
+                workPatternPending: extractCount(workPatternResp),
+                leavePending: extractCount(leaveResp),
+                holidayPending: extractCount(holidayResp)
+            };
+        } catch (error) {
+            console.warn('ダッシュボード件数の再取得に失敗:', error);
+            return null;
+        } finally {
+            this._dashboardFallbackInProgress = false;
+        }
+    }
+
+    createEmptyDashboardSummary() {
+        return {
+            adjustmentPending: 0,
+            workPatternPending: 0,
+            leavePending: 0,
+            holidayPending: 0
+        };
     }
 
     /**

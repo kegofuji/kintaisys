@@ -199,6 +199,47 @@
             border-color: #dc3545;
             background-color: #fff;
         }
+
+        .admin-dashboard-card {
+            border: none;
+            border-radius: 16px;
+            background-color: #fff;
+            box-shadow: 0 12px 30px rgba(31, 45, 61, 0.08);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .admin-dashboard-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 16px 38px rgba(31, 45, 61, 0.14);
+        }
+
+        .admin-dashboard-count {
+            font-size: 2.5rem;
+            font-weight: 700;
+            line-height: 1;
+        }
+
+        .admin-dashboard-label {
+            font-size: 0.95rem;
+            color: #6c757d;
+        }
+
+        .admin-dashboard-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.4rem;
+            background-color: #e7f0ff;
+            color: #0d6efd;
+        }
+
+        .admin-dashboard-link {
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
         
         .badge-sm {
             font-size: 0.7em;
@@ -988,8 +1029,95 @@
                 </div>
             </div>
 
-            <!-- 管理者TOP画面（白紙表示） -->
-            <div id="adminDashboardScreen" class="screen-container"></div>
+            <!-- 管理者TOP画面 -->
+            <div id="adminDashboardScreen" class="screen-container">
+                <div class="card shadow-sm">
+                    <div class="card-header d-flex align-items-center justify-content-between">
+                        <h5 class="mb-0">管理者ダッシュボード</h5>
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="text-muted small" id="adminDashboardUpdatedAt">--</span>
+                            <button class="btn btn-outline-secondary btn-sm" id="adminDashboardRefreshBtn">
+                                <i class="fas fa-rotate-right me-1"></i>更新
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body py-4">
+                        <p class="text-muted mb-4 small">
+                            主要な申請の未承認件数を表示しています。詳細は各リンクから確認できます。
+                        </p>
+                        <div class="row g-3">
+                            <div class="col-12 col-md-6 col-xl-3">
+                                <div class="admin-dashboard-card h-100 position-relative p-3">
+                                    <div class="d-flex justify-content-between align-items-start">
+                                        <div>
+                                            <p class="admin-dashboard-label mb-2">打刻修正</p>
+                                            <p class="admin-dashboard-count mb-0" id="adminDashboardAdjustmentCount">-</p>
+                                        </div>
+                                        <div class="admin-dashboard-icon">
+                                            <i class="fas fa-clock-rotate-left"></i>
+                                        </div>
+                                    </div>
+                                    <p class="text-muted small mb-3">打刻修正申請の承認待ち件数です。</p>
+                                    <a href="/admin/approvals" id="adminDashboardAdjustmentLink" class="stretched-link admin-dashboard-link text-decoration-none">
+                                        詳細を見る
+                                    </a>
+                                </div>
+                            </div>
+                            <div class="col-12 col-md-6 col-xl-3">
+                                <div class="admin-dashboard-card h-100 position-relative p-3">
+                                    <div class="d-flex justify-content-between align-items-start">
+                                        <div>
+                                            <p class="admin-dashboard-label mb-2">勤務時間変更</p>
+                                            <p class="admin-dashboard-count mb-0" id="adminDashboardWorkPatternCount">-</p>
+                                        </div>
+                                        <div class="admin-dashboard-icon">
+                                            <i class="fas fa-business-time"></i>
+                                        </div>
+                                    </div>
+                                    <p class="text-muted small mb-3">勤務時間変更申請の承認待ち件数です。</p>
+                                    <a href="/admin/work-pattern-change" id="adminDashboardWorkPatternLink" class="stretched-link admin-dashboard-link text-decoration-none">
+                                        詳細を見る
+                                    </a>
+                                </div>
+                            </div>
+                            <div class="col-12 col-md-6 col-xl-3">
+                                <div class="admin-dashboard-card h-100 position-relative p-3">
+                                    <div class="d-flex justify-content-between align-items-start">
+                                        <div>
+                                            <p class="admin-dashboard-label mb-2">休暇申請</p>
+                                            <p class="admin-dashboard-count mb-0" id="adminDashboardLeaveCount">-</p>
+                                        </div>
+                                        <div class="admin-dashboard-icon">
+                                            <i class="fas fa-umbrella-beach"></i>
+                                        </div>
+                                    </div>
+                                    <p class="text-muted small mb-3">休暇申請（有休等）の承認待ち件数です。</p>
+                                    <a href="/admin/vacation-management" id="adminDashboardLeaveLink" class="stretched-link admin-dashboard-link text-decoration-none">
+                                        詳細を見る
+                                    </a>
+                                </div>
+                            </div>
+                            <div class="col-12 col-md-6 col-xl-3">
+                                <div class="admin-dashboard-card h-100 position-relative p-3">
+                                    <div class="d-flex justify-content-between align-items-start">
+                                        <div>
+                                            <p class="admin-dashboard-label mb-2">休日関連</p>
+                                            <p class="admin-dashboard-count mb-0" id="adminDashboardHolidayCount">-</p>
+                                        </div>
+                                        <div class="admin-dashboard-icon">
+                                            <i class="fas fa-calendar-day"></i>
+                                        </div>
+                                    </div>
+                                    <p class="text-muted small mb-3">休日出勤・振替申請の承認待ち件数です。</p>
+                                    <a href="/admin/holiday" id="adminDashboardHolidayLink" class="stretched-link admin-dashboard-link text-decoration-none">
+                                        詳細を見る
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
 
             <!-- 社員管理画面 -->
             <div id="adminEmployeesScreen" class="screen-container">

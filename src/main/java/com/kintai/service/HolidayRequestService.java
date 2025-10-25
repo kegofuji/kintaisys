@@ -176,6 +176,10 @@ public class HolidayRequestService {
             throw new IllegalArgumentException("勤務日のみ選択できます");
         }
     }
-}
 
+    @Transactional(readOnly = true)
+    public long countByStatus(Status status) {
+        return repository.countByStatus(status);
+    }
+}
 

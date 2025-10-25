@@ -14,6 +14,7 @@ public interface HolidayRequestRepository extends JpaRepository<HolidayRequest, 
     List<HolidayRequest> findByStatusOrderByCreatedAtDesc(Status status);
     List<HolidayRequest> findByEmployeeIdAndStatusIn(Long employeeId, List<Status> statuses);
     List<HolidayRequest> findByEmployeeIdAndWorkDate(Long employeeId, LocalDate workDate);
-}
 
+    long countByStatus(Status status);
+}
 

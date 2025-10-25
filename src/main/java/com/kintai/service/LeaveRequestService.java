@@ -608,4 +608,14 @@ public class LeaveRequestService {
         } catch (Exception ignored) {
         }
     }
+
+    @Transactional(readOnly = true)
+    public long countByStatus(LeaveStatus status) {
+        return leaveRequestRepository.countByStatus(status);
+    }
+
+    @Transactional(readOnly = true)
+    public List<LeaveRequest> findByStatus(LeaveStatus status) {
+        return leaveRequestRepository.findByStatusOrderByCreatedAtDesc(status);
+    }
 }
