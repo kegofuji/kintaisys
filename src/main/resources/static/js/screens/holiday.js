@@ -108,17 +108,20 @@ class HolidayScreen {
         this.resetBtn?.addEventListener('click', () => this.resetForm());
 
         // 更新ボタン: 勤務パターンの再取得と予定日の再描画
-        this.refreshBtn?.addEventListener('click', async () => {
-            try {
-                await this.prefetchWorkPatterns();
-                this.updateHolidayWorkHints();
-                this.updateUpcomingHolidaysHint();
-                this.updateTransferHints();
-                this.showAlert('休日予定日を更新しました', 'info');
-            } catch (e) {
-                this.showAlert('更新に失敗しました', 'danger');
-            }
-        });
+        if (this.refreshBtn && !this.refreshBtn.dataset.bound) {
+            this.refreshBtn.addEventListener('click', async () => {
+                const success = await this.handleRefreshButton(this.refreshBtn, async () => {
+                    await this.prefetchWorkPatterns();
+                    this.updateHolidayWorkHints();
+                    this.updateUpcomingHolidaysHint();
+                    this.updateTransferHints();
+                });
+                if (!success) {
+                    this.showAlert('更新に失敗しました', 'danger');
+                }
+            });
+            this.refreshBtn.dataset.bound = 'true';
+        }
 
         updateMode();
         this.updateHolidayWorkHints();
@@ -391,6 +394,57 @@ class HolidayScreen {
         }
     }
 
+    /**
+     * 更新ボタンの共通ハンドリング
+     * @param {HTMLButtonElement} button
+     * @param {() => Promise<boolean|void>} taskFn
+     * @returns {Promise<boolean>}
+     */
+    async handleRefreshButton(button, taskFn) {
+        if (!button || typeof taskFn !== 'function') {
+            return false;
+        }
+
+        const originalHtml = button.dataset.originalHtml || button.innerHTML;
+        button.dataset.originalHtml = originalHtml;
+        button.disabled = true;
+        button.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>更新中...';
+
+        let success = true;
+        let caughtError = null;
+
+        try {
+            const result = await taskFn();
+            if (result === false || (result && typeof result === 'object' && result.success === false)) {
+                success = false;
+            }
+        } catch (error) {
+            success = false;
+            caughtError = error;
+            console.error('更新処理でエラーが発生しました:', error);
+        }
+
+        if (success) {
+            button.innerHTML = '<i class="fas fa-check me-1"></i>更新完了';
+            setTimeout(() => {
+                button.innerHTML = originalHtml;
+                button.disabled = false;
+            }, 1000);
+        } else {
+            button.innerHTML = '<i class="fas fa-exclamation-triangle me-1"></i>更新失敗';
+            setTimeout(() => {
+                button.innerHTML = originalHtml;
+                button.disabled = false;
+            }, 2000);
+        }
+
+        if (caughtError == null && success === false) {
+            console.warn('更新処理は失敗として扱われました');
+        }
+
+        return success;
+    }
+
     async handleSubmit(e) {
         e.preventDefault();
 
@@ -584,5 +638,3 @@ class HolidayScreen {
 }
 
 window.holidayScreen = new HolidayScreen();
-
-

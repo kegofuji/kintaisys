@@ -179,12 +179,8 @@ class HistoryScreen {
         // 更新ボタンのクリックイベント
         if (this.historyRefreshBtn) {
             this.historyRefreshBtn.addEventListener('click', async () => {
-                try {
-                    // 最新データを取得してカレンダーを再生成
-                    await this.loadCalendarData(true);
-                    this.showAlert('カレンダーを更新しました', 'info');
-                } catch (e) {
-                    console.error('カレンダー更新エラー:', e);
+                const success = await this.handleRefreshButton(this.historyRefreshBtn, () => this.loadCalendarData(true));
+                if (!success) {
                     this.showAlert('更新に失敗しました', 'danger');
                 }
             });
@@ -224,7 +220,7 @@ class HistoryScreen {
     async loadCalendarData(shouldRegenerate = false) {
         if (!window.currentEmployeeId) {
             console.warn('従業員IDが取得できません');
-            return;
+            return false;
         }
 
         const selectedMonth = this.historyMonthSelect?.value;
@@ -235,6 +231,7 @@ class HistoryScreen {
             url += `?year=${year}&month=${parseInt(month, 10)}`;
         }
 
+        let success = true;
         try {
             const data = await fetchWithAuth.handleApiCall(
                 () => fetchWithAuth.get(url),
@@ -270,6 +267,7 @@ class HistoryScreen {
                 this.generateCalendar();
             }
         } catch (error) {
+            success = false;
             console.error('勤怠履歴読み込みエラー:', error);
             // エラーの場合もモックデータは使用しない
             this.attendanceData = [];
@@ -297,6 +295,58 @@ class HistoryScreen {
                 this.generateCalendar();
             }
         }
+        return success;
+    }
+
+    /**
+     * 更新ボタンの共通ハンドリング
+     * @param {HTMLButtonElement} button
+     * @param {() => Promise<boolean|void>} taskFn
+     * @returns {Promise<boolean>}
+     */
+    async handleRefreshButton(button, taskFn) {
+        if (!button || typeof taskFn !== 'function') {
+            return false;
+        }
+
+        const originalHtml = button.dataset.originalHtml || button.innerHTML;
+        button.dataset.originalHtml = originalHtml;
+        button.disabled = true;
+        button.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>更新中...';
+
+        let success = true;
+        let caughtError = null;
+
+        try {
+            const result = await taskFn();
+            if (result === false || (result && typeof result === 'object' && result.success === false)) {
+                success = false;
+            }
+        } catch (error) {
+            success = false;
+            caughtError = error;
+            console.error('更新処理でエラーが発生しました:', error);
+        }
+
+        if (success) {
+            button.innerHTML = '<i class="fas fa-check me-1"></i>更新完了';
+            setTimeout(() => {
+                button.innerHTML = originalHtml;
+                button.disabled = false;
+            }, 1000);
+        } else {
+            button.innerHTML = '<i class="fas fa-exclamation-triangle me-1"></i>更新失敗';
+            setTimeout(() => {
+                button.innerHTML = originalHtml;
+                button.disabled = false;
+            }, 2000);
+        }
+
+        if (caughtError == null && success === false) {
+            console.warn('更新処理は失敗として扱われました');
+        }
+
+        return success;
     }
 
     /**
@@ -2331,19 +2381,19 @@ class HistoryScreen {
 
             if (!response) {
                 console.error('APIレスポンスがnullまたはundefined:', response);
-                this.showAlert('APIからの応答がありません', 'warning');
+                this.showAlert('APIからの応答がありません', 'danger');
                 return;
             }
 
             if (!response.success) {
                 console.error('APIが失敗を返しました:', response);
-                this.showAlert(response.message || '申請データの取得に失敗しました', 'warning');
+                this.showAlert(response.message || '申請データの取得に失敗しました', 'danger');
                 return;
             }
 
             if (!Array.isArray(response.data)) {
                 console.error('APIレスポンスのdataが配列ではありません:', response);
-                this.showAlert('申請データの形式が正しくありません', 'warning');
+                this.showAlert('申請データの形式が正しくありません', 'danger');
                 return;
             }
 
@@ -2370,7 +2420,7 @@ class HistoryScreen {
             console.log('見つかった申請:', adjustmentRequest);
 
             if (!adjustmentRequest) {
-                this.showAlert('指定日の申請が見つかりません', 'warning');
+                this.showAlert('指定日の申請が見つかりません', 'danger');
                 return;
             }
 
@@ -2523,19 +2573,19 @@ class HistoryScreen {
 
             if (!response) {
                 console.error('APIレスポンスがnullまたはundefined:', response);
-                this.showAlert('APIからの応答がありません', 'warning');
+                this.showAlert('APIからの応答がありません', 'danger');
                 return;
             }
 
             if (!response.success) {
                 console.error('APIが失敗を返しました:', response);
-                this.showAlert(response.message || '申請データの取得に失敗しました', 'warning');
+                this.showAlert(response.message || '申請データの取得に失敗しました', 'danger');
                 return;
             }
 
             if (!Array.isArray(response.data)) {
                 console.error('APIレスポンスのdataが配列ではありません:', response);
-                this.showAlert('申請データの形式が正しくありません', 'warning');
+                this.showAlert('申請データの形式が正しくありません', 'danger');
                 return;
             }
 
@@ -2573,7 +2623,7 @@ class HistoryScreen {
             console.log('見つかった申請:', holidayRequest);
 
             if (!holidayRequest) {
-                this.showAlert('指定日の申請が見つかりません', 'warning');
+                this.showAlert('指定日の申請が見つかりません', 'danger');
                 return;
             }
 
@@ -2766,7 +2816,7 @@ class HistoryScreen {
         const normalizedId = (requestId || '').trim();
 
         if (!normalizedId) {
-            this.showAlert('申請IDを取得できません。画面を再読み込みしてください。', 'warning');
+            this.showAlert('申請IDを取得できません。画面を再読み込みしてください。', 'danger');
             return;
         }
         if (!window.currentEmployeeId) {
@@ -2820,7 +2870,7 @@ class HistoryScreen {
             const isStateError = message.includes('取消できない');
 
             if (isMissing || isStateError) {
-                this.showAlert(`${message}。最新の状態を反映します。`, 'warning');
+                this.showAlert(`${message}。最新の状態を反映します。`, 'info');
                 refreshRequired = true;
                 closeModal = true;
             } else {
@@ -2908,7 +2958,7 @@ class HistoryScreen {
         }
 
         if (!request) {
-            this.showAlert('申請詳細が見つかりません', 'warning');
+            this.showAlert('申請詳細が見つかりません', 'danger');
             return;
         }
 
@@ -3046,7 +3096,7 @@ class HistoryScreen {
         const normalizedId = (vacationId || '').trim();
 
         if (!normalizedId) {
-            this.showAlert('申請IDを取得できません。画面を再読み込みしてください', 'warning');
+            this.showAlert('申請IDを取得できません。画面を再読み込みしてください', 'danger');
             return;
         }
         if (!window.currentEmployeeId) {
@@ -3100,7 +3150,7 @@ class HistoryScreen {
             const isStateError = message.includes('取消できない');
 
             if (isMissing || isStateError) {
-                this.showAlert(`${message}。最新の状態を反映します`, 'warning');
+                this.showAlert(`${message}。最新の状態を反映します`, 'info');
                 refreshRequired = true;
                 closeModal = true;
             } else {
@@ -3142,7 +3192,7 @@ class HistoryScreen {
         }
         const detail = this.currentAdjustmentDetail?.request;
         if (!detail) {
-            this.showAlert('再申請するデータが見つかりません', 'warning');
+            this.showAlert('再申請するデータが見つかりません', 'danger');
             return;
         }
 
@@ -3222,7 +3272,7 @@ class HistoryScreen {
         }
         const detail = this.currentVacationDetail?.request;
         if (!detail) {
-            this.showAlert('再申請するデータが見つかりません', 'warning');
+            this.showAlert('再申請するデータが見つかりません', 'danger');
             return;
         }
 

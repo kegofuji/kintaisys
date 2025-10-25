@@ -143,8 +143,14 @@ class WorkPatternScreen {
         if (this.resetButton) {
             this.resetButton.addEventListener('click', () => this.setDefaultValues());
         }
-        if (this.refreshButton) {
-            this.refreshButton.addEventListener('click', () => this.refreshRequests());
+        if (this.refreshButton && !this.refreshButton.dataset.bound) {
+            this.refreshButton.addEventListener('click', async () => {
+                const success = await this.handleRefreshButton(this.refreshButton, () => this.refreshRequests());
+                if (!success) {
+                    this.showAlert('更新に失敗しました', 'danger');
+                }
+            });
+            this.refreshButton.dataset.bound = 'true';
         }
         if (this.startDateInput) {
             this.startDateInput.addEventListener('change', () => this.handleDateChange());
@@ -167,6 +173,57 @@ class WorkPatternScreen {
             });
         }
         this.listenersBound = true;
+    }
+
+    /**
+     * 更新ボタンの共通ハンドリング
+     * @param {HTMLButtonElement} button
+     * @param {() => Promise<{success?: boolean}|boolean|void>} taskFn
+     * @returns {Promise<boolean>}
+     */
+    async handleRefreshButton(button, taskFn) {
+        if (!button || typeof taskFn !== 'function') {
+            return false;
+        }
+
+        const originalHtml = button.dataset.originalHtml || button.innerHTML;
+        button.dataset.originalHtml = originalHtml;
+        button.disabled = true;
+        button.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>更新中...';
+
+        let success = true;
+        let caughtError = null;
+
+        try {
+            const result = await taskFn();
+            if (result === false || (result && typeof result === 'object' && result.success === false)) {
+                success = false;
+            }
+        } catch (error) {
+            success = false;
+            caughtError = error;
+            console.error('更新処理でエラーが発生しました:', error);
+        }
+
+        if (success) {
+            button.innerHTML = '<i class="fas fa-check me-1"></i>更新完了';
+            setTimeout(() => {
+                button.innerHTML = originalHtml;
+                button.disabled = false;
+            }, 1000);
+        } else {
+            button.innerHTML = '<i class="fas fa-exclamation-triangle me-1"></i>更新失敗';
+            setTimeout(() => {
+                button.innerHTML = originalHtml;
+                button.disabled = false;
+            }, 2000);
+        }
+
+        if (caughtError == null && success === false) {
+            console.warn('更新処理は失敗として扱われました');
+        }
+
+        return success;
     }
 
     setDefaultValues() {
@@ -214,7 +271,7 @@ class WorkPatternScreen {
         }
 
         if (endDate < startDate) {
-            this.showAlert('終了日は開始日以降を指定してください', 'warning');
+            this.showAlert('終了日は開始日以降を指定してください', 'danger');
             this.endDateInput?.focus();
             return;
         }
@@ -234,11 +291,11 @@ class WorkPatternScreen {
 
         const totalMinutes = this.calculateTotalMinutes();
         if (totalMinutes === null) {
-            this.showAlert('有効な勤務時間を入力してください', 'warning');
+            this.showAlert('有効な勤務時間を入力してください', 'danger');
             return;
         }
         if (totalMinutes <= 0) {
-            this.showAlert('勤務時間が0分以下です', 'warning');
+            this.showAlert('勤務時間が0分以下です', 'danger');
             return;
         }
 
@@ -704,7 +761,7 @@ class WorkPatternScreen {
             this.updateDayButtonState(button, false);
         } else {
             if (this.selectedDays.size >= 5) {
-                this.showAlert('勤務日は5日まで選択できます', 'warning');
+                this.showAlert('勤務日は5日まで選択できます', 'danger');
                 return;
             }
             this.selectedDays.add(dayKey);
@@ -955,11 +1012,11 @@ class WorkPatternScreen {
             if (updateSummary) {
                 summary = await this.loadCurrentSummary({ silent });
             }
-            return { updated: false, summary };
+            return { updated: false, summary, success: true };
         }
 
         if (silent && this.requestsLoading) {
-            return { updated: false, summary: null };
+            return { updated: false, summary: null, success: true };
         }
 
         if (!silent) {
@@ -968,6 +1025,7 @@ class WorkPatternScreen {
 
         let updated = false;
         let summary = null;
+        let success = true;
         try {
             this.requestsLoading = true;
             const response = await fetchWithAuth.handleApiCall(
@@ -990,6 +1048,7 @@ class WorkPatternScreen {
             }
             this.latestRequestCache = [];
             this.lastRequestsSignature = '';
+            success = false;
         } finally {
             this.requestsLoading = false;
         }
@@ -998,7 +1057,7 @@ class WorkPatternScreen {
             summary = await this.loadCurrentSummary({ silent });
         }
 
-        return { updated, summary };
+        return { updated, summary, success };
     }
 
     renderRequests(entries) {

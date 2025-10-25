@@ -68,6 +68,7 @@ class AdminScreen {
         this.dashboardLeaveCount = null;
         this.dashboardHolidayCount = null;
         this.dashboardRefreshButton = null;
+        this.adminHolidayRefreshBtn = null;
         this.dashboardUpdatedAt = null;
         this.dashboardLinks = [];
         this.dashboardInitialized = false;
@@ -307,6 +308,59 @@ class AdminScreen {
     }
 
     /**
+     * 更新ボタンの表示を統一的に制御
+     * @param {HTMLButtonElement} button
+     * @param {() => Promise<boolean|{success?: boolean}|void>} taskFn
+     * @param {{successDelay?:number,failureDelay?:number}} options
+     * @returns {Promise<boolean>}
+     */
+    async handleRefreshButton(button, taskFn, options = {}) {
+        if (!button || typeof taskFn !== 'function') {
+            return false;
+        }
+
+        const { successDelay = 1000, failureDelay = 2000 } = options || {};
+        const originalHtml = button.dataset.originalHtml || button.innerHTML;
+        button.dataset.originalHtml = originalHtml;
+        button.disabled = true;
+        button.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>更新中...';
+
+        let success = true;
+        let caughtError = null;
+
+        try {
+            const result = await taskFn();
+            if (result === false || (result && typeof result === 'object' && result.success === false)) {
+                success = false;
+            }
+        } catch (error) {
+            success = false;
+            caughtError = error;
+            console.error('更新処理でエラーが発生しました:', error);
+        }
+
+        if (success) {
+            button.innerHTML = '<i class="fas fa-check me-1"></i>更新完了';
+            setTimeout(() => {
+                button.innerHTML = originalHtml;
+                button.disabled = false;
+            }, successDelay);
+        } else {
+            button.innerHTML = '<i class="fas fa-exclamation-triangle me-1"></i>更新失敗';
+            setTimeout(() => {
+                button.innerHTML = originalHtml;
+                button.disabled = false;
+            }, failureDelay);
+        }
+
+        if (caughtError == null && success === false) {
+            console.warn('更新処理は失敗として扱われました');
+        }
+
+        return success;
+    }
+
+    /**
      * 管理者TOP初期化
      */
     initDashboard() {
@@ -341,9 +395,9 @@ class AdminScreen {
 
     bindDashboardEvents() {
         if (this.dashboardRefreshButton && !this.dashboardRefreshButton.dataset.bound) {
-            this.dashboardRefreshButton.addEventListener('click', (event) => {
+            this.dashboardRefreshButton.addEventListener('click', async (event) => {
                 event.preventDefault();
-                this.refreshDashboardSummary();
+                await this.handleRefreshButton(this.dashboardRefreshButton, () => this.refreshDashboardSummary({ manual: true }));
             });
             this.dashboardRefreshButton.dataset.bound = 'true';
         }
@@ -367,13 +421,15 @@ class AdminScreen {
         });
     }
 
-    async refreshDashboardSummary() {
+    async refreshDashboardSummary(options = {}) {
+        const { manual = false } = typeof options === 'object' && options !== null ? options : {};
         if (this.dashboardLoading) {
-            return;
+            return true;
         }
 
         this.dashboardLoading = true;
-        this.setDashboardLoading(true);
+        this.setDashboardLoading(true, { skipButton: manual });
+        let success = true;
 
         try {
             const response = await fetchWithAuth.handleApiCall(
@@ -404,20 +460,24 @@ class AdminScreen {
             console.error('管理者ダッシュボード取得エラー:', error);
             this.setDashboardError();
             this.showAlert(error.message || 'ダッシュボード情報の取得に失敗しました', 'danger');
+            success = false;
         } finally {
             this.dashboardLoading = false;
-            this.setDashboardLoading(false);
+            this.setDashboardLoading(false, { skipButton: manual });
         }
+
+        return success;
     }
 
-    setDashboardLoading(isLoading) {
-        if (this.dashboardRefreshButton) {
+    setDashboardLoading(isLoading, options = {}) {
+        const { skipButton = false } = typeof options === 'object' && options !== null ? options : {};
+        if (this.dashboardRefreshButton && !skipButton) {
             this.dashboardRefreshButton.disabled = Boolean(isLoading);
             if (isLoading) {
                 if (!this.dashboardRefreshButton.dataset.originalHtml) {
                     this.dashboardRefreshButton.dataset.originalHtml = this.dashboardRefreshButton.innerHTML;
                 }
-                this.dashboardRefreshButton.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>更新中';
+                this.dashboardRefreshButton.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>更新中...';
             } else if (this.dashboardRefreshButton.dataset.originalHtml) {
                 this.dashboardRefreshButton.innerHTML = this.dashboardRefreshButton.dataset.originalHtml;
             }
@@ -950,19 +1010,26 @@ class AdminScreen {
         this.initializeApprovalElements();
         this.setupApprovalEventListeners();
         this.loadHolidayPending();
-        const refreshBtn = document.getElementById('adminHolidayRefreshBtn');
-        if (refreshBtn) {
-            refreshBtn.addEventListener('click', () => this.loadHolidayPending());
+        if (this.adminHolidayRefreshBtn && !this.adminHolidayRefreshBtn.dataset.bound) {
+            this.adminHolidayRefreshBtn.addEventListener('click', async () => {
+                const success = await this.handleRefreshButton(this.adminHolidayRefreshBtn, () => this.loadHolidayPending());
+                if (!success) {
+                    this.showAlert('更新に失敗しました', 'danger');
+                }
+            });
+            this.adminHolidayRefreshBtn.dataset.bound = 'true';
         }
     }
 
     initializeHolidayElements() {
         this.holidayTableBody = document.getElementById('adminHolidayTableBody');
+        this.adminHolidayRefreshBtn = document.getElementById('adminHolidayRefreshBtn') || this.adminHolidayRefreshBtn;
     }
 
     async loadHolidayPending() {
-        if (!this.holidayTableBody) return;
+        if (!this.holidayTableBody) return false;
         this.holidayTableBody.innerHTML = `<tr><td colspan="6" class="text-center text-muted">データを読み込み中...</td></tr>`;
+        let success = true;
         try {
             const statuses = ['PENDING', 'APPROVED', 'REJECTED'];
             const responses = await Promise.all(
@@ -984,7 +1051,10 @@ class AdminScreen {
         } catch (e) {
             console.error('休日関連読み込みエラー:', e);
             this.holidayTableBody.innerHTML = `<tr><td colspan="6" class="text-danger text-center">読み込みに失敗しました</td></tr>`;
+            success = false;
         }
+
+        return success;
     }
 
     renderHolidayTable(list) {
@@ -1271,7 +1341,12 @@ class AdminScreen {
 
         // 更新ボタン
         if (this.adminApprovalsRefreshBtn && !this.adminApprovalsRefreshBtn.dataset.bound) {
-            this.adminApprovalsRefreshBtn.addEventListener('click', () => this.loadPendingApprovals());
+            this.adminApprovalsRefreshBtn.addEventListener('click', async () => {
+                const success = await this.handleRefreshButton(this.adminApprovalsRefreshBtn, () => this.loadPendingApprovals());
+                if (!success) {
+                    this.showAlert('更新に失敗しました', 'danger');
+                }
+            });
             this.adminApprovalsRefreshBtn.dataset.bound = 'true';
         }
 
@@ -1301,7 +1376,12 @@ class AdminScreen {
      */
     setupWorkPatternEventListeners() {
         if (this.workPatternRefreshButton && !this.workPatternRefreshButton.dataset.bound) {
-            this.workPatternRefreshButton.addEventListener('click', () => this.loadWorkPatternRequests());
+            this.workPatternRefreshButton.addEventListener('click', async () => {
+                const success = await this.handleRefreshButton(this.workPatternRefreshButton, () => this.loadWorkPatternRequests());
+                if (!success) {
+                    this.showAlert('更新に失敗しました', 'danger');
+                }
+            });
             this.workPatternRefreshButton.dataset.bound = 'true';
         }
         if (this.workPatternModalConfirmButton && !this.workPatternModalConfirmButton.dataset.bound) {
@@ -1348,12 +1428,22 @@ class AdminScreen {
 
 
         if (this.refreshLeaveRequestsButton && !this.refreshLeaveRequestsButton.dataset.bound) {
-            this.refreshLeaveRequestsButton.addEventListener('click', () => this.loadVacationManagementData(false)); // 通常更新
+            this.refreshLeaveRequestsButton.addEventListener('click', async () => {
+                const success = await this.handleRefreshButton(this.refreshLeaveRequestsButton, () => this.loadVacationManagementData(false));
+                if (!success) {
+                    this.showAlert('更新に失敗しました', 'danger');
+                }
+            }); // 通常更新
             this.refreshLeaveRequestsButton.dataset.bound = 'true';
         }
 
         if (this.refreshLeaveBalancesButton && !this.refreshLeaveBalancesButton.dataset.bound) {
-            this.refreshLeaveBalancesButton.addEventListener('click', () => this.loadLeaveBalances());
+            this.refreshLeaveBalancesButton.addEventListener('click', async () => {
+                const success = await this.handleRefreshButton(this.refreshLeaveBalancesButton, () => this.loadLeaveBalances());
+                if (!success) {
+                    this.showAlert('更新に失敗しました', 'danger');
+                }
+            });
             this.refreshLeaveBalancesButton.dataset.bound = 'true';
         }
 
@@ -1555,9 +1645,10 @@ class AdminScreen {
      * 未承認申請読み込み
      */
     async loadPendingApprovals() {
-        if (!this.approvalsTableBody) return;
+        if (!this.approvalsTableBody) return false;
 
         this.setTableState(this.approvalsTableBody, 6, 'データを読み込み中...', 'text-muted');
+        let success = true;
 
         try {
             const statuses = ['PENDING', 'APPROVED', 'REJECTED'];
@@ -1603,7 +1694,10 @@ class AdminScreen {
         } catch (error) {
             console.error('打刻修正申請読み込みエラー:', error);
             this.setTableState(this.approvalsTableBody, 6, '打刻修正申請の取得に失敗しました', 'text-danger');
+            success = false;
         }
+
+        return success;
     }
 
     /**
@@ -1687,9 +1781,10 @@ class AdminScreen {
     }
 
     async loadWorkPatternRequests() {
-        if (!this.workPatternTableBody) return;
+        if (!this.workPatternTableBody) return false;
 
         this.setTableState(this.workPatternTableBody, 9, 'データを読み込み中...', 'text-muted');
+        let success = true;
 
         try {
             this.workPatternRequestMap = new Map();
@@ -1742,7 +1837,10 @@ class AdminScreen {
         } catch (error) {
             console.error('勤務時間変更申請読み込みエラー:', error);
             this.setTableState(this.workPatternTableBody, 9, '勤務時間変更申請の取得に失敗しました', 'text-danger');
+            success = false;
         }
+
+        return success;
     }
 
     renderWorkPatternRequests(entries) {
@@ -1844,7 +1942,7 @@ class AdminScreen {
             );
             const submissionStatus = statusResp?.data?.submissionStatus || statusResp?.submissionStatus;
             if (submissionStatus !== 'APPROVED') {
-                this.showAlert('PDF出力は月末申請が承認済の場合のみ可能です', 'warning');
+                this.showAlert('PDF出力は月末申請が承認済の場合のみ可能です', 'info');
                 return;
             }
 
@@ -1877,9 +1975,11 @@ class AdminScreen {
         if (!this.vacationManagementTableBody) {
             this.initializeVacationManagementElements();
         }
-        if (!this.vacationManagementTableBody || this.vacationManagementLoading) return;
+        if (!this.vacationManagementTableBody) return false;
+        if (this.vacationManagementLoading) return true;
 
         this.vacationManagementLoading = true;
+        let success = true;
 
         // サイレント更新でない場合のみローディングメッセージを表示
         if (!silent) {
@@ -1951,7 +2051,7 @@ class AdminScreen {
                 const lastDataHash = JSON.stringify(this.lastVacationManagementData);
                 if (currentDataHash === lastDataHash) {
                     this.vacationManagementLoading = false;
-                    return; // データが変更されていない場合は処理を終了
+                    return true; // データが変更されていない場合は処理を終了
                 }
             }
 
@@ -1969,9 +2069,12 @@ class AdminScreen {
         } catch (error) {
             console.error('休暇申請読み込みエラー:', error);
             this.setTableState(this.vacationManagementTableBody, 7, '休暇申請の取得に失敗しました', 'text-danger');
+            success = false;
         } finally {
             this.vacationManagementLoading = false;
         }
+
+        return success;
     }
 
     /**
@@ -2052,14 +2155,14 @@ class AdminScreen {
         // 通常の休暇の場合
         const parsed = parseFloat(this.leaveGrantDaysInput?.value ?? '0');
         if (!Number.isFinite(parsed) || parsed === 0) {
-            this.showAlert('付与日数は0以外で入力してください（マイナス可）', 'warning');
+            this.showAlert('付与日数は0以外で入力してください（マイナス可）', 'danger');
             this.leaveGrantDaysInput?.focus();
             return;
         }
         // 0.5刻みチェック（負数可）
         const doubled = Math.round(parsed * 2);
         if (Math.abs(parsed * 2 - doubled) > 1e-9) {
-            this.showAlert('付与日数は0.5単位で入力してください', 'warning');
+            this.showAlert('付与日数は0.5単位で入力してください', 'danger');
             this.leaveGrantDaysInput?.focus();
             return;
         }
@@ -2084,7 +2187,7 @@ class AdminScreen {
             
             // 開始日が終了日より後の場合はエラー
             if (new Date(grantedDate) > new Date(expiresAt)) {
-                this.showAlert('開始日は終了日より前の日付を選択してください', 'warning');
+                this.showAlert('開始日は終了日より前の日付を選択してください', 'danger');
                 this.leaveGrantStartDateInput?.focus();
                 return;
             }
@@ -2328,15 +2431,16 @@ class AdminScreen {
     }
 
     async loadLeaveBalances() {
-        if (!this.leaveBalanceTableBody) return;
+        if (!this.leaveBalanceTableBody) return false;
         this.setTableState(this.leaveBalanceTableBody, 5, 'データを読み込み中...', 'text-muted');
+        let success = true;
 
         try {
             await this.ensureEmployeeOptions();
             const employees = Array.isArray(this.employeeCache) ? this.employeeCache : [];
             if (employees.length === 0) {
                 this.setTableState(this.leaveBalanceTableBody, 5, '社員情報が見つかりません', 'text-muted');
-                return;
+                return true;
             }
 
             const rows = await Promise.all(employees.map(async (emp) => {
@@ -2356,7 +2460,10 @@ class AdminScreen {
         } catch (error) {
             console.error('休暇残数読み込みエラー:', error);
             this.setTableState(this.leaveBalanceTableBody, 5, '休暇残数の取得に失敗しました', 'text-danger');
+            success = false;
         }
+
+        return success;
     }
 
     renderLeaveBalances(rows) {
@@ -3263,7 +3370,6 @@ class AdminScreen {
                     }
                     this.displayEmployees(this.employeeCache);
                     bootstrap.Modal.getOrCreateInstance(modalEl).hide();
-                    this.showAlert(data.message || '社員情報を更新しました', 'success');
                 } else {
                     this.showAlert(data?.message || '社員情報の更新に失敗しました', 'danger');
                 }
@@ -3699,7 +3805,6 @@ class AdminScreen {
             });
 
             if (response.ok) {
-                this.showAlert('社員情報を更新しました', 'success');
                 this.loadEmployees();
             } else {
                 const errorData = await response.json();

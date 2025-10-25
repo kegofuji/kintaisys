@@ -260,22 +260,22 @@ class DashboardScreen {
      */
     handleBreakTimeEdit() {
         if (!this.currentAttendance || !this.currentAttendance.attendanceId) {
-            this.showAlert('休憩時間は退勤後に編集できます', 'warning');
+            this.showAlert('休憩時間は退勤後に編集できます', 'info');
             return;
         }
 
         if (!this.currentAttendance.clockOutTime) {
-            this.showAlert('退勤打刻後に休憩時間を編集できます', 'warning');
+            this.showAlert('退勤打刻後に休憩時間を編集できます', 'info');
             return;
         }
 
         if (this.normalizeBoolean(this.currentAttendance.hasApprovedAdjustment)) {
-            this.showAlert('承認済みの打刻修正が適用されているため編集できません', 'warning');
+            this.showAlert('承認済みの打刻修正が適用されているため編集できません', 'danger');
             return;
         }
 
         if (this.currentAttendance.attendanceFixed) {
-            this.showAlert('確定済みの勤怠は編集できません', 'warning');
+            this.showAlert('確定済みの勤怠は編集できません', 'danger');
             return;
         }
 
@@ -316,12 +316,12 @@ class DashboardScreen {
         }
 
         if (!this.currentAttendance.clockOutTime) {
-            this.showAlert('退勤打刻後に休憩時間を編集できます', 'warning');
+            this.showAlert('退勤打刻後に休憩時間を編集できます', 'info');
             return;
         }
 
         if (this.currentAttendance.attendanceFixed) {
-            this.showAlert('確定済みの勤怠は編集できません', 'warning');
+            this.showAlert('確定済みの勤怠は編集できません', 'danger');
             return;
         }
 
@@ -366,7 +366,6 @@ class DashboardScreen {
 
             const result = await response.json().catch(() => null);
             if (response.ok && result && result.success) {
-                this.showAlert(result.message || '休憩時間を更新しました', 'success');
                 await this.loadTodayAttendance();
                 await this.loadAttendanceHistory();
                 await this.refreshLinkedScreens();
@@ -879,7 +878,7 @@ class DashboardScreen {
             
             window.currentUser = null;
             window.currentEmployeeId = null;
-            this.showAlert('ログアウトしました', 'info');
+            this.showAlert('ログアウトしました', 'success');
             
             // ログイン画面に戻る
             if (window.loginScreen) {

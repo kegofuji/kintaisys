@@ -544,7 +544,7 @@ class VacationScreen {
             if (conflicts.length > 0) {
                 const displayDates = conflicts.map((date) => this.formatDateForDisplay(date)).filter(Boolean);
                 const dateLabel = displayDates.length > 0 ? `対象日（${displayDates.join(', ')}）` : '対象日';
-                this.showAlert(`${dateLabel}には打刻修正申請が存在します。休暇申請するには、打刻修正申請を取消してください。`, 'warning');
+                this.showAlert(`${dateLabel}には打刻修正申請が存在します。休暇申請するには、打刻修正申請を取消してください。`, 'danger');
                 return;
             }
         } catch (error) {
@@ -676,12 +676,12 @@ class VacationScreen {
         const end = this.parseLocalDate(endDate);
 
         if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
-            this.showAlert('有効な日付を入力してください', 'warning');
+            this.showAlert('有効な日付を入力してください', 'danger');
             return false;
         }
 
         if (end < start) {
-            this.showAlert('終了日は開始日以降の日付を選択してください', 'warning');
+            this.showAlert('終了日は開始日以降の日付を選択してください', 'danger');
             this.vacationEndDate.focus();
             return false;
         }
@@ -689,14 +689,14 @@ class VacationScreen {
         const { leaveType, timeUnit } = this.getSelectedLeaveType();
         const requestedDays = this.calculateRequestedDays(start, end, timeUnit);
         if (requestedDays <= 0) {
-            this.showAlert('申請期間の日付が不正です', 'warning');
+            this.showAlert('申請期間の日付が不正です', 'danger');
             return false;
         }
 
         const remaining = this.getRemainingDays(leaveType);
         if (remaining < requestedDays) {
             const label = this.leaveTypeDisplayMap[leaveType] || leaveType;
-            this.showAlert(`申請日数（${requestedDays}日）が${label}の残日数（${remaining}日）を超えています`, 'warning');
+            this.showAlert(`申請日数（${requestedDays}日）が${label}の残日数（${remaining}日）を超えています`, 'danger');
             return false;
         }
 
@@ -706,7 +706,7 @@ class VacationScreen {
             const grants = this.activeGrantsByType.get(leaveType) || [];
             const invalid = selectedDates.filter((date) => !this.isDateCoveredByGrant(date, grants));
             if (invalid.length > 0) {
-                this.showAlert('選択した期間に有効な休暇付与がありません', 'warning');
+                this.showAlert('選択した期間に有効な休暇付与がありません', 'danger');
                 return false;
             }
         }

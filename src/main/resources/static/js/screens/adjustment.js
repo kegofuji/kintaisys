@@ -302,7 +302,7 @@ class AdjustmentScreen {
 
         const breakPattern = /^\d{1,2}:[0-5]\d$/;
         if (!breakPattern.test(breakTimeValue)) {
-            this.showAlert('休憩時間はHH:MM形式で入力してください', 'warning');
+            this.showAlert('休憩時間はHH:MM形式で入力してください', 'danger');
             this.breakTimeInput?.classList.add('is-invalid');
             this.breakTimeInput?.setAttribute('aria-invalid', 'true');
             this.breakTimeInput?.focus();
@@ -316,12 +316,12 @@ class AdjustmentScreen {
         }
         const totalMinutes = this.calculateTotalMinutes(clockInDate, clockInTime, clockOutDate, clockOutTime);
         if (totalMinutes === null) {
-            this.showAlert('有効な勤務時間を入力してください', 'warning');
+            this.showAlert('有効な勤務時間を入力してください', 'danger');
             return;
         }
 
         if (breakMinutes > totalMinutes) {
-            this.showAlert('休憩時間が勤務時間を超えています', 'warning');
+            this.showAlert('休憩時間が勤務時間を超えています', 'danger');
             this.breakTimeInput?.focus();
             return;
         }
@@ -352,7 +352,7 @@ class AdjustmentScreen {
             if (conflicts.length > 0) {
                 const displayDates = conflicts.map((date) => this.formatDateForDisplay(date)).filter(Boolean);
                 const dateLabel = displayDates.length > 0 ? `対象日（${displayDates.join(', ')}）` : '対象日';
-                this.showAlert(`${dateLabel}には有給申請が存在します。打刻修正するには、有給申請を取消してください。`, 'warning');
+                this.showAlert(`${dateLabel}には有給申請が存在します。打刻修正するには、有給申請を取消してください。`, 'danger');
                 return;
             }
         } catch (error) {
@@ -462,7 +462,7 @@ class AdjustmentScreen {
 
         const selectedDate = new Date(`${dateStr}T00:00:00`);
         if (Number.isNaN(selectedDate.getTime())) {
-            this.showAlert('有効な出勤日を入力してください', 'warning');
+            this.showAlert('有効な出勤日を入力してください', 'danger');
             this.clockInDateInput.focus();
             return false;
         }
@@ -492,19 +492,19 @@ class AdjustmentScreen {
         const end = new Date(`${clockOutDate}T${clockOutTime}:00`);
 
         if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
-            this.showAlert('有効な出勤・退勤日時を入力してください', 'warning');
+            this.showAlert('有効な出勤・退勤日時を入力してください', 'danger');
             return false;
         }
 
         if (end <= start) {
-            this.showAlert('退勤日時は出勤日時より後に設定してください', 'warning');
+            this.showAlert('退勤日時は出勤日時より後に設定してください', 'danger');
             this.clockOutTimeInput.focus();
             return false;
         }
 
         const workHours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
         if (workHours > 36) {
-            this.showAlert('勤務時間が長すぎます（36時間以内で入力してください）', 'warning');
+            this.showAlert('勤務時間が長すぎます（36時間以内で入力してください）', 'danger');
             return false;
         }
 
