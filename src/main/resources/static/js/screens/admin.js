@@ -1268,7 +1268,7 @@ class AdminScreen {
     renderHolidayTable(list) {
         if (!this.holidayTableBody) return;
         if (!Array.isArray(list) || list.length === 0) {
-            this.holidayTableBody.innerHTML = `<tr><td colspan="7" class="text-center text-muted">現在処理すべき休日関連申請はありません</td></tr>`;
+            this.holidayTableBody.innerHTML = '';
             return;
         }
 
@@ -2089,7 +2089,7 @@ class AdminScreen {
         this.workPatternTableBody.innerHTML = '';
 
         if (!Array.isArray(entries) || entries.length === 0) {
-            this.setTableState(this.workPatternTableBody, 10, '現在処理すべき勤務時間変更申請はありません', 'text-muted');
+            // 空白の状態にする（メッセージを表示しない）
             return;
         }
 

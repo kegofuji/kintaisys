@@ -61,6 +61,8 @@ class HolidayScreen {
             if (isTransfer) {
                 this.transferWorkDate.required = true;
                 this.transferHolidayDate.required = true;
+                this.setValidity(this.transferWorkDate, true);
+                this.setValidity(this.transferHolidayDate, true);
                 // 代休UI/値を完全クリア
                 if (this.compSwitch) this.compSwitch.checked = false;
                 if (this.compDate) {
@@ -71,15 +73,35 @@ class HolidayScreen {
             } else {
                 this.transferWorkDate.required = false;
                 this.transferHolidayDate.required = false;
+                this.setValidity(this.transferWorkDate, true);
+                this.setValidity(this.transferHolidayDate, true);
+                this.setValidity(this.workDate, true);
+                this.setValidity(this.compDate, true);
             }
         };
         this.typeWorkRadio?.addEventListener('change', updateMode);
         this.typeTransferRadio?.addEventListener('change', updateMode);
 
+        const resetValidity = (input) => {
+            if (!input) return;
+            const handler = () => this.setValidity(input, true);
+            input.addEventListener('input', handler);
+            input.addEventListener('change', handler);
+        };
+        resetValidity(this.workDate);
+        resetValidity(this.compDate);
+        resetValidity(this.transferWorkDate);
+        resetValidity(this.transferHolidayDate);
+        resetValidity(this.reason);
+
         // 代休スイッチ
         this.compSwitch?.addEventListener('change', () => {
             const on = this.compSwitch.checked;
             this.compDate.disabled = !on;
+            if (!on) {
+                this.setValidity(this.compDate, true);
+                if (this.compDate) this.compDate.value = '';
+            }
             // 代休日の現状表示を即時更新
             this.updateHolidayWorkHints();
         });
@@ -137,6 +159,11 @@ class HolidayScreen {
         if (this.typeTransferRadio) this.typeTransferRadio.checked = false;
         if (this.compSwitch) this.compSwitch.checked = false;
         if (this.compDate) this.compDate.disabled = true;
+        this.setValidity(this.workDate, true);
+        this.setValidity(this.compDate, true);
+        this.setValidity(this.transferWorkDate, true);
+        this.setValidity(this.transferHolidayDate, true);
+        this.setValidity(this.reason, true);
     }
 
     // 休日（非勤務日）かどうか
@@ -450,6 +477,34 @@ class HolidayScreen {
 
         const isTransfer = this.typeTransferRadio?.checked === true;
 
+        const requiredFields = [];
+        if (isTransfer) {
+            const transferWorkOk = !!(this.transferWorkDate?.value);
+            const transferHolidayOk = !!(this.transferHolidayDate?.value);
+            requiredFields.push({ input: this.transferWorkDate, ok: transferWorkOk });
+            requiredFields.push({ input: this.transferHolidayDate, ok: transferHolidayOk });
+            this.setValidity(this.workDate, true);
+            this.setValidity(this.compDate, true);
+        } else {
+            const workDateOk = !!(this.workDate?.value);
+            requiredFields.push({ input: this.workDate, ok: workDateOk });
+            if (this.compSwitch?.checked) {
+                const compDateOk = !!(this.compDate?.value);
+                requiredFields.push({ input: this.compDate, ok: compDateOk });
+            } else {
+                this.setValidity(this.compDate, true);
+            }
+            this.setValidity(this.transferWorkDate, true);
+            this.setValidity(this.transferHolidayDate, true);
+        }
+        let firstInvalidField = null;
+        requiredFields.forEach(({ input, ok }) => {
+            this.setValidity(input, ok, '必須項目を入力してください');
+            if (!ok && !firstInvalidField) {
+                firstInvalidField = input;
+            }
+        });
+
         // 事前バリデーション（理由必須）
         const reasonValue = (this.reason?.value || '').trim();
         const hasReason = reasonValue.length > 0;
@@ -459,12 +514,18 @@ class HolidayScreen {
             this.setValidity(this.reason, true);
         }
         const checks = [
+            requiredFields.every(({ ok }) => ok),
             hasReason,
             isTransfer ? this.validateTransferWorkDate() : this.validateWorkDate(),
             isTransfer ? this.validateTransferHolidayDate() : this.validateCompDate()
         ];
         if (checks.some(ok => !ok)) {
             this.showAlert('必須項目を入力してください', 'warning');
+            if (firstInvalidField?.focus) {
+                firstInvalidField.focus();
+            } else if (!hasReason) {
+                this.reason?.focus();
+            }
             return;
         }
 

@@ -25,6 +25,9 @@ class VacationScreen {
         this.specialNotice = null;
         this.prefillCancelButton = null;
         this.formTitle = null;
+        this.refreshLeaveBalanceButton = null;
+        this.reasonTouched = false;
+        this.validationAttempted = false;
 
         this.listenersBound = false;
         this.remainingByType = {};
@@ -83,6 +86,7 @@ class VacationScreen {
         this.reasonRequiredMark = document.getElementById('vacationReasonRequiredMark');
         this.specialNotice = document.getElementById('vacationSpecialNotice');
         this.prefillCancelButton = document.getElementById('vacationFormCancel');
+        this.resetButton = document.getElementById('vacationFormResetBtn');
         this.formTitle = document.getElementById('vacationFormTitle');
         this.refreshLeaveBalanceButton = document.getElementById('refreshLeaveBalance');
 
@@ -121,7 +125,38 @@ class VacationScreen {
             this.refreshLeaveBalanceButton.addEventListener('click', () => this.handleRefreshLeaveBalance());
         }
 
+        if (this.resetButton) {
+            this.resetButton.addEventListener('click', () => this.resetForm());
+        }
+
+        const resetValidity = (input) => {
+            if (!input) return;
+            const handler = () => this.setValidity(input, true);
+            input.addEventListener('input', handler);
+            input.addEventListener('change', handler);
+        };
+        resetValidity(this.vacationStartDate);
+        resetValidity(this.vacationEndDate);
+        resetValidity(this.vacationReason);
+
+        if (this.vacationReason) {
+            this.vacationReason.addEventListener('input', () => {
+                this.reasonTouched = true;
+                this.updateReasonValidity();
+            });
+        }
+
         this.listenersBound = true;
+    }
+
+    /**
+     * フォームリセット
+     */
+    resetForm() {
+        if (this.vacationForm) {
+            this.vacationForm.reset();
+        }
+        this.clearPrefillState();
     }
 
     /**
@@ -148,6 +183,11 @@ class VacationScreen {
                 this.leaveTypeSelect.value = availableOption.value;
             }
         }
+        this.validationAttempted = false;
+        this.reasonTouched = false;
+        this.setValidity(this.vacationStartDate, true);
+        this.setValidity(this.vacationEndDate, true);
+        this.setValidity(this.vacationReason, true);
         this.handleLeaveTypeChange();
     }
 
@@ -179,6 +219,11 @@ class VacationScreen {
         if (this.vacationReason) {
             this.vacationReason.value = reason || '';
         }
+        this.validationAttempted = false;
+        this.reasonTouched = !!(reason && reason.trim().length > 0);
+        this.setValidity(this.vacationStartDate, true);
+        this.setValidity(this.vacationEndDate, true);
+        this.setValidity(this.vacationReason, true);
 
         if (this.formTitle) {
             this.formTitle.textContent = '休暇申請の再申請';
@@ -430,6 +475,7 @@ class VacationScreen {
                     this.reasonRequiredMark.classList.add('d-none');
                 }
             }
+            this.updateReasonValidity();
         }
 
         if (this.vacationEndDate) {
@@ -510,6 +556,8 @@ class VacationScreen {
      */
     async handleVacationSubmit(e) {
         e.preventDefault();
+        this.validationAttempted = true;
+        this.updateReasonValidity();
 
         if (!window.currentEmployeeId) {
             this.showAlert('従業員IDが取得できません', 'danger');
@@ -517,22 +565,44 @@ class VacationScreen {
         }
 
         const { leaveType, timeUnit } = this.getSelectedLeaveType();
-        const startDate = this.vacationStartDate?.value || '';
-        const endDate = this.vacationEndDate?.value || startDate;
+        const startDateRaw = this.vacationStartDate?.value || '';
+        const endDateRaw = this.vacationEndDate?.value || '';
         const reasonRaw = this.vacationReason?.value || '';
         const reason = reasonRaw.trim();
 
-        if (!startDate || !endDate) {
+        const isPaidLeave = leaveType === 'PAID_LEAVE';
+        const requiredChecks = [
+            { input: this.vacationStartDate, ok: !!startDateRaw }
+        ];
+        if (this.vacationEndDate) {
+            if (!this.vacationEndDate.disabled) {
+                requiredChecks.push({ input: this.vacationEndDate, ok: !!endDateRaw });
+            } else {
+                this.setValidity(this.vacationEndDate, true);
+            }
+        }
+        if (isPaidLeave) {
+            requiredChecks.push({ input: this.vacationReason, ok: reason.length > 0 });
+        } else {
+            this.setValidity(this.vacationReason, true);
+        }
+
+        let firstInvalid = null;
+        requiredChecks.forEach(({ input, ok }) => {
+            this.setValidity(input, ok, '必須項目を入力してください');
+            if (!ok && !firstInvalid) {
+                firstInvalid = input;
+            }
+        });
+
+        if (firstInvalid) {
             this.showAlert('必須項目を入力してください', 'warning');
+            firstInvalid.focus?.();
             return;
         }
 
-        const isPaidLeave = leaveType === 'PAID_LEAVE';
-        if (isPaidLeave && !reason) {
-            this.showAlert('必須項目を入力してください', 'warning');
-            this.vacationReason?.focus();
-            return;
-        }
+        const startDate = startDateRaw;
+        const endDate = endDateRaw || startDateRaw;
 
         if (!this.validateDateRange()) {
             return;
@@ -675,12 +745,26 @@ class VacationScreen {
         const start = this.parseLocalDate(startDate);
         const end = this.parseLocalDate(endDate);
 
+        this.setValidity(this.vacationStartDate, true);
+        if (!this.vacationEndDate.disabled) {
+            this.setValidity(this.vacationEndDate, true);
+        }
+
         if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+            if (Number.isNaN(start.getTime())) {
+                this.setValidity(this.vacationStartDate, false, '有効な日付を入力してください');
+            }
+            if (!this.vacationEndDate.disabled && Number.isNaN(end.getTime())) {
+                this.setValidity(this.vacationEndDate, false, '有効な日付を入力してください');
+            }
             this.showAlert('有効な日付を入力してください', 'danger');
             return false;
         }
 
         if (end < start) {
+            if (!this.vacationEndDate.disabled) {
+                this.setValidity(this.vacationEndDate, false, '終了日は開始日以降の日付を選択してください');
+            }
             this.showAlert('終了日は開始日以降の日付を選択してください', 'danger');
             this.vacationEndDate.focus();
             return false;
@@ -689,6 +773,10 @@ class VacationScreen {
         const { leaveType, timeUnit } = this.getSelectedLeaveType();
         const requestedDays = this.calculateRequestedDays(start, end, timeUnit);
         if (requestedDays <= 0) {
+            this.setValidity(this.vacationStartDate, false, '申請期間の日付が不正です');
+            if (!this.vacationEndDate.disabled) {
+                this.setValidity(this.vacationEndDate, false, '申請期間の日付が不正です');
+            }
             this.showAlert('申請期間の日付が不正です', 'danger');
             return false;
         }
@@ -707,6 +795,9 @@ class VacationScreen {
             const invalid = selectedDates.filter((date) => !this.isDateCoveredByGrant(date, grants));
             if (invalid.length > 0) {
                 this.showAlert('選択した期間に有効な休暇付与がありません', 'danger');
+                if (!this.vacationEndDate.disabled) {
+                    this.setValidity(this.vacationEndDate, false, '選択した期間に有効な休暇付与がありません');
+                }
                 return false;
             }
         }
@@ -869,6 +960,41 @@ class VacationScreen {
                 alertDiv.parentNode.removeChild(alertDiv);
             }
         }, 5000);
+    }
+
+    setValidity(input, ok, message) {
+        if (!input) return;
+        if (ok) {
+            if (typeof input.setCustomValidity === 'function') {
+                input.setCustomValidity('');
+            }
+            input.classList.remove('is-invalid');
+            input.removeAttribute('aria-invalid');
+        } else {
+            if (typeof input.setCustomValidity === 'function') {
+                input.setCustomValidity(message || '無効な値です');
+            }
+            input.classList.add('is-invalid');
+            input.setAttribute('aria-invalid', 'true');
+        }
+    }
+
+    updateReasonValidity(options = {}) {
+        if (!this.vacationReason) return;
+        const { force = false } = options;
+        const { leaveType } = this.getSelectedLeaveType();
+        const isPaidLeave = leaveType === 'PAID_LEAVE';
+        if (!isPaidLeave) {
+            this.setValidity(this.vacationReason, true);
+            return;
+        }
+        const shouldValidate = force || this.validationAttempted || this.reasonTouched;
+        if (!shouldValidate) {
+            this.setValidity(this.vacationReason, true);
+            return;
+        }
+        const hasReason = (this.vacationReason.value || '').trim().length > 0;
+        this.setValidity(this.vacationReason, hasReason, '必須項目を入力してください');
     }
 
     expandDateRange(startStr, endStr) {

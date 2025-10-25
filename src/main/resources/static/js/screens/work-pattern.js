@@ -165,13 +165,28 @@ class WorkPatternScreen {
             this.endTimeInput.addEventListener('change', () => this.handleTimeChange());
         }
         if (this.breakTimeInput) {
-            this.breakTimeInput.addEventListener('input', () => this.updateWorkingPreview());
+            this.breakTimeInput.addEventListener('input', () => {
+                this.setValidity(this.breakTimeInput, true);
+                this.updateWorkingPreview();
+            });
         }
         if (Array.isArray(this.dayButtons) && this.dayButtons.length > 0) {
             this.dayButtons.forEach((button) => {
                 button.addEventListener('click', () => this.toggleDaySelection(button));
             });
         }
+        const resetValidity = (input) => {
+            if (!input) return;
+            const handler = () => this.setValidity(input, true);
+            input.addEventListener('input', handler);
+            input.addEventListener('change', handler);
+        };
+        resetValidity(this.startDateInput);
+        resetValidity(this.endDateInput);
+        resetValidity(this.startTimeInput);
+        resetValidity(this.endTimeInput);
+        resetValidity(this.breakTimeInput);
+        resetValidity(this.reasonInput);
         this.listenersBound = true;
     }
 
@@ -245,6 +260,12 @@ class WorkPatternScreen {
         if (this.reasonInput) {
             this.reasonInput.value = '';
         }
+        this.setValidity(this.startDateInput, true);
+        this.setValidity(this.endDateInput, true);
+        this.setValidity(this.startTimeInput, true);
+        this.setValidity(this.endTimeInput, true);
+        this.setValidity(this.breakTimeInput, true);
+        this.setValidity(this.reasonInput, true);
         this.setDaySelection(DEFAULT_WORK_PATTERN_DAYS);
         this.updateDaySelectionVisibility();
         this.updateWorkingPreview();
@@ -260,21 +281,42 @@ class WorkPatternScreen {
             return;
         }
 
-        const startDate = this.startDateInput?.value;
-        const endDate = this.endDateInput?.value;
-        const startTime = this.startTimeInput?.value;
-        const endTime = this.endTimeInput?.value;
+        const startDate = this.startDateInput?.value || '';
+        const endDate = this.endDateInput?.value || '';
+        const startTime = this.startTimeInput?.value || '';
+        const endTime = this.endTimeInput?.value || '';
+        const reasonRaw = this.reasonInput?.value || '';
+        const reason = reasonRaw.trim();
 
-        if (!startDate || !endDate || !startTime || !endTime) {
+        const requiredChecks = [
+            { input: this.startDateInput, ok: !!startDate },
+            { input: this.endDateInput, ok: !!endDate },
+            { input: this.startTimeInput, ok: !!startTime },
+            { input: this.endTimeInput, ok: !!endTime },
+            { input: this.reasonInput, ok: reason.length > 0 }
+        ];
+
+        let firstInvalid = null;
+        requiredChecks.forEach(({ input, ok }) => {
+            this.setValidity(input, ok, '必須項目を入力してください');
+            if (!ok && !firstInvalid) {
+                firstInvalid = input;
+            }
+        });
+
+        if (firstInvalid) {
             this.showAlert('必須項目を入力してください', 'warning');
+            firstInvalid.focus?.();
             return;
         }
 
         if (endDate < startDate) {
             this.showAlert('終了日は開始日以降を指定してください', 'danger');
+            this.setValidity(this.endDateInput, false, '終了日は開始日以降を指定してください');
             this.endDateInput?.focus();
             return;
         }
+        this.setValidity(this.endDateInput, true);
 
         // 申請期間が7日以上の場合のみ勤務日の選択を必須とする
         const periodLength = this.getRequestedPeriodLength();
@@ -292,12 +334,17 @@ class WorkPatternScreen {
         const totalMinutes = this.calculateTotalMinutes();
         if (totalMinutes === null) {
             this.showAlert('有効な勤務時間を入力してください', 'danger');
+            this.setValidity(this.startTimeInput, false, '有効な勤務時間を入力してください');
+            this.setValidity(this.endTimeInput, false, '有効な勤務時間を入力してください');
             return;
         }
         if (totalMinutes <= 0) {
             this.showAlert('勤務時間が0分以下です', 'danger');
+            this.setValidity(this.endTimeInput, false, '勤務時間が0分以下です');
             return;
         }
+        this.setValidity(this.startTimeInput, true);
+        this.setValidity(this.endTimeInput, true);
 
         let breakMinutes = this.parseBreakInputMinutes();
         if (breakMinutes === null) {
@@ -309,29 +356,24 @@ class WorkPatternScreen {
         breakMinutes = Math.min(Math.max(breakMinutes, 0), totalMinutes);
 
         const workingMinutes = Math.max(totalMinutes - breakMinutes, 0);
-        
+
         // 実働時間に応じた最小休憩時間の検証
         // 実働6時間以上8時間未満：45分以上の休憩が必要
         if (workingMinutes >= 360 && workingMinutes < 480 && breakMinutes < 45) {
             this.showAlert('実働6時間以上8時間未満の場合、休憩時間は45分以上必要です', 'danger');
+            this.setValidity(this.breakTimeInput, false, '45分以上の休憩が必要です');
             this.breakTimeInput?.focus();
             return;
         }
         // 実働8時間以上：60分以上の休憩が必要
-        else if (workingMinutes >= 480 && breakMinutes < 60) {
+        if (workingMinutes >= 480 && breakMinutes < 60) {
             this.showAlert('実働8時間以上の場合、休憩時間は60分以上必要です', 'danger');
+            this.setValidity(this.breakTimeInput, false, '60分以上の休憩が必要です');
             this.breakTimeInput?.focus();
             return;
         }
-        
-        const reason = this.reasonInput?.value?.trim() || '';
-        
-        if (!reason) {
-            this.showAlert('必須項目を入力してください', 'warning');
-            this.reasonInput?.focus();
-            return;
-        }
-        
+        this.setValidity(this.breakTimeInput, true);
+
         const selectedDaysDisplay = this.formatSelectedDays(this.buildSelectedDaysEntry());
 
         const confirmed = await this.confirmSubmission({
@@ -1482,6 +1524,23 @@ class WorkPatternScreen {
         const mm = String(today.getMonth() + 1).padStart(2, '0');
         const dd = String(today.getDate()).padStart(2, '0');
         return `${yyyy}-${mm}-${dd}`;
+    }
+
+    setValidity(input, ok, message) {
+        if (!input) return;
+        if (ok) {
+            if (typeof input.setCustomValidity === 'function') {
+                input.setCustomValidity('');
+            }
+            input.classList.remove('is-invalid');
+            input.removeAttribute('aria-invalid');
+        } else {
+            if (typeof input.setCustomValidity === 'function') {
+                input.setCustomValidity(message || '無効な値です');
+            }
+            input.classList.add('is-invalid');
+            input.setAttribute('aria-invalid', 'true');
+        }
     }
 
     showAlert(message, type = 'info', clearExisting = true) {

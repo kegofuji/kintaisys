@@ -90,6 +90,13 @@ class AdjustmentScreen {
             this.adjustmentReason.value = reason || '';
         }
 
+        this.setValidity(this.clockInDateInput, true);
+        this.setValidity(this.clockOutDateInput, true);
+        this.setValidity(this.clockInTimeInput, true);
+        this.setValidity(this.clockOutTimeInput, true);
+        this.setValidity(this.breakTimeInput, true);
+        this.setValidity(this.adjustmentReason, true);
+
         this.breakManuallyEdited = false;
         if (this.breakTimeInput) {
             if (typeof breakMinutes === 'number' && !Number.isNaN(breakMinutes)) {
@@ -145,6 +152,7 @@ class AdjustmentScreen {
         this.adjustmentReason = document.getElementById('adjustmentReason');
         this.formTitle = document.getElementById('adjustmentFormTitle');
         this.cancelPrefillButton = document.getElementById('adjustmentFormCancel');
+        this.resetButton = document.getElementById('adjustmentFormResetBtn');
 
         // サマリー用要素
         this.summaryContainer = document.getElementById('adjustmentSelectedDaySummary');
@@ -211,13 +219,39 @@ class AdjustmentScreen {
         if (this.breakTimeInput) {
             this.breakTimeInput.addEventListener('input', () => {
                 this.breakManuallyEdited = true;
-                this.breakTimeInput.classList.remove('is-invalid');
-                this.breakTimeInput.removeAttribute('aria-invalid');
+                this.setValidity(this.breakTimeInput, true);
                 this.updateWorkingPreview();
             });
         }
 
+        const resetValidity = (input) => {
+            if (!input) return;
+            const handler = () => this.setValidity(input, true);
+            input.addEventListener('input', handler);
+            input.addEventListener('change', handler);
+        };
+        resetValidity(this.clockInDateInput);
+        resetValidity(this.clockOutDateInput);
+        resetValidity(this.clockInTimeInput);
+        resetValidity(this.clockOutTimeInput);
+        resetValidity(this.breakTimeInput);
+        resetValidity(this.adjustmentReason);
+
+        if (this.resetButton) {
+            this.resetButton.addEventListener('click', () => this.resetForm());
+        }
+
         this.listenersBound = true;
+    }
+
+    /**
+     * フォームリセット
+     */
+    resetForm() {
+        if (this.adjustmentForm) {
+            this.adjustmentForm.reset();
+        }
+        this.setDefaultDate();
     }
 
     /**
@@ -238,9 +272,13 @@ class AdjustmentScreen {
         }
         if (this.breakTimeInput) {
             this.breakTimeInput.value = '';
-            this.breakTimeInput.classList.remove('is-invalid');
-            this.breakTimeInput.removeAttribute('aria-invalid');
+            this.setValidity(this.breakTimeInput, true);
         }
+        this.setValidity(this.clockInDateInput, true);
+        this.setValidity(this.clockOutDateInput, true);
+        this.setValidity(this.clockInTimeInput, true);
+        this.setValidity(this.clockOutTimeInput, true);
+        this.setValidity(this.adjustmentReason, true);
         this.breakManuallyEdited = false;
         this.autoCalculatedBreakMinutes = 0;
         this.updateWorkingPreview();
@@ -260,6 +298,12 @@ class AdjustmentScreen {
         this.autoCalculatedBreakMinutes = 0;
         this.renderSelectedDaySummary('', '');
         this.setSummaryStatus('');
+        this.setValidity(this.clockInDateInput, true);
+        this.setValidity(this.clockOutDateInput, true);
+        this.setValidity(this.clockInTimeInput, true);
+        this.setValidity(this.clockOutTimeInput, true);
+        this.setValidity(this.breakTimeInput, true);
+        this.setValidity(this.adjustmentReason, true);
     }
 
     /**
@@ -273,11 +317,30 @@ class AdjustmentScreen {
         const clockInTime = this.clockInTimeInput?.value || '';
         const clockOutDate = this.clockOutDateInput?.value || '';
         const clockOutTime = this.clockOutTimeInput?.value || '';
-        const reason = this.adjustmentReason?.value || '';
-        const breakTimeValue = this.breakTimeInput?.value || '';
+        const reasonRaw = this.adjustmentReason?.value || '';
+        const reason = reasonRaw.trim();
+        const breakTimeValueRaw = this.breakTimeInput?.value || '';
+        const breakTimeValue = breakTimeValueRaw.trim();
 
-        if (!clockInDate || !clockOutDate || !reason) {
+        const requiredChecks = [
+            { input: this.clockInDateInput, ok: !!clockInDate },
+            { input: this.clockOutDateInput, ok: !!clockOutDate },
+            { input: this.clockInTimeInput, ok: !!clockInTime },
+            { input: this.clockOutTimeInput, ok: !!clockOutTime },
+            { input: this.adjustmentReason, ok: reason.length > 0 }
+        ];
+
+        let firstInvalid = null;
+        requiredChecks.forEach(({ input, ok }) => {
+            this.setValidity(input, ok, '必須項目を入力してください');
+            if (!ok && !firstInvalid) {
+                firstInvalid = input;
+            }
+        });
+
+        if (firstInvalid) {
             this.showAlert('必須項目を入力してください', 'warning');
+            firstInvalid?.focus();
             return;
         }
 
@@ -285,43 +348,34 @@ class AdjustmentScreen {
             return;
         }
 
-        if (!clockInTime || !clockOutTime) {
-            this.showAlert('必須項目を入力してください', 'warning');
-            return;
-        }
-
         if (!this.validateTimeRange()) {
             return;
         }
 
-        if (!breakTimeValue) {
-            this.showAlert('必須項目を入力してください', 'warning');
-            this.breakTimeInput?.focus();
-            return;
-        }
-
-        const breakPattern = /^\d{1,2}:[0-5]\d$/;
-        if (!breakPattern.test(breakTimeValue)) {
-            this.showAlert('休憩時間はHH:MM形式で入力してください', 'danger');
-            this.breakTimeInput?.classList.add('is-invalid');
-            this.breakTimeInput?.setAttribute('aria-invalid', 'true');
-            this.breakTimeInput?.focus();
-            return;
+        // 休憩時間が入力されている場合のみバリデーション
+        if (breakTimeValue.length > 0) {
+            const breakPattern = /^\d{1,2}:[0-5]\d$/;
+            if (!breakPattern.test(breakTimeValue)) {
+                this.showAlert('休憩時間はHH:MM形式で入力してください', 'danger');
+                this.setValidity(this.breakTimeInput, false, '休憩時間はHH:MM形式で入力してください');
+                this.breakTimeInput?.focus();
+                return;
+            }
         }
 
         const breakMinutes = TimeUtils.timeStringToMinutes(breakTimeValue);
-        if (this.breakTimeInput) {
-            this.breakTimeInput.classList.remove('is-invalid');
-            this.breakTimeInput.removeAttribute('aria-invalid');
-        }
+        this.setValidity(this.breakTimeInput, true);
         const totalMinutes = this.calculateTotalMinutes(clockInDate, clockInTime, clockOutDate, clockOutTime);
         if (totalMinutes === null) {
             this.showAlert('有効な勤務時間を入力してください', 'danger');
+            this.setValidity(this.clockInTimeInput, false, '有効な勤務時間を入力してください');
+            this.setValidity(this.clockOutTimeInput, false, '有効な勤務時間を入力してください');
             return;
         }
 
         if (breakMinutes > totalMinutes) {
             this.showAlert('休憩時間が勤務時間を超えています', 'danger');
+            this.setValidity(this.breakTimeInput, false, '休憩時間が勤務時間を超えています');
             this.breakTimeInput?.focus();
             return;
         }
@@ -333,13 +387,22 @@ class AdjustmentScreen {
         // 実働8時間以上：60分以上の休憩が必要
         if (workingMinutes >= 360 && workingMinutes < 480 && breakMinutes < 45) {
             this.showAlert('実働6時間以上8時間未満の場合、休憩時間は45分以上必要です', 'danger');
+            this.setValidity(this.breakTimeInput, false, '45分以上の休憩が必要です');
             this.breakTimeInput?.focus();
             return;
         } else if (workingMinutes >= 480 && breakMinutes < 60) {
             this.showAlert('実働8時間以上の場合、休憩時間は60分以上必要です', 'danger');
+            this.setValidity(this.breakTimeInput, false, '60分以上の休憩が必要です');
             this.breakTimeInput?.focus();
             return;
         }
+
+        this.setValidity(this.clockInDateInput, true);
+        this.setValidity(this.clockOutDateInput, true);
+        this.setValidity(this.clockInTimeInput, true);
+        this.setValidity(this.clockOutTimeInput, true);
+        this.setValidity(this.breakTimeInput, true);
+        this.setValidity(this.adjustmentReason, true);
 
         if (!window.currentEmployeeId) {
             this.showAlert('従業員IDが取得できません', 'danger');
@@ -371,7 +434,7 @@ class AdjustmentScreen {
 
         const readableBreak = TimeUtils.formatMinutesToTime(breakMinutes);
         const readableWork = TimeUtils.formatMinutesToTime(workingMinutes);
-        const reasonDisplay = (reason || '').trim() || '記載なし';
+        const reasonDisplay = reason || '記載なし';
         const escapeHtml = (value) => String(value ?? '').replace(/&/g, '&amp;')
             .replace(/</g, '&lt;')
             .replace(/>/g, '&gt;')
@@ -451,20 +514,36 @@ class AdjustmentScreen {
      * @returns {boolean}
      */
     validateDateFields() {
-        if (!this.clockInDateInput) {
+        if (!this.clockInDateInput && !this.clockOutDateInput) {
             return true;
         }
 
-        const dateStr = this.clockInDateInput.value;
-        if (!dateStr) {
-            return true;
+        if (this.clockInDateInput) {
+            const dateStr = (this.clockInDateInput.value || '').trim();
+            if (dateStr) {
+                const selectedDate = new Date(`${dateStr}T00:00:00`);
+                if (Number.isNaN(selectedDate.getTime())) {
+                    this.setValidity(this.clockInDateInput, false, '有効な出勤日を入力してください');
+                    this.showAlert('有効な出勤日を入力してください', 'danger');
+                    this.clockInDateInput.focus();
+                    return false;
+                }
+                this.setValidity(this.clockInDateInput, true);
+            }
         }
 
-        const selectedDate = new Date(`${dateStr}T00:00:00`);
-        if (Number.isNaN(selectedDate.getTime())) {
-            this.showAlert('有効な出勤日を入力してください', 'danger');
-            this.clockInDateInput.focus();
-            return false;
+        if (this.clockOutDateInput) {
+            const dateStr = (this.clockOutDateInput.value || '').trim();
+            if (dateStr) {
+                const selectedDate = new Date(`${dateStr}T00:00:00`);
+                if (Number.isNaN(selectedDate.getTime())) {
+                    this.setValidity(this.clockOutDateInput, false, '有効な退勤日を入力してください');
+                    this.showAlert('有効な退勤日を入力してください', 'danger');
+                    this.clockOutDateInput.focus();
+                    return false;
+                }
+                this.setValidity(this.clockOutDateInput, true);
+            }
         }
 
         return true;
@@ -488,16 +567,26 @@ class AdjustmentScreen {
             return true;
         }
 
+        this.setValidity(this.clockInTimeInput, true);
+        this.setValidity(this.clockOutTimeInput, true);
+
         const start = new Date(`${clockInDate}T${clockInTime}:00`);
         const end = new Date(`${clockOutDate}T${clockOutTime}:00`);
 
         if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
             this.showAlert('有効な出勤・退勤日時を入力してください', 'danger');
+            if (Number.isNaN(start.getTime())) {
+                this.setValidity(this.clockInTimeInput, false, '有効な出勤時刻を入力してください');
+            }
+            if (Number.isNaN(end.getTime())) {
+                this.setValidity(this.clockOutTimeInput, false, '有効な退勤時刻を入力してください');
+            }
             return false;
         }
 
         if (end <= start) {
             this.showAlert('退勤日時は出勤日時より後に設定してください', 'danger');
+            this.setValidity(this.clockOutTimeInput, false, '退勤時刻は出勤後に設定してください');
             this.clockOutTimeInput.focus();
             return false;
         }
@@ -505,6 +594,7 @@ class AdjustmentScreen {
         const workHours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
         if (workHours > 36) {
             this.showAlert('勤務時間が長すぎます（36時間以内で入力してください）', 'danger');
+            this.setValidity(this.clockOutTimeInput, false, '勤務時間は36時間以内で入力してください');
             return false;
         }
 
@@ -814,6 +904,23 @@ class AdjustmentScreen {
                 alertDiv.parentNode.removeChild(alertDiv);
             }
         }, 5000);
+    }
+
+    setValidity(input, ok, message) {
+        if (!input) return;
+        if (ok) {
+            if (typeof input.setCustomValidity === 'function') {
+                input.setCustomValidity('');
+            }
+            input.classList.remove('is-invalid');
+            input.removeAttribute('aria-invalid');
+        } else {
+            if (typeof input.setCustomValidity === 'function') {
+                input.setCustomValidity(message || '無効な値です');
+            }
+            input.classList.add('is-invalid');
+            input.setAttribute('aria-invalid', 'true');
+        }
     }
 
     expandDateRange(startStr, endStr) {
