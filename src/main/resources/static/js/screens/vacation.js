@@ -797,18 +797,17 @@ class VacationScreen {
         const { leaveType, timeUnit } = this.getSelectedLeaveType();
         const requestedDays = this.calculateRequestedDays(start, end, timeUnit);
         if (requestedDays <= 0) {
-            this.setValidity(this.vacationStartDate, false, '申請期間の日付が不正です');
+            this.setValidity(this.vacationStartDate, false, '休日は申請できません');
             if (!this.vacationEndDate.disabled) {
-                this.setValidity(this.vacationEndDate, false, '申請期間の日付が不正です');
+                this.setValidity(this.vacationEndDate, false, '休日は申請できません');
             }
-            this.showAlert('申請期間の日付が不正です', 'danger');
+            this.showAlert('休日は申請できません', 'danger');
             return false;
         }
 
         const remaining = this.getRemainingDays(leaveType);
         if (remaining < requestedDays) {
-            const label = this.leaveTypeDisplayMap[leaveType] || leaveType;
-            this.showAlert(`申請日数（${requestedDays}日）が${label}の残日数（${remaining}日）を超えています`, 'danger');
+            this.showAlert('所有休暇残数不足のため申請できません', 'danger');
             return false;
         }
 
