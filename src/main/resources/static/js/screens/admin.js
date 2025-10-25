@@ -50,7 +50,8 @@ class AdminScreen {
         this.workPatternModalMode = 'approve';
         this.workPatternApprovalEntry = null;
         this.workPatternApprovalButtons = null;
-        this.workPatternModalApplicantEl = null;
+        this.workPatternModalEmployeeIdEl = null;
+        this.workPatternModalEmployeeNameEl = null;
         this.workPatternModalPeriodEl = null;
         this.workPatternModalTimeEl = null;
         this.workPatternModalBreakEl = null;
@@ -58,6 +59,8 @@ class AdminScreen {
         this.workPatternModalDaysEl = null;
         this.workPatternModalReasonTextEl = null;
         this.employeeCache = null;
+        this.employeeCacheLoaded = false;
+        this.employeeCachePromise = null;
         this.selectedGrantEmployees = [];
         this.vacationManagementLoading = false;
         this.vacationManagementPoller = null;
@@ -82,16 +85,188 @@ class AdminScreen {
      * @returns {string}
      */
     getDisplayEmployeeName(item) {
-        // 全ての社員をemp{ID}形式で表記
-        if (item && item.employeeId) {
-            return `emp${item.employeeId}`;
+        const identity = this.getEmployeeIdentity(item);
+        return identity.display;
+    }
+
+    normalizeEmployeeId(value) {
+        if (value == null) {
+            return null;
         }
-        // employeeIdがない場合のフォールバック
-        const nameFromTopRight = window.currentUser;
-        if (nameFromTopRight && typeof nameFromTopRight === 'string') {
-            return nameFromTopRight;
+        if (typeof value === 'number' && Number.isFinite(value)) {
+            return value;
         }
-        return 'unknown';
+        if (typeof value === 'string') {
+            const trimmed = value.trim();
+            if (!trimmed) {
+                return null;
+            }
+            const empMatch = trimmed.match(/^emp(\d+)$/i);
+            if (empMatch) {
+                return Number(empMatch[1]);
+            }
+            const parsed = Number(trimmed);
+            if (Number.isFinite(parsed)) {
+                return parsed;
+            }
+        }
+        return null;
+    }
+
+    extractEmployeeId(item) {
+        if (!item) {
+            return null;
+        }
+        const candidates = [
+            item.employeeId,
+            item.employee_id,
+            item.employeeCode,
+            item.employee?.employeeId,
+            item.employee?.id,
+            typeof item.getEmployeeId === 'function' ? item.getEmployeeId() : null
+        ];
+        for (const candidate of candidates) {
+            const normalized = this.normalizeEmployeeId(candidate);
+            if (normalized != null) {
+                return normalized;
+            }
+        }
+        return null;
+    }
+
+    findEmployeeInCache(employeeId) {
+        if (employeeId == null || !Array.isArray(this.employeeCache)) {
+            return null;
+        }
+        const numericId = Number(employeeId);
+        if (!Number.isFinite(numericId)) {
+            return null;
+        }
+        return this.employeeCache.find((emp) => {
+            const candidate = this.normalizeEmployeeId(emp?.employeeId);
+            return Number.isFinite(candidate) && candidate === numericId;
+        }) || null;
+    }
+
+    getEmployeeIdentity(item) {
+        const employeeId = this.extractEmployeeId(item);
+        const idLabel = employeeId != null ? `emp${employeeId}` : '-';
+
+        const candidateNames = [];
+        if (item) {
+            const combined = `${item.lastName || ''} ${item.firstName || ''}`.trim();
+            if (combined) {
+                candidateNames.push(combined);
+            }
+            ['fullName', 'employeeFullName', 'employeeName', 'name', 'applicant', 'displayName'].forEach((key) => {
+                const value = item[key];
+                if (typeof value === 'string' && value.trim()) {
+                    candidateNames.push(value.trim());
+                }
+            });
+        }
+
+        let resolvedName = candidateNames.find((name) => {
+            if (!name) return false;
+            return name.trim().toLowerCase() !== idLabel.toLowerCase();
+        }) || '';
+
+        if (!resolvedName && employeeId != null) {
+            const cached = this.findEmployeeInCache(employeeId);
+            if (cached) {
+                const cacheCombined = `${cached.lastName || ''} ${cached.firstName || ''}`.trim();
+                const cacheCandidates = [
+                    cacheCombined,
+                    cached.fullName,
+                    cached.employeeName,
+                    cached.name,
+                    cached.username
+                ];
+                resolvedName = cacheCandidates.find((name) => {
+                    if (!name) return false;
+                    return name.trim().toLowerCase() !== idLabel.toLowerCase();
+                }) || resolvedName;
+            }
+        }
+
+        if (!resolvedName && item && typeof item.username === 'string') {
+            const trimmed = item.username.trim();
+            if (trimmed.toLowerCase() !== idLabel.toLowerCase()) {
+                resolvedName = trimmed;
+            }
+        }
+
+        let name = resolvedName ? resolvedName.trim() : '';
+        if (!name) {
+            const fallback = (typeof window !== 'undefined' && typeof window.currentUser === 'string') ? window.currentUser.trim() : '';
+            if (fallback && idLabel === '-') {
+                name = fallback;
+            }
+        }
+
+        const display = name ? (idLabel !== '-' ? `${idLabel} / ${name}` : name) : idLabel;
+
+        return {
+            employeeId,
+            idLabel,
+            name,
+            display
+        };
+    }
+
+    getEmployeeCellParts(item) {
+        const identity = this.getEmployeeIdentity(item);
+        const idText = identity.idLabel || '-';
+        const nameText = identity.name || '-';
+        return {
+            identity,
+            idHtml: this.escapeHtml(idText),
+            nameHtml: this.escapeHtml(nameText)
+        };
+    }
+
+    async ensureEmployeeCache(force = false) {
+        if (!force && this.employeeCacheLoaded) {
+            if (!Array.isArray(this.employeeCache)) {
+                this.employeeCache = [];
+            }
+            return this.employeeCache;
+        }
+
+        if (this.employeeCachePromise) {
+            return this.employeeCachePromise;
+        }
+
+        this.employeeCachePromise = (async () => {
+            try {
+                const response = await fetchWithAuth.handleApiCall(
+                    () => fetchWithAuth.get('/api/admin/employee-management'),
+                    '社員一覧の取得に失敗しました'
+                );
+
+                if (response?.success && Array.isArray(response.data)) {
+                    this.employeeCache = response.data;
+                } else if (Array.isArray(response?.data)) {
+                    this.employeeCache = response.data;
+                } else if (Array.isArray(response)) {
+                    this.employeeCache = response;
+                } else if (!Array.isArray(this.employeeCache)) {
+                    this.employeeCache = [];
+                }
+            } catch (error) {
+                console.error('社員キャッシュ取得エラー:', error);
+                if (!Array.isArray(this.employeeCache)) {
+                    this.employeeCache = [];
+                }
+            } finally {
+                this.employeeCacheLoaded = true;
+                this.employeeCachePromise = null;
+            }
+
+            return this.employeeCache;
+        })();
+
+        return this.employeeCachePromise;
     }
 
     /**
@@ -262,13 +437,13 @@ class AdminScreen {
     getLeaveTypeLabel(type) {
         switch ((type || '').toUpperCase()) {
             case 'PAID_LEAVE':
-                return '有休休暇';
+                return '有給';
             case 'SUMMER':
-                return '夏季休暇';
+                return '夏季';
             case 'WINTER':
-                return '冬季休暇';
+                return '冬季';
             case 'SPECIAL':
-                return '特別休暇';
+                return '特別';
             default:
                 return type || '-';
         }
@@ -993,7 +1168,8 @@ class AdminScreen {
         this.workPatternModalReasonInput = document.getElementById('workPatternApprovalReason');
         this.workPatternModalReasonFeedback = document.getElementById('workPatternApprovalReasonFeedback');
         this.workPatternModalConfirmButton = document.getElementById('workPatternApprovalConfirmButton');
-        this.workPatternModalApplicantEl = document.getElementById('workPatternModalApplicant');
+        this.workPatternModalEmployeeIdEl = document.getElementById('workPatternModalEmployeeId');
+        this.workPatternModalEmployeeNameEl = document.getElementById('workPatternModalEmployeeName');
         this.workPatternModalPeriodEl = document.getElementById('workPatternModalPeriod');
         this.workPatternModalTimeEl = document.getElementById('workPatternModalTime');
         this.workPatternModalBreakEl = document.getElementById('workPatternModalBreak');
@@ -1059,8 +1235,9 @@ class AdminScreen {
 
     async loadHolidayPending() {
         if (!this.holidayTableBody) return false;
-        this.holidayTableBody.innerHTML = `<tr><td colspan="6" class="text-center text-muted">データを読み込み中...</td></tr>`;
+        this.holidayTableBody.innerHTML = `<tr><td colspan="7" class="text-center text-muted">データを読み込み中...</td></tr>`;
         let success = true;
+        await this.ensureEmployeeCache();
         try {
             const statuses = ['PENDING', 'APPROVED', 'REJECTED'];
             const responses = await Promise.all(
@@ -1081,7 +1258,7 @@ class AdminScreen {
             this.renderHolidayTable(list);
         } catch (e) {
             console.error('休日関連読み込みエラー:', e);
-            this.holidayTableBody.innerHTML = `<tr><td colspan="6" class="text-danger text-center">読み込みに失敗しました</td></tr>`;
+            this.holidayTableBody.innerHTML = `<tr><td colspan="7" class="text-danger text-center">読み込みに失敗しました</td></tr>`;
             success = false;
         }
 
@@ -1091,7 +1268,7 @@ class AdminScreen {
     renderHolidayTable(list) {
         if (!this.holidayTableBody) return;
         if (!Array.isArray(list) || list.length === 0) {
-            this.holidayTableBody.innerHTML = `<tr><td colspan="6" class="text-center text-muted">現在処理すべき休日関連申請はありません</td></tr>`;
+            this.holidayTableBody.innerHTML = `<tr><td colspan="7" class="text-center text-muted">現在処理すべき休日関連申請はありません</td></tr>`;
             return;
         }
 
@@ -1105,7 +1282,6 @@ class AdminScreen {
         const rows = sorted.map(item => {
             const type = (item.requestType || '').toUpperCase();
             const isHolidayWork = type === 'HOLIDAY_WORK';
-            const employeeName = this.getDisplayEmployeeName(item);
             const workDate = this.formatDate(item.workDate);
             const compDate = item.takeComp ? (this.formatDate(item.compDate) || '取得') : '取得しない';
             const transferHoliday = this.formatDate(item.transferHolidayDate);
@@ -1113,6 +1289,8 @@ class AdminScreen {
             const rawStatus = (item.status || 'PENDING');
             const status = this.translateStatus(rawStatus);
             const isPending = (rawStatus || 'PENDING').toUpperCase() === 'PENDING';
+            const { idHtml, nameHtml } = this.getEmployeeCellParts(item);
+            const reasonHtml = reason ? this.escapeHtml(reason) : '-';
 
             // 申請内容を打刻修正一覧の体裁に合わせてブロック化
             const contentHtml = isHolidayWork
@@ -1134,7 +1312,7 @@ class AdminScreen {
                 data-work-date="${item.workDate || ''}"
                 data-comp-date="${item.compDate || ''}"
                 data-transfer-holiday-date="${item.transferHolidayDate || ''}"
-                data-reason="${this.escapeHtml(reason)}"
+                data-reason="${encodeURIComponent(reason)}"
                 data-status="${item.status || 'PENDING'}"
             `;
 
@@ -1147,10 +1325,11 @@ class AdminScreen {
 
             return `
                 <tr${isPending ? '' : ' class="table-secondary"'}>
-                    <td class="text-start">${employeeName}</td>
+                    <td class="text-start">${idHtml}</td>
+                    <td class="text-start">${nameHtml}</td>
                     <td class="text-start">${workDate}</td>
                     <td class="text-start">${contentHtml}</td>
-                    <td class="text-start">${this.escapeHtml(reason) || '-'}</td>
+                    <td class="text-start">${reasonHtml}</td>
                     <td class="text-start">${status}</td>
                     <td class="text-start">${actionHtml}</td>
                 </tr>`;
@@ -1173,7 +1352,14 @@ class AdminScreen {
             workDate: button.getAttribute('data-work-date') || '',
             compDate: button.getAttribute('data-comp-date') || '',
             transferHolidayDate: button.getAttribute('data-transfer-holiday-date') || '',
-            reason: button.getAttribute('data-reason') || '',
+            reason: (() => {
+                const encoded = button.getAttribute('data-reason') || '';
+                try {
+                    return decodeURIComponent(encoded);
+                } catch (_) {
+                    return encoded;
+                }
+            })(),
             status: button.getAttribute('data-status') || 'PENDING'
         };
 
@@ -1187,13 +1373,19 @@ class AdminScreen {
         console.log('休日関連申請承認モーダル - entry:', entry);
         console.log('休日関連申請承認モーダル - requestType:', type);
         const actionText = isApprove ? '承認' : '却下';
-        const employeeName = this.getDisplayEmployeeName({ employeeId: entry.employeeId });
+        const identity = this.getEmployeeIdentity(entry);
+        const employeeIdRow = `
+                <dt class="col-4 text-muted text-nowrap mb-0">社員ID</dt>
+                <dd class="col-8 text-end mb-0 fw-semibold">${this.escapeHtml(identity.idLabel || '-')}</dd>`;
+        const employeeNameRow = `
+                <dt class="col-4 text-muted text-nowrap mb-0">社員名</dt>
+                <dd class="col-8 text-end mb-0 fw-semibold">${identity.name ? this.escapeHtml(identity.name) : '-'}</dd>`;
         let detailsHtml = '';
         if (type === 'HOLIDAY_WORK') {
             const compText = entry.compDate ? this.formatDate(entry.compDate) : '取得しない';
             detailsHtml = `
-                <dt class="col-4 text-muted text-nowrap mb-0">申請者</dt>
-                <dd class="col-8 text-end mb-0 fw-semibold">${this.escapeHtml(employeeName)}</dd>
+                ${employeeIdRow}
+                ${employeeNameRow}
                 <dt class="col-4 text-muted text-nowrap mb-0">申請種別</dt>
                 <dd class="col-8 text-end mb-0 fw-semibold">休日出勤</dd>
                 <dt class="col-4 text-muted text-nowrap mb-0">休日出勤日</dt>
@@ -1202,8 +1394,8 @@ class AdminScreen {
                 <dd class="col-8 text-end mb-0 fw-semibold">${compText}</dd>`;
         } else if (type === 'TRANSFER') {
             detailsHtml = `
-                <dt class="col-4 text-muted text-nowrap mb-0">申請者</dt>
-                <dd class="col-8 text-end mb-0 fw-semibold">${this.escapeHtml(employeeName)}</dd>
+                ${employeeIdRow}
+                ${employeeNameRow}
                 <dt class="col-4 text-muted text-nowrap mb-0">申請種別</dt>
                 <dd class="col-8 text-end mb-0 fw-semibold">振替</dd>
                 <dt class="col-4 text-muted text-nowrap mb-0">振替出勤日</dt>
@@ -1214,8 +1406,8 @@ class AdminScreen {
             // 不明な申請種別の場合のフォールバック（代休情報も含める）
             const compText = entry.compDate ? this.formatDate(entry.compDate) : '取得しない';
             detailsHtml = `
-                <dt class="col-4 text-muted text-nowrap mb-0">申請者</dt>
-                <dd class="col-8 text-end mb-0 fw-semibold">${this.escapeHtml(employeeName)}</dd>
+                ${employeeIdRow}
+                ${employeeNameRow}
                 <dt class="col-4 text-muted text-nowrap mb-0">申請種別</dt>
                 <dd class="col-8 text-end mb-0 fw-semibold">休日出勤</dd>
                 <dt class="col-4 text-muted text-nowrap mb-0">休日出勤日</dt>
@@ -1223,7 +1415,7 @@ class AdminScreen {
                 <dt class="col-4 text-muted text-nowrap mb-0">代休日</dt>
                 <dd class="col-8 text-end mb-0 fw-semibold">${compText}</dd>`;
         }
-        const reasonText = entry.reason || '（理由なし）';
+        const reasonText = entry.reason ? this.escapeHtml(entry.reason) : '（理由なし）';
         const message = `
             <div class="text-start small">
                 <dl class="row g-1 mb-3 align-items-center">
@@ -1290,13 +1482,13 @@ class AdminScreen {
         if (!buttons || buttons.length === 0) return;
         const row = buttons[0].closest('tr');
         if (!row) return;
-        // 状態セル（5列目）を更新
-        const statusCell = row.querySelector('td:nth-child(5)');
+        // 状態セル（6列目）を更新
+        const statusCell = row.querySelector('td:nth-child(6)');
         if (statusCell) {
             statusCell.textContent = this.translateStatus(newStatus);
         }
-        // 操作セル（6列目）を処理済みに変更
-        const actionCell = row.querySelector('td:nth-child(6)');
+        // 操作セル（7列目）を処理済みに変更
+        const actionCell = row.querySelector('td:nth-child(7)');
         if (actionCell) {
             actionCell.innerHTML = '<span class="text-muted">処理済</span>';
         }
@@ -1536,6 +1728,7 @@ class AdminScreen {
 
             if (data.success) {
                 this.employeeCache = Array.isArray(data.data) ? data.data : [];
+                this.employeeCacheLoaded = true;
                 this.displayEmployees(this.employeeCache);
                 // 社員一覧更新後に次の社員番号も更新
                 this.updateNextEmployeeNumber();
@@ -1543,6 +1736,7 @@ class AdminScreen {
                 // フォールバック: emp1 のみ表示
                 const mockData = this.generateMockEmployeeData();
                 this.employeeCache = mockData;
+                this.employeeCacheLoaded = true;
                 this.displayEmployees(mockData);
             }
         } catch (error) {
@@ -1550,6 +1744,7 @@ class AdminScreen {
             // エラー時も emp1 のみ
             const mockData = this.generateMockEmployeeData();
             this.employeeCache = mockData;
+            this.employeeCacheLoaded = true;
             this.displayEmployees(mockData);
         }
     }
@@ -1678,8 +1873,9 @@ class AdminScreen {
     async loadPendingApprovals() {
         if (!this.approvalsTableBody) return false;
 
-        this.setTableState(this.approvalsTableBody, 6, 'データを読み込み中...', 'text-muted');
+        this.setTableState(this.approvalsTableBody, 7, 'データを読み込み中...', 'text-muted');
         let success = true;
+        await this.ensureEmployeeCache();
 
         try {
             const statuses = ['PENDING', 'APPROVED', 'REJECTED'];
@@ -1699,9 +1895,13 @@ class AdminScreen {
                 const payload = responses[index];
                 if (!payload?.success || !Array.isArray(payload.data)) return;
                 payload.data.forEach(item => {
+                    const identity = this.getEmployeeIdentity(item);
                     list.push({
                         requestId: item.adjustmentRequestId,
-                        employeeName: this.getDisplayEmployeeName(item),
+                        employeeId: identity.employeeId,
+                        employeeCode: identity.idLabel,
+                        employeeFullName: identity.name,
+                        employeeName: identity.display,
                         targetDate: item.targetDate,
                         reason: item.reason || '',
                         newClockIn: item.newClockIn,
@@ -1724,7 +1924,7 @@ class AdminScreen {
             this.renderAdjustmentApprovals(list);
         } catch (error) {
             console.error('打刻修正申請読み込みエラー:', error);
-            this.setTableState(this.approvalsTableBody, 6, '打刻修正申請の取得に失敗しました', 'text-danger');
+            this.setTableState(this.approvalsTableBody, 7, '打刻修正申請の取得に失敗しました', 'text-danger');
             success = false;
         }
 
@@ -1740,7 +1940,7 @@ class AdminScreen {
         this.approvalsTableBody.innerHTML = '';
 
         if (!Array.isArray(entries) || entries.length === 0) {
-            this.setTableState(this.approvalsTableBody, 6, '現在処理すべき打刻修正申請はありません', 'text-muted');
+            this.approvalsTableBody.innerHTML = '';
             return;
         }
 
@@ -1798,11 +1998,15 @@ class AdminScreen {
                 ? `<div>${this.translateStatus(entry.status)}</div><div class="text-danger small mt-1">却下理由：${this.escapeHtml(entry.rejectionComment)}</div>`
                 : `<div>${this.translateStatus(entry.status)}</div>`;
 
+            const { idHtml, nameHtml } = this.getEmployeeCellParts(entry);
+            const reasonHtml = entry.reason ? this.escapeHtml(entry.reason) : '-';
+
             row.innerHTML = `
-                <td>${entry.employeeName}</td>
+                <td>${idHtml}</td>
+                <td>${nameHtml}</td>
                 <td>${this.formatDate(entry.targetDate)}</td>
                 <td>${content}</td>
-                <td>${entry.reason || '-'}</td>
+                <td>${reasonHtml}</td>
                 <td>${statusHtml}</td>
                 <td>${actionCell}</td>
             `;
@@ -1814,8 +2018,9 @@ class AdminScreen {
     async loadWorkPatternRequests() {
         if (!this.workPatternTableBody) return false;
 
-        this.setTableState(this.workPatternTableBody, 9, 'データを読み込み中...', 'text-muted');
+        this.setTableState(this.workPatternTableBody, 10, 'データを読み込み中...', 'text-muted');
         let success = true;
+        await this.ensureEmployeeCache();
 
         try {
             this.workPatternRequestMap = new Map();
@@ -1836,9 +2041,13 @@ class AdminScreen {
                 const payload = responses[index];
                 if (!payload?.success || !Array.isArray(payload.data)) return;
                 payload.data.forEach(item => {
+                    const identity = this.getEmployeeIdentity(item);
                     list.push({
                         requestId: item.requestId,
-                        employeeId: item.employeeId,
+                        employeeId: identity.employeeId ?? item.employeeId,
+                        employeeCode: identity.idLabel,
+                        employeeFullName: identity.name,
+                        employeeName: identity.display,
                         startDate: item.startDate,
                         endDate: item.endDate,
                         startTime: item.startTime,
@@ -1867,7 +2076,7 @@ class AdminScreen {
             this.renderWorkPatternRequests(list);
         } catch (error) {
             console.error('勤務時間変更申請読み込みエラー:', error);
-            this.setTableState(this.workPatternTableBody, 9, '勤務時間変更申請の取得に失敗しました', 'text-danger');
+            this.setTableState(this.workPatternTableBody, 10, '勤務時間変更申請の取得に失敗しました', 'text-danger');
             success = false;
         }
 
@@ -1880,7 +2089,7 @@ class AdminScreen {
         this.workPatternTableBody.innerHTML = '';
 
         if (!Array.isArray(entries) || entries.length === 0) {
-            this.setTableState(this.workPatternTableBody, 9, '現在処理すべき勤務時間変更申請はありません', 'text-muted');
+            this.setTableState(this.workPatternTableBody, 10, '現在処理すべき勤務時間変更申請はありません', 'text-muted');
             return;
         }
 
@@ -1937,8 +2146,11 @@ class AdminScreen {
                 ? `<div>${this.translateStatus(entry.status)}</div><div class="text-danger small mt-1">却下理由：${this.escapeHtml(entry.rejectionComment)}</div>`
                 : `<div>${this.translateStatus(entry.status)}</div>`;
 
+            const { idHtml, nameHtml } = this.getEmployeeCellParts(entry);
+
             row.innerHTML = `
-                <td class="text-start">${this.getDisplayEmployeeName(entry)}</td>
+                <td class="text-start">${idHtml}</td>
+                <td class="text-start">${nameHtml}</td>
                 <td class="text-start">${this.formatDateRange(entry.startDate, entry.endDate)}</td>
                 <td class="text-start">${this.formatTime(entry.startTime)} 〜 ${this.formatTime(entry.endTime)}</td>
                 <td class="text-start">${breakDisplay}</td>
@@ -2011,10 +2223,11 @@ class AdminScreen {
 
         this.vacationManagementLoading = true;
         let success = true;
+        await this.ensureEmployeeCache();
 
         // サイレント更新でない場合のみローディングメッセージを表示
         if (!silent) {
-            this.setTableState(this.vacationManagementTableBody, 7, 'データを読み込み中...', 'text-muted');
+            this.setTableState(this.vacationManagementTableBody, 8, 'データを読み込み中...', 'text-muted');
         }
 
         try {
@@ -2063,18 +2276,24 @@ class AdminScreen {
             const mergedList = Array.from(dedupedMap.values());
             console.log('マージ後の休暇申請一覧:', mergedList);
 
-            const entries = mergedList.map((item) => ({
-                vacationId: item.leaveRequestId ?? item.id ?? item.vacationId,
-                employeeName: this.getDisplayEmployeeName(item),
-                startDate: item.startDate,
-                endDate: item.endDate,
-                reason: item.reason || '',
-                leaveType: item.leaveType || 'PAID_LEAVE',
-                timeUnit: item.timeUnit || 'FULL_DAY',
-                status: item.status || 'PENDING',
-                createdAt: item.createdAt || item.requestDate || item.submittedAt, // 申請日
-                rejectionComment: item.rejectionComment
-            }));
+            const entries = mergedList.map((item) => {
+                const identity = this.getEmployeeIdentity(item);
+                return {
+                    vacationId: item.leaveRequestId ?? item.id ?? item.vacationId,
+                    employeeId: identity.employeeId,
+                    employeeCode: identity.idLabel,
+                    employeeName: identity.display,
+                    employeeFullName: identity.name,
+                    startDate: item.startDate,
+                    endDate: item.endDate,
+                    reason: item.reason || '',
+                    leaveType: item.leaveType || 'PAID_LEAVE',
+                    timeUnit: item.timeUnit || 'FULL_DAY',
+                    status: item.status || 'PENDING',
+                    createdAt: item.createdAt || item.requestDate || item.submittedAt, // 申請日
+                    rejectionComment: item.rejectionComment
+                };
+            });
 
             // サイレント更新の場合は、データが変更されていない場合は再描画しない
             if (silent && this.lastVacationManagementData) {
@@ -2099,7 +2318,7 @@ class AdminScreen {
             this.renderVacationApprovals(entries);
         } catch (error) {
             console.error('休暇申請読み込みエラー:', error);
-            this.setTableState(this.vacationManagementTableBody, 7, '休暇申請の取得に失敗しました', 'text-danger');
+            this.setTableState(this.vacationManagementTableBody, 8, '休暇申請の取得に失敗しました', 'text-danger');
             success = false;
         } finally {
             this.vacationManagementLoading = false;
@@ -2117,7 +2336,7 @@ class AdminScreen {
         this.vacationManagementTableBody.innerHTML = '';
 
         if (!Array.isArray(entries) || entries.length === 0) {
-            this.setTableState(this.vacationManagementTableBody, 7, '現在処理すべき休暇申請はありません', 'text-muted');
+            this.vacationManagementTableBody.innerHTML = '';
             return;
         }
 
@@ -2157,8 +2376,11 @@ class AdminScreen {
                 ? `<div>${this.translateStatus(entry.status)}</div><div class="text-danger small mt-1">却下理由：${this.escapeHtml(entry.rejectionComment)}</div>`
                 : `<div>${this.translateStatus(entry.status)}</div>`;
 
+            const { idHtml, nameHtml } = this.getEmployeeCellParts(entry);
+
             row.innerHTML = `
-                <td>${entry.employeeName}</td>
+                <td>${idHtml}</td>
+                <td>${nameHtml}</td>
                 <td>${typeLabel}</td>
                 <td>${this.formatDateRange(entry.startDate, entry.endDate)}</td>
                 <td>${unitLabel}</td>
@@ -2463,14 +2685,14 @@ class AdminScreen {
 
     async loadLeaveBalances() {
         if (!this.leaveBalanceTableBody) return false;
-        this.setTableState(this.leaveBalanceTableBody, 5, 'データを読み込み中...', 'text-muted');
+        this.setTableState(this.leaveBalanceTableBody, 6, 'データを読み込み中...', 'text-muted');
         let success = true;
 
         try {
             await this.ensureEmployeeOptions();
             const employees = Array.isArray(this.employeeCache) ? this.employeeCache : [];
             if (employees.length === 0) {
-                this.setTableState(this.leaveBalanceTableBody, 5, '社員情報が見つかりません', 'text-muted');
+                this.setTableState(this.leaveBalanceTableBody, 6, '社員情報が見つかりません', 'text-muted');
                 return true;
             }
 
@@ -2490,7 +2712,7 @@ class AdminScreen {
             this.renderLeaveBalances(rows);
         } catch (error) {
             console.error('休暇残数読み込みエラー:', error);
-            this.setTableState(this.leaveBalanceTableBody, 5, '休暇残数の取得に失敗しました', 'text-danger');
+            this.setTableState(this.leaveBalanceTableBody, 6, '休暇残数の取得に失敗しました', 'text-danger');
             success = false;
         }
 
@@ -2502,13 +2724,13 @@ class AdminScreen {
 
         this.leaveBalanceTableBody.innerHTML = '';
         if (!Array.isArray(rows) || rows.length === 0) {
-            this.setTableState(this.leaveBalanceTableBody, 5, '表示するデータがありません', 'text-muted');
+            this.setTableState(this.leaveBalanceTableBody, 6, '表示するデータがありません', 'text-muted');
             return;
         }
 
         rows.forEach(({ employee, remaining }) => {
             const row = document.createElement('tr');
-            const name = this.getDisplayEmployeeName(employee);
+            const { idHtml, nameHtml } = this.getEmployeeCellParts(employee);
             const paid = this.formatRemainingValue(remaining, 'PAID_LEAVE');
             const summer = this.formatRemainingValue(remaining, 'SUMMER');
             const winter = this.formatRemainingValue(remaining, 'WINTER');
@@ -2523,7 +2745,8 @@ class AdminScreen {
             }
 
             row.innerHTML = `
-                <td>${name}</td>
+                <td>${idHtml}</td>
+                <td>${nameHtml}</td>
                 <td>${paid}</td>
                 <td>${summer}</td>
                 <td>${winter}</td>
@@ -2719,12 +2942,17 @@ class AdminScreen {
         const clockInDisplay = `${this.formatDate(entry.newClockIn || entry.targetDate)} ${this.formatTime(entry.newClockIn)}`;
         const clockOutDisplay = `${this.formatDate(entry.newClockOut || entry.targetDate)} ${this.formatTime(entry.newClockOut)}`;
 
+        const identity = this.getEmployeeIdentity(entry);
+        const employeeIdLabel = this.escapeHtml(identity.idLabel || '-');
+        const employeeNameLabel = identity.name ? this.escapeHtml(identity.name) : '-';
         const actionText = isApprove ? '承認' : '却下';
         const message = `
             <div class="text-start small">
                 <dl class="row g-1 mb-3 align-items-center">
-                    <dt class="col-4 text-muted text-nowrap mb-0">申請者</dt>
-                    <dd class="col-8 text-end mb-0 fw-semibold">${this.escapeHtml(entry.employeeName)}</dd>
+                    <dt class="col-4 text-muted text-nowrap mb-0">社員ID</dt>
+                    <dd class="col-8 text-end mb-0 fw-semibold">${employeeIdLabel}</dd>
+                    <dt class="col-4 text-muted text-nowrap mb-0">社員名</dt>
+                    <dd class="col-8 text-end mb-0 fw-semibold">${employeeNameLabel}</dd>
                     <dt class="col-4 text-muted text-nowrap mb-0">対象日</dt>
                     <dd class="col-8 text-end mb-0 fw-semibold">${this.formatDate(entry.targetDate)}</dd>
                     <dt class="col-4 text-muted text-nowrap mb-0">出勤</dt>
@@ -2846,7 +3074,7 @@ class AdminScreen {
                     const rest = Math.abs(minutes % 60);
                     return `${hours}:${String(rest).padStart(2, '0')}`;
                 });
-            const applicant = this.getDisplayEmployeeName(entry);
+            const identity = this.getEmployeeIdentity(entry);
             const period = this.formatDateRange(entry.startDate, entry.endDate);
             const timeRange = `${this.formatTime(entry.startTime)} 〜 ${this.formatTime(entry.endTime)}`;
             const breakDisplay = typeof entry.breakMinutes === 'number'
@@ -2875,7 +3103,8 @@ class AdminScreen {
 
             const messageLines = [
                 `勤務時間変更申請を${isApprove ? '承認' : '却下'}しますか？`,
-                `社員: ${applicant}`,
+                `社員ID: ${identity.idLabel || '-'}`,
+                `社員名: ${identity.name || '-'}`,
                 `期間: ${period}`,
                 `勤務時間: ${timeRange}`,
                 `休憩: ${breakDisplay}`,
@@ -2958,7 +3187,7 @@ class AdminScreen {
                 return `${hours}:${String(rest).padStart(2, '0')}`;
             });
 
-        const applicant = this.getDisplayEmployeeName(entry);
+        const identity = this.getEmployeeIdentity(entry);
         const period = this.formatDateRange(entry.startDate, entry.endDate);
         const timeRange = `${this.formatTime(entry.startTime)} 〜 ${this.formatTime(entry.endTime)}`;
         const breakDisplay = typeof entry.breakMinutes === 'number'
@@ -2970,8 +3199,11 @@ class AdminScreen {
         const daysDisplay = this.formatWorkPatternDays(entry);
         const reasonText = entry.reason ? this.escapeHtml(entry.reason) : '（理由なし）';
 
-        if (this.workPatternModalApplicantEl) {
-            this.workPatternModalApplicantEl.innerHTML = this.escapeHtml(applicant);
+        if (this.workPatternModalEmployeeIdEl) {
+            this.workPatternModalEmployeeIdEl.textContent = identity.idLabel || '-';
+        }
+        if (this.workPatternModalEmployeeNameEl) {
+            this.workPatternModalEmployeeNameEl.textContent = identity.name || '-';
         }
         if (this.workPatternModalPeriodEl) {
             this.workPatternModalPeriodEl.innerHTML = this.escapeHtml(period);
@@ -3128,7 +3360,7 @@ class AdminScreen {
                 }
                 const trimmed = reason.trim();
                 if (!trimmed) {
-                    this.showAlert('却下理由は必須です', 'warning');
+                    // 管理者画面ではトーストメッセージを表示しない
                     return { confirmed: false };
                 }
                 return { confirmed: true, reason: trimmed };
@@ -3238,18 +3470,23 @@ class AdminScreen {
             return;
         }
 
+        const identity = this.getEmployeeIdentity(entry);
+        const employeeIdLabel = this.escapeHtml(identity.idLabel || '-');
+        const employeeNameLabel = identity.name ? this.escapeHtml(identity.name) : '-';
         const typeLabel = this.getLeaveTypeLabel(entry.leaveType);
         const unitLabel = LEAVE_TIME_UNIT_LABELS[entry.timeUnit] || '';
         const period = this.formatDateRange(entry.startDate, entry.endDate);
-        const reasonText = entry.reason || '（理由なし）';
+        const reasonText = entry.reason ? this.escapeHtml(entry.reason) : '（理由なし）';
         const actionText = isApprove ? '承認' : '却下';
 
         // 打刻修正承認モーダルと同じフォーマットで詳細情報を表示
         const message = `
             <div class="text-start small">
                 <dl class="row g-1 mb-3 align-items-center">
-                    <dt class="col-4 text-muted text-nowrap mb-0">申請者</dt>
-                    <dd class="col-8 text-end mb-0 fw-semibold">${entry.employeeName}</dd>
+                    <dt class="col-4 text-muted text-nowrap mb-0">社員ID</dt>
+                    <dd class="col-8 text-end mb-0 fw-semibold">${employeeIdLabel}</dd>
+                    <dt class="col-4 text-muted text-nowrap mb-0">社員名</dt>
+                    <dd class="col-8 text-end mb-0 fw-semibold">${employeeNameLabel}</dd>
                     <dt class="col-4 text-muted text-nowrap mb-0">休暇種別</dt>
                     <dd class="col-8 text-end mb-0 fw-semibold">${typeLabel}</dd>
                     <dt class="col-4 text-muted text-nowrap mb-0">対象期間</dt>
@@ -3341,6 +3578,12 @@ class AdminScreen {
             return;
         }
 
+        // エラーメッセージをリセット
+        const errorMessageEl = document.getElementById('editEmployeeErrorMessage');
+        if (errorMessageEl) {
+            errorMessageEl.classList.add('d-none');
+        }
+        
         // 値をセット
         idEl.value = String(employee.employeeId);
         lastNameEl.value = employee.lastName || '';
@@ -3371,9 +3614,26 @@ class AdminScreen {
                 birthday: birthdayEl.value.trim() || null
             };
 
-            // 必須チェック: 名前
-            if (!update.lastName || !update.firstName) {
-                this.showAlert('名前（姓・名）は必須です', 'warning');
+            // 必須チェック: 名前（一括エラーメッセージ表示）
+            const errorMessageEl = document.getElementById('editEmployeeErrorMessage');
+            
+            // エラーメッセージをリセット
+            if (errorMessageEl) errorMessageEl.classList.add('d-none');
+            
+            let hasError = false;
+            
+            if (!update.lastName) {
+                hasError = true;
+            }
+            
+            if (!update.firstName) {
+                hasError = true;
+            }
+            
+            if (hasError) {
+                if (errorMessageEl) {
+                    errorMessageEl.classList.remove('d-none');
+                }
                 return;
             }
 
@@ -3909,6 +4169,9 @@ class AdminScreen {
         const form = document.getElementById('addEmployeeForm');
         if (form) {
             form.reset();
+            // エラーメッセージをリセット
+            const errorMessageEl = document.getElementById('addEmployeeErrorMessage');
+            if (errorMessageEl) errorMessageEl.classList.add('d-none');
         } else {
             console.error('社員追加フォームが見つかりません');
             return;
@@ -3969,19 +4232,30 @@ class AdminScreen {
             birthday: formData.get('birthday')?.trim() || null
         };
 
-        // バリデーション
-        if (!employeeData.password) {
-            this.showAlert('パスワードは必須です', 'warning');
-            return;
-        }
-        if (employeeData.password.length < 4) {
-            this.showAlert('パスワードは4文字以上で入力してください', 'warning');
-            return;
+        // バリデーション（一括エラーメッセージ表示）
+        const errorMessageEl = document.getElementById('addEmployeeErrorMessage');
+        
+        // エラーメッセージをリセット
+        if (errorMessageEl) errorMessageEl.classList.add('d-none');
+        
+        let hasError = false;
+        
+        if (!employeeData.password || employeeData.password.length < 4) {
+            hasError = true;
         }
         
-        // 必須チェック
-        if (!employeeData.lastName || !employeeData.firstName) {
-            this.showAlert('名前（姓・名）は必須です', 'warning');
+        if (!employeeData.lastName) {
+            hasError = true;
+        }
+        
+        if (!employeeData.firstName) {
+            hasError = true;
+        }
+        
+        if (hasError) {
+            if (errorMessageEl) {
+                errorMessageEl.classList.remove('d-none');
+            }
             return;
         }
         // ふりがな必須チェックは廃止
@@ -4015,7 +4289,7 @@ class AdminScreen {
             // 送信ボタンを有効化
             if (submitBtn) {
                 submitBtn.disabled = false;
-                submitBtn.innerHTML = '<i class="fas fa-save"></i> 社員を追加';
+                submitBtn.innerHTML = '社員追加';
             }
         }
     }

@@ -327,7 +327,7 @@ class WorkPatternScreen {
         const reason = this.reasonInput?.value?.trim() || '';
         
         if (!reason) {
-            this.showAlert('理由を入力してください', 'warning');
+            this.showAlert('必須項目を入力してください', 'warning');
             this.reasonInput?.focus();
             return;
         }
@@ -1080,11 +1080,6 @@ class WorkPatternScreen {
             .forEach((entry) => {
                 const row = document.createElement('tr');
                 const status = (entry.status || '').toString().toUpperCase();
-                if (status === 'APPROVED') {
-                    row.classList.add('table-success');
-                } else if (status === 'REJECTED') {
-                    row.classList.add('table-secondary');
-                }
 
                 const reasonSegments = [];
                 if (entry.reason) {
@@ -1234,7 +1229,7 @@ class WorkPatternScreen {
         const holidayDaysText = this.joinDayLabels(summary.holidayDays);
         const periodText = summary.hasApprovedRequest
             ? this.formatDateRange(summary.patternStartDate, summary.patternEndDate)
-            : '指定なし（標準勤務）';
+            : '指定なし';
         const headline = '現在の勤務時間';
 
         // 7日未満の申請（承認済み）の場合は、勤務日・休日表示を非表示
@@ -1244,7 +1239,7 @@ class WorkPatternScreen {
         );
         const daysRowHtml = hideDaysRow
             ? ''
-            : `<div>勤務日: <span class="text-body text-success fw-semibold">${this.escapeHtml(workingDaysText)}</span> | 休日: <span class="text-body text-danger fw-semibold">${this.escapeHtml(holidayDaysText)}</span></div>`;
+            : `<div>勤務日: <span class="text-body text-success fw-semibold">${this.escapeHtml(workingDaysText)}</span> / 休日: <span class="text-body text-danger fw-semibold">${this.escapeHtml(holidayDaysText)}</span></div>`;
 
         this.currentSummaryContainer.innerHTML = `
             <div class="fw-semibold text-body">${this.escapeHtml(headline)}</div>

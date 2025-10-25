@@ -277,7 +277,7 @@ class AdjustmentScreen {
         const breakTimeValue = this.breakTimeInput?.value || '';
 
         if (!clockInDate || !clockOutDate || !reason) {
-            this.showAlert('出勤日・退勤日・理由は必須です', 'warning');
+            this.showAlert('必須項目を入力してください', 'warning');
             return;
         }
 
@@ -286,7 +286,7 @@ class AdjustmentScreen {
         }
 
         if (!clockInTime || !clockOutTime) {
-            this.showAlert('出勤時刻と退勤時刻は両方入力してください', 'warning');
+            this.showAlert('必須項目を入力してください', 'warning');
             return;
         }
 
@@ -295,7 +295,7 @@ class AdjustmentScreen {
         }
 
         if (!breakTimeValue) {
-            this.showAlert('休憩時間を入力してください', 'warning');
+            this.showAlert('必須項目を入力してください', 'warning');
             this.breakTimeInput?.focus();
             return;
         }

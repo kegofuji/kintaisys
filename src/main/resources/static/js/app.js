@@ -371,44 +371,18 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 /**
  * カスタムフォームバリデーション設定
- * ブラウザのデフォルトバリデーションメッセージを「必要な項目はすべて入力してください」に変更
+ * 各画面の独自バリデーション処理を優先し、統一されたトーストメッセージを表示
  */
 function setupCustomFormValidation() {
     // 対象フォームのID
-    const targetFormIds = ['vacationForm', 'adjustmentForm', 'workPatternForm'];
+    const targetFormIds = ['vacationForm', 'adjustmentForm', 'workPatternForm', 'holidayForm'];
     
     targetFormIds.forEach(formId => {
         const form = document.getElementById(formId);
         if (form) {
-            form.addEventListener('submit', function(event) {
-                const requiredFields = form.querySelectorAll('[required]');
-                let hasEmptyFields = false;
-                
-                requiredFields.forEach(field => {
-                    if (!field.value.trim()) {
-                        hasEmptyFields = true;
-                        field.classList.add('is-invalid');
-                    } else {
-                        field.classList.remove('is-invalid');
-                    }
-                });
-                
-                if (hasEmptyFields) {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    
-                    // トーストアラートで表示
-                    showToastAlert('必要な項目はすべて入力してください', 'warning');
-                    
-                    // 最初の無効なフィールドにフォーカス
-                    const firstInvalidField = form.querySelector('.is-invalid');
-                    if (firstInvalidField) {
-                        firstInvalidField.focus();
-                    }
-                }
-            }, true);
-            
-            // フィールドの入力時にクラスをクリア
+            // 各画面の独自バリデーション処理を優先するため、
+            // フォーム送信時のバリデーション処理は無効化
+            // 代わりに、フィールドの入力時にクラスのクリアのみを行う
             form.addEventListener('input', function(event) {
                 if (event.target.hasAttribute('required')) {
                     event.target.classList.remove('is-invalid');

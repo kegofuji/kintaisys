@@ -454,7 +454,7 @@ class HolidayScreen {
         const reasonValue = (this.reason?.value || '').trim();
         const hasReason = reasonValue.length > 0;
         if (!hasReason) {
-            this.setValidity(this.reason, false, '理由は必須です');
+            this.setValidity(this.reason, false, '必須項目を入力してください');
         } else {
             this.setValidity(this.reason, true);
         }
@@ -464,7 +464,7 @@ class HolidayScreen {
             isTransfer ? this.validateTransferHolidayDate() : this.validateCompDate()
         ];
         if (checks.some(ok => !ok)) {
-            this.showAlert('入力内容を確認してください', 'danger');
+            this.showAlert('必須項目を入力してください', 'warning');
             return;
         }
 

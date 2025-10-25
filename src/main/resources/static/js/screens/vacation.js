@@ -523,13 +523,13 @@ class VacationScreen {
         const reason = reasonRaw.trim();
 
         if (!startDate || !endDate) {
-            this.showAlert('開始日・終了日の両方を指定してください', 'warning');
+            this.showAlert('必須項目を入力してください', 'warning');
             return;
         }
 
         const isPaidLeave = leaveType === 'PAID_LEAVE';
         if (isPaidLeave && !reason) {
-            this.showAlert('有休の場合は理由を入力してください', 'warning');
+            this.showAlert('必須項目を入力してください', 'warning');
             this.vacationReason?.focus();
             return;
         }
