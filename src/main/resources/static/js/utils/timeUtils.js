@@ -39,6 +39,74 @@ class TimeUtils {
     }
 
     /**
+     * 8桁または4桁の文字列を日付/時間形式へ整形
+     */
+    static normalizeCompactDateString(value) {
+        if (value === null || value === undefined) {
+            return null;
+        }
+        const digitsOnly = String(value).replace(/\D/g, '');
+        if (digitsOnly.length !== 8) {
+            return null;
+        }
+        const year = parseInt(digitsOnly.slice(0, 4), 10);
+        const month = parseInt(digitsOnly.slice(4, 6), 10);
+        const day = parseInt(digitsOnly.slice(6, 8), 10);
+        if (!this.isValidDateParts(year, month, day)) {
+            return null;
+        }
+        const yyyy = digitsOnly.slice(0, 4);
+        const mm = digitsOnly.slice(4, 6);
+        const dd = digitsOnly.slice(6, 8);
+        const iso = `${yyyy}-${mm}-${dd}`;
+        const display = `${yyyy}/${mm}/${dd}`;
+        const date = new Date(year, month - 1, day);
+        if (Number.isNaN(date.getTime())) {
+            return null;
+        }
+        return { iso, display, date };
+    }
+
+    static normalizeCompactTimeString(value) {
+        if (value === null || value === undefined) {
+            return null;
+        }
+        let digitsOnly = String(value).replace(/\D/g, '');
+        if (digitsOnly.length === 3) {
+            digitsOnly = `0${digitsOnly}`;
+        }
+        if (digitsOnly.length !== 4) {
+            return null;
+        }
+        const hours = parseInt(digitsOnly.slice(0, 2), 10);
+        const minutes = parseInt(digitsOnly.slice(2, 4), 10);
+        if (Number.isNaN(hours) || Number.isNaN(minutes) || hours > 23 || minutes > 59) {
+            return null;
+        }
+        const hh = digitsOnly.slice(0, 2);
+        const mm = digitsOnly.slice(2, 4);
+        return {
+            value: `${hh}:${mm}`,
+            display: `${hh}:${mm}`
+        };
+    }
+
+    static isValidDateParts(year, month, day) {
+        if (Number.isNaN(year) || Number.isNaN(month) || Number.isNaN(day)) {
+            return false;
+        }
+        if (month < 1 || month > 12 || day < 1 || day > 31) {
+            return false;
+        }
+        const date = new Date(year, month - 1, day);
+        return (
+            date.getFullYear() === year &&
+            date.getMonth() === month - 1 &&
+            date.getDate() === day
+        );
+    }
+
+    /**
      * 勤務時間を計算（出勤時刻と退勤時刻から）
      * 労働基準法第34条に基づく休憩時間を自動控除する
      * @param {string} clockInTime - 出勤時刻

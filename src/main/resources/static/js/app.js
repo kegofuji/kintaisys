@@ -363,6 +363,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // フォームバリデーションカスタマイズ
     setupCustomFormValidation();
+    setupAutoDateTimeInputFormatting();
 
     window.app.setupNavigationListeners();
     await window.app.init();
@@ -423,6 +424,87 @@ function setupCustomFormValidation() {
 function showToastAlert(message, type = 'warning') {
     // グローバルなshowAlert関数を使用
     window.showAlert(message, type);
+}
+
+function setupAutoDateTimeInputFormatting() {
+    const processed = new WeakSet();
+    const selector = 'input[type="date"], input[type="time"]';
+
+    const attach = (input) => {
+        if (!(input instanceof HTMLInputElement) || processed.has(input)) {
+            return;
+        }
+        processed.add(input);
+        if (input.type !== 'date' && input.type !== 'time') {
+            return;
+        }
+
+        let suppress = false;
+        const normalize = () => {
+            if (suppress) {
+                return;
+            }
+            const rawValue = input.value;
+            let formatted = null;
+            if (input.type === 'date') {
+                formatted = typeof TimeUtils !== 'undefined'
+                    ? TimeUtils.normalizeCompactDateString(rawValue)
+                    : null;
+            } else if (input.type === 'time') {
+                formatted = typeof TimeUtils !== 'undefined'
+                    ? TimeUtils.normalizeCompactTimeString(rawValue)
+                    : null;
+            }
+            if (formatted) {
+                let nextValue = null;
+                if (input.type === 'date' && formatted.iso) {
+                    nextValue = formatted.iso;
+                } else if (input.type === 'time' && formatted.value) {
+                    nextValue = formatted.value;
+                }
+                if (!nextValue || nextValue === rawValue) {
+                    return;
+                }
+                suppress = true;
+                if (input.type === 'date' && formatted.date instanceof Date) {
+                    input.valueAsDate = formatted.date;
+                }
+                input.value = nextValue;
+                if (formatted.display) {
+                    input.dataset.formattedDisplay = formatted.display;
+                    input.title = formatted.display;
+                } else {
+                    delete input.dataset.formattedDisplay;
+                    input.removeAttribute('title');
+                }
+                input.dispatchEvent(new Event('change', { bubbles: true }));
+                suppress = false;
+            }
+        };
+
+        input.addEventListener('input', normalize);
+        input.addEventListener('blur', normalize);
+    };
+
+    document.querySelectorAll(selector).forEach(attach);
+
+    const observer = new MutationObserver((mutations) => {
+        mutations.forEach((mutation) => {
+            mutation.addedNodes.forEach((node) => {
+                if (!(node instanceof HTMLElement)) {
+                    return;
+                }
+                if (node.matches(selector)) {
+                    attach(node);
+                }
+                if (typeof node.querySelectorAll === 'function') {
+                    node.querySelectorAll(selector).forEach(attach);
+                }
+            });
+        });
+    });
+
+    observer.observe(document.body, { childList: true, subtree: true });
 }
 
 // ページ離脱時の処理
