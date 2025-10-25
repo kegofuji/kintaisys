@@ -419,7 +419,7 @@ class VacationScreen {
         if (this.vacationReason) {
             if (isPaidLeave) {
                 this.vacationReason.required = true;
-                this.vacationReason.placeholder = '休暇理由を入力してください';
+                this.vacationReason.placeholder = '理由は必須です';
                 if (this.reasonRequiredMark) {
                     this.reasonRequiredMark.classList.remove('d-none');
                 }
