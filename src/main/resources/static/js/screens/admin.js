@@ -3603,6 +3603,22 @@ class AdminScreen {
             birthdayEl.value = '';
         }
 
+        // 入力フィールドのエラー状態クリア機能を追加
+        const clearErrorState = (inputEl, errorIconEl) => {
+            inputEl.classList.remove('is-invalid');
+            if (errorIconEl) errorIconEl.classList.add('d-none');
+        };
+
+        // 姓フィールドの入力リスナー
+        lastNameEl.addEventListener('input', () => {
+            clearErrorState(lastNameEl, null);
+        });
+
+        // 名フィールドの入力リスナー
+        firstNameEl.addEventListener('input', () => {
+            clearErrorState(firstNameEl, null);
+        });
+
         // 保存ボタンの既存リスナーを一旦解除してから登録
         if (this._boundSaveEditHandler) {
             saveBtn.removeEventListener('click', this._boundSaveEditHandler);
@@ -3620,14 +3636,21 @@ class AdminScreen {
             // エラーメッセージをリセット
             if (errorMessageEl) errorMessageEl.classList.add('d-none');
             
+            // 個別フィールドのエラー状態をリセット
+            lastNameEl.classList.remove('is-invalid');
+            firstNameEl.classList.remove('is-invalid');
+            
+            
             let hasError = false;
             
             if (!update.lastName) {
                 hasError = true;
+                lastNameEl.classList.add('is-invalid');
             }
             
             if (!update.firstName) {
                 hasError = true;
+                firstNameEl.classList.add('is-invalid');
             }
             
             if (hasError) {
@@ -4172,6 +4195,36 @@ class AdminScreen {
             // エラーメッセージをリセット
             const errorMessageEl = document.getElementById('addEmployeeErrorMessage');
             if (errorMessageEl) errorMessageEl.classList.add('d-none');
+            
+            // 入力フィールドのエラー状態クリア機能を追加
+            const clearErrorState = (inputEl, errorIconEl) => {
+                inputEl.classList.remove('is-invalid');
+                if (errorIconEl) errorIconEl.classList.add('d-none');
+            };
+
+            // 姓フィールドの入力リスナー
+            const lastNameEl = document.getElementById('employeeLastName');
+            if (lastNameEl) {
+                lastNameEl.addEventListener('input', () => {
+                    clearErrorState(lastNameEl, null);
+                });
+            }
+
+            // 名フィールドの入力リスナー
+            const firstNameEl = document.getElementById('employeeFirstName');
+            if (firstNameEl) {
+                firstNameEl.addEventListener('input', () => {
+                    clearErrorState(firstNameEl, null);
+                });
+            }
+
+            // パスワードフィールドの入力リスナー
+            const passwordEl = document.getElementById('employeePassword');
+            if (passwordEl) {
+                passwordEl.addEventListener('input', () => {
+                    clearErrorState(passwordEl, null);
+                });
+            }
         } else {
             console.error('社員追加フォームが見つかりません');
             return;
@@ -4238,18 +4291,31 @@ class AdminScreen {
         // エラーメッセージをリセット
         if (errorMessageEl) errorMessageEl.classList.add('d-none');
         
+        // 個別フィールドのエラー状態をリセット
+        const lastNameEl = document.getElementById('employeeLastName');
+        const firstNameEl = document.getElementById('employeeFirstName');
+        const passwordEl = document.getElementById('employeePassword');
+        
+        if (lastNameEl) lastNameEl.classList.remove('is-invalid');
+        if (firstNameEl) firstNameEl.classList.remove('is-invalid');
+        if (passwordEl) passwordEl.classList.remove('is-invalid');
+        
+        
         let hasError = false;
         
         if (!employeeData.password || employeeData.password.length < 4) {
             hasError = true;
+            if (passwordEl) passwordEl.classList.add('is-invalid');
         }
         
         if (!employeeData.lastName) {
             hasError = true;
+            if (lastNameEl) lastNameEl.classList.add('is-invalid');
         }
         
         if (!employeeData.firstName) {
             hasError = true;
+            if (firstNameEl) firstNameEl.classList.add('is-invalid');
         }
         
         if (hasError) {
