@@ -29,3 +29,7 @@ venv/
 
 # OS
 .DS_Store
+
+# Cookies and sensitive data
+cookies.txt
+admin_cookies.txt
