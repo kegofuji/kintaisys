@@ -370,10 +370,10 @@ class AdminScreen {
     }
 
     initializeDashboardElements() {
-        this.dashboardAdjustmentCount = document.getElementById('adminDashboardAdjustmentCount') || this.dashboardAdjustmentCount;
-        this.dashboardWorkPatternCount = document.getElementById('adminDashboardWorkPatternCount') || this.dashboardWorkPatternCount;
-        this.dashboardLeaveCount = document.getElementById('adminDashboardLeaveCount') || this.dashboardLeaveCount;
-        this.dashboardHolidayCount = document.getElementById('adminDashboardHolidayCount') || this.dashboardHolidayCount;
+        this.dashboardAdjustmentBadge = document.getElementById('adminDashboardAdjustmentBadge') || this.dashboardAdjustmentBadge;
+        this.dashboardWorkPatternBadge = document.getElementById('adminDashboardWorkPatternBadge') || this.dashboardWorkPatternBadge;
+        this.dashboardLeaveBadge = document.getElementById('adminDashboardLeaveBadge') || this.dashboardLeaveBadge;
+        this.dashboardHolidayBadge = document.getElementById('adminDashboardHolidayBadge') || this.dashboardHolidayBadge;
         this.dashboardRefreshButton = document.getElementById('adminDashboardRefreshBtn') || this.dashboardRefreshButton;
 
         this.dashboardLinks = [
@@ -401,6 +401,31 @@ class AdminScreen {
             });
             this.dashboardRefreshButton.dataset.bound = 'true';
         }
+
+        // カード全体のクリックイベントを追加
+        const dashboardCards = document.querySelectorAll('.admin-dashboard-card');
+        dashboardCards.forEach(card => {
+            if (!card.dataset.bound) {
+                card.addEventListener('click', (event) => {
+                    // バッジやリンクのクリックは除外
+                    if (event.target.closest('.admin-dashboard-badge') || event.target.closest('.admin-dashboard-link')) {
+                        return;
+                    }
+                    
+                    event.preventDefault();
+                    const link = card.querySelector('.admin-dashboard-link');
+                    if (link) {
+                        const path = link.getAttribute('href');
+                        if (window.router) {
+                            window.router.navigate(path);
+                        } else {
+                            window.location.href = path;
+                        }
+                    }
+                });
+                card.dataset.bound = 'true';
+            }
+        });
 
         (this.dashboardLinks || []).forEach(({ element, path }) => {
             if (!element || element.dataset.bound) {
@@ -493,18 +518,24 @@ class AdminScreen {
     }
 
     updateDashboardSummary(summary) {
-        this.setDashboardCount(this.dashboardAdjustmentCount, summary.adjustmentPending);
-        this.setDashboardCount(this.dashboardWorkPatternCount, summary.workPatternPending);
-        this.setDashboardCount(this.dashboardLeaveCount, summary.leavePending);
-        this.setDashboardCount(this.dashboardHolidayCount, summary.holidayPending);
+        this.setDashboardBadge(this.dashboardAdjustmentBadge, summary.adjustmentPending);
+        this.setDashboardBadge(this.dashboardWorkPatternBadge, summary.workPatternPending);
+        this.setDashboardBadge(this.dashboardLeaveBadge, summary.leavePending);
+        this.setDashboardBadge(this.dashboardHolidayBadge, summary.holidayPending);
 
         this.dashboardHasData = true;
     }
 
-    setDashboardCount(element, value) {
+    setDashboardBadge(element, value) {
         if (!element) return;
         const normalized = this.normalizeDashboardCount(value);
         element.textContent = normalized.toLocaleString('ja-JP');
+        
+        // バッジのスタイルを更新
+        element.classList.remove('zero');
+        if (normalized === 0) {
+            element.classList.add('zero');
+        }
     }
 
     setDashboardError() {
@@ -519,10 +550,10 @@ class AdminScreen {
 
     getDashboardCountElements() {
         return [
-            this.dashboardAdjustmentCount,
-            this.dashboardWorkPatternCount,
-            this.dashboardLeaveCount,
-            this.dashboardHolidayCount
+            this.dashboardAdjustmentBadge,
+            this.dashboardWorkPatternBadge,
+            this.dashboardLeaveBadge,
+            this.dashboardHolidayBadge
         ];
     }
 
