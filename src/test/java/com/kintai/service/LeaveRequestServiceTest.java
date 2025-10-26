@@ -167,7 +167,7 @@ class LeaveRequestServiceTest {
 
     @Test
     void duplicateHalfDayOnSameDateIsRejected() {
-        LocalDate target = nextBusinessDay(6);
+        LocalDate target = nextWorkingDay(6);
         leaveRequestService.createLeaveRequest(
                 employee.getEmployeeId(),
                 LeaveType.PAID_LEAVE,
@@ -185,6 +185,46 @@ class LeaveRequestServiceTest {
                 "午後休"))
                 .isInstanceOf(VacationException.class)
                 .hasMessageContaining("同一期間に既存の申請があります");
+    }
+
+    @Test
+    void pendingRequestsConsumeRemainingDays() {
+        employee.setPaidLeaveBaseDays(2);
+        employee = employeeRepository.save(employee);
+
+        LocalDate first = nextWorkingDay(1);
+        leaveRequestService.createLeaveRequest(
+                employee.getEmployeeId(),
+                LeaveType.PAID_LEAVE,
+                LeaveTimeUnit.FULL_DAY,
+                first,
+                first,
+                "1日目");
+
+        LocalDate second = nextWorkingDay(2);
+        leaveRequestService.createLeaveRequest(
+                employee.getEmployeeId(),
+                LeaveType.PAID_LEAVE,
+                LeaveTimeUnit.FULL_DAY,
+                second,
+                second,
+                "2日目");
+
+        Map<LeaveType, BigDecimal> summary = leaveRequestService.getRemainingLeaveSummary(employee.getEmployeeId());
+        assertThat(summary.get(LeaveType.PAID_LEAVE)).isEqualByComparingTo("0");
+        BigDecimal remainingDays = leaveRequestService.getRemainingLeaveDays(employee.getEmployeeId(), LeaveType.PAID_LEAVE);
+        assertThat(remainingDays).isEqualByComparingTo("0");
+
+        LocalDate third = nextWorkingDay(3);
+        assertThatThrownBy(() -> leaveRequestService.createLeaveRequest(
+                employee.getEmployeeId(),
+                LeaveType.PAID_LEAVE,
+                LeaveTimeUnit.FULL_DAY,
+                third,
+                third,
+                "3日目"))
+                .isInstanceOf(VacationException.class)
+                .hasMessageContaining("残日数が不足しています");
     }
 
     @Test
@@ -252,4 +292,5 @@ class LeaveRequestServiceTest {
         }
         return date;
     }
+
 }

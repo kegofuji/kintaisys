@@ -61,5 +61,12 @@ public interface LeaveRequestRepository extends JpaRepository<LeaveRequest, Long
                                                   @Param("startDate") LocalDate startDate,
                                                   @Param("endDate") LocalDate endDate);
 
+    @Query("SELECT COALESCE(SUM(lr.days), 0) FROM LeaveRequest lr " +
+            "WHERE lr.employeeId = :employeeId " +
+            "AND lr.leaveType = :leaveType " +
+            "AND lr.status = 'PENDING'")
+    BigDecimal sumPendingDays(@Param("employeeId") Long employeeId,
+                              @Param("leaveType") LeaveType leaveType);
+
     long countByStatus(LeaveStatus status);
 }

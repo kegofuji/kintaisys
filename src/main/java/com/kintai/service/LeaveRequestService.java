@@ -206,7 +206,11 @@ public class LeaveRequestService {
             } else {
                 remaining = balance.getRemainingDays();
             }
-            summary.put(type, remaining);
+            BigDecimal available = subtractPendingDays(employeeId, type, remaining);
+            if (available.signum() < 0) {
+                available = BigDecimal.ZERO;
+            }
+            summary.put(type, available.setScale(2, RoundingMode.HALF_UP));
         }
         return summary;
     }
@@ -214,7 +218,9 @@ public class LeaveRequestService {
     @Transactional(readOnly = true)
     public BigDecimal getRemainingLeaveDays(Long employeeId, LeaveType leaveType) {
         Optional<LeaveBalance> balanceOpt = leaveBalanceRepository.findByEmployeeIdAndLeaveType(employeeId, leaveType);
-        return balanceOpt.map(LeaveBalance::getRemainingDays).orElse(BigDecimal.ZERO);
+        BigDecimal remaining = balanceOpt.map(LeaveBalance::getRemainingDays).orElse(BigDecimal.ZERO);
+        BigDecimal available = subtractPendingDays(employeeId, leaveType, remaining);
+        return available.signum() < 0 ? BigDecimal.ZERO : available.setScale(2, RoundingMode.HALF_UP);
     }
 
     @Transactional(readOnly = true)
@@ -394,8 +400,9 @@ public class LeaveRequestService {
                                          LocalDate endDate) {
         cleanupExpiredGrants(balance.getEmployeeId(), leaveType);
 
-        BigDecimal remaining = balance.getRemainingDays();
-        if (remaining.compareTo(requestedDays) < 0) {
+        BigDecimal remaining = Optional.ofNullable(balance.getRemainingDays()).orElse(BigDecimal.ZERO);
+        BigDecimal available = subtractPendingDays(balance.getEmployeeId(), leaveType, remaining);
+        if (available.compareTo(requestedDays) < 0) {
             throw new VacationException(VacationException.INVALID_REQUEST, "残日数が不足しています");
         }
 
@@ -607,6 +614,14 @@ public class LeaveRequestService {
             }
         } catch (Exception ignored) {
         }
+    }
+
+    private BigDecimal subtractPendingDays(Long employeeId, LeaveType leaveType, BigDecimal remainingDays) {
+        BigDecimal base = Optional.ofNullable(remainingDays).orElse(BigDecimal.ZERO);
+        BigDecimal pending = Optional.ofNullable(
+                leaveRequestRepository.sumPendingDays(employeeId, leaveType)
+        ).orElse(BigDecimal.ZERO);
+        return base.subtract(pending);
     }
 
     @Transactional(readOnly = true)
