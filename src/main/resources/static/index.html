@@ -418,10 +418,10 @@
                             <a class="nav-link" href="/history" id="historyNavLink">勤怠履歴</a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" href="/vacation" id="vacationNavLink">休暇申請</a>
+                            <a class="nav-link" href="/adjustment" id="adjustmentNavLink">打刻修正</a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" href="/adjustment" id="adjustmentNavLink">打刻修正</a>
+                            <a class="nav-link" href="/vacation" id="vacationNavLink">休暇申請</a>
                         </li>
                         <li class="nav-item">
                             <a class="nav-link" href="/work-pattern" id="workPatternNavLink">勤務時間変更</a>
@@ -433,11 +433,11 @@
                         <li class="nav-item" id="adminApprovalsNavItem" style="display: none;">
                             <a class="nav-link" href="/admin/approvals" id="adminApprovalsNavLink">打刻修正</a>
                         </li>
-                        <li class="nav-item" id="adminWorkPatternNavItem" style="display: none;">
-                            <a class="nav-link" href="/admin/work-pattern-change" id="adminWorkPatternNavLink">勤務時間変更</a>
-                        </li>
                         <li class="nav-item" id="adminVacationManagementNavItem" style="display: none;">
                             <a class="nav-link" href="/admin/vacation-management" id="adminVacationManagementNavLink">休暇管理</a>
+                        </li>
+                        <li class="nav-item" id="adminWorkPatternNavItem" style="display: none;">
+                            <a class="nav-link" href="/admin/work-pattern-change" id="adminWorkPatternNavLink">勤務時間変更</a>
                         </li>
                         <li class="nav-item" id="adminHolidayNavItem" style="display: none;">
                             <a class="nav-link" href="/admin/holiday" id="adminHolidayNavLink">休日関連</a>
@@ -1142,20 +1142,6 @@
                             </div>
                             <div class="col-12 col-md-6 col-xl-3">
                                 <div class="admin-dashboard-card h-100 position-relative">
-                                    <div class="admin-dashboard-badge" id="adminDashboardWorkPatternBadge">0</div>
-                                    <div class="text-center">
-                                        <div class="admin-dashboard-icon mx-auto mb-3">
-                                            <i class="fas fa-business-time"></i>
-                                        </div>
-                                        <h6 class="admin-dashboard-label mb-3">勤務時間変更</h6>
-                                        <a href="/admin/work-pattern-change" id="adminDashboardWorkPatternLink" class="admin-dashboard-link">
-                                            詳細を見る <i class="fas fa-arrow-right"></i>
-                                        </a>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-12 col-md-6 col-xl-3">
-                                <div class="admin-dashboard-card h-100 position-relative">
                                     <div class="admin-dashboard-badge" id="adminDashboardLeaveBadge">0</div>
                                     <div class="text-center">
                                         <div class="admin-dashboard-icon mx-auto mb-3">
@@ -1163,6 +1149,20 @@
                                         </div>
                                         <h6 class="admin-dashboard-label mb-3">休暇申請</h6>
                                         <a href="/admin/vacation-management" id="adminDashboardLeaveLink" class="admin-dashboard-link">
+                                            詳細を見る <i class="fas fa-arrow-right"></i>
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-12 col-md-6 col-xl-3">
+                                <div class="admin-dashboard-card h-100 position-relative">
+                                    <div class="admin-dashboard-badge" id="adminDashboardWorkPatternBadge">0</div>
+                                    <div class="text-center">
+                                        <div class="admin-dashboard-icon mx-auto mb-3">
+                                            <i class="fas fa-business-time"></i>
+                                        </div>
+                                        <h6 class="admin-dashboard-label mb-3">勤務時間変更</h6>
+                                        <a href="/admin/work-pattern-change" id="adminDashboardWorkPatternLink" class="admin-dashboard-link">
                                             詳細を見る <i class="fas fa-arrow-right"></i>
                                         </a>
                                     </div>
