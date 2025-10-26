@@ -301,12 +301,11 @@ class VacationScreen {
             if (data && data.success && data.remaining) {
                 this.remainingByType = {};
                 Object.entries(data.remaining).forEach(([key, value]) => {
-                    const numeric = Number(value);
-                    this.remainingByType[key] = Number.isFinite(numeric) ? numeric : 0;
-                    console.log(`休暇種別 ${key}: ${value} -> ${this.remainingByType[key]}`);
+                    const normalized = this.normalizeBalanceEntry(value);
+                    this.remainingByType[key] = normalized;
+                    console.log(`休暇種別 ${key}:`, normalized);
                 });
                 console.log('残休暇日数データ:', this.remainingByType);
-                this.renderBalanceSummary();
             } else {
                 this.remainingByType = {};
                 console.log('残休暇日数データなし:', data);
@@ -366,65 +365,89 @@ class VacationScreen {
         if (!this.paidLeaveRemaining && !this.summerLeaveRemaining && !this.winterLeaveRemaining && !this.specialLeaveRemaining) {
             return;
         }
-        
-        // 有休休暇の表示
-        if (this.paidLeaveRemaining) {
-            const paidLeaveDays = this.getRemainingDays('PAID_LEAVE');
-            this.paidLeaveRemaining.textContent = paidLeaveDays % 1 === 0 ? `${paidLeaveDays}日` : `${paidLeaveDays.toFixed(1)}日`;
-            if (this.paidLeaveValidity) {
-                const paidValidity = this.getValidityPeriod('PAID_LEAVE');
-                if (paidValidity) {
-                    this.paidLeaveValidity.textContent = `有効期限：${paidValidity}`;
-                } else {
-                    this.paidLeaveValidity.innerHTML = '&nbsp;';
-                }
+        this.renderBalanceForType(this.paidLeaveRemaining, this.paidLeaveValidity, 'PAID_LEAVE');
+        this.renderBalanceForType(this.summerLeaveRemaining, this.summerValidity, 'SUMMER');
+        this.renderBalanceForType(this.winterLeaveRemaining, this.winterValidity, 'WINTER');
+        this.renderBalanceForType(this.specialLeaveRemaining, this.specialValidity, 'SPECIAL');
+    }
+
+    renderBalanceForType(displayElement, validityElement, leaveType) {
+        if (!displayElement) {
+            return;
+        }
+        const balance = this.getBalanceForType(leaveType);
+        displayElement.innerHTML = this.formatBalanceDisplay(balance.remaining, balance.pending);
+
+        if (validityElement) {
+            const validity = this.getValidityPeriod(leaveType);
+            if (validity) {
+                validityElement.textContent = `有効期限：${validity}`;
+            } else {
+                validityElement.innerHTML = '&nbsp;';
             }
         }
+    }
 
-        // 夏季休暇の表示
-        if (this.summerLeaveRemaining) {
-            const summerDays = this.getRemainingDays('SUMMER');
-            this.summerLeaveRemaining.textContent = summerDays % 1 === 0 ? `${summerDays}日` : `${summerDays.toFixed(1)}日`;
-
-            const summerValidity = this.getValidityPeriod('SUMMER');
-            if (this.summerValidity) {
-                if (summerValidity) {
-                    this.summerValidity.textContent = `有効期限：${summerValidity}`;
-                } else {
-                    this.summerValidity.innerHTML = '&nbsp;';
-                }
-            }
+    normalizeBalanceEntry(rawValue) {
+        if (rawValue && typeof rawValue === 'object') {
+            const remaining = this.parseDays(rawValue.remaining ?? rawValue.available ?? rawValue.value ?? 0);
+            const pending = this.parseDays(rawValue.pending ?? 0);
+            const available = rawValue.available != null
+                ? this.parseDays(rawValue.available)
+                : this.parseDays(remaining - pending);
+            return { remaining, pending, available: available < 0 ? 0 : available };
         }
+        const numeric = this.parseDays(rawValue);
+        return { remaining: numeric, pending: 0, available: numeric };
+    }
 
-        // 冬季休暇の表示
-        if (this.winterLeaveRemaining) {
-            const winterDays = this.getRemainingDays('WINTER');
-            this.winterLeaveRemaining.textContent = winterDays % 1 === 0 ? `${winterDays}日` : `${winterDays.toFixed(1)}日`;
-
-            const winterValidity = this.getValidityPeriod('WINTER');
-            if (this.winterValidity) {
-                if (winterValidity) {
-                    this.winterValidity.textContent = `有効期限：${winterValidity}`;
-                } else {
-                    this.winterValidity.innerHTML = '&nbsp;';
-                }
-            }
+    getBalanceForType(leaveType) {
+        if (!leaveType || !this.remainingByType) {
+            return { remaining: 0, pending: 0, available: 0 };
         }
-
-        // 特別休暇の表示
-        if (this.specialLeaveRemaining) {
-            const specialDays = this.getRemainingDays('SPECIAL');
-            this.specialLeaveRemaining.textContent = specialDays % 1 === 0 ? `${specialDays}日` : `${specialDays.toFixed(1)}日`;
-
-            const specialValidity = this.getValidityPeriod('SPECIAL');
-            if (this.specialValidity) {
-                if (specialValidity) {
-                    this.specialValidity.textContent = `有効期限：${specialValidity}`;
-                } else {
-                    this.specialValidity.innerHTML = '&nbsp;';
-                }
-            }
+        const entry = this.remainingByType[leaveType];
+        if (!entry) {
+            return { remaining: 0, pending: 0, available: 0 };
         }
+        const normalized = this.normalizeBalanceEntry(entry);
+        // 保存されている値が未正規化の場合があるため再代入しておく
+        this.remainingByType[leaveType] = normalized;
+        return normalized;
+    }
+
+    getPendingDays(leaveType) {
+        const balance = this.getBalanceForType(leaveType);
+        return balance.pending;
+    }
+
+    formatBalanceDisplay(remaining, pending) {
+        const remainingText = `${this.formatDaysNumber(remaining)}日`;
+        const pendingValue = Number(pending);
+        if (pendingValue > 0) {
+            return `${remainingText}<br><span style="font-size: 0.7em;">申請中: ${this.formatDaysNumber(pendingValue)}日</span>`;
+        }
+        return remainingText;
+    }
+
+    formatDaysNumber(value) {
+        const num = Number(value);
+        if (!Number.isFinite(num)) {
+            return '0';
+        }
+        const rounded = Math.round(num * 100) / 100;
+        if (Number.isInteger(rounded)) {
+            return String(Math.trunc(rounded));
+        }
+        return rounded.toFixed(2).replace(/\.0+$/, '').replace(/\.([1-9])0$/, '.$1');
+    }
+
+    parseDays(value) {
+        const num = Number(value);
+        if (!Number.isFinite(num)) {
+            return 0;
+        }
+        const rounded = Math.round(num * 100) / 100;
+        return rounded;
     }
 
     /**
@@ -853,31 +876,9 @@ class VacationScreen {
      * 休暇残数取得
      */
     getRemainingDays(leaveType) {
-        console.log(`getRemainingDays called for ${leaveType}`);
-        console.log('leaveType:', leaveType);
-        console.log('this.remainingByType:', this.remainingByType);
-        
-        if (!leaveType || !this.remainingByType) {
-            console.log('leaveType or remainingByType is null/undefined');
-            return 0;
-        }
-        
-        const value = this.remainingByType[leaveType];
-        console.log(`Value for ${leaveType}:`, value, 'type:', typeof value);
-        
-        if (typeof value === 'number') {
-            const result = Math.max(0, Math.round(value * 10) / 10);
-            console.log(`Number result for ${leaveType}:`, result);
-            return result;
-        }
-        const parsed = Number(value);
-        if (Number.isFinite(parsed)) {
-            const result = Math.max(0, Math.round(parsed * 10) / 10);
-            console.log(`Parsed result for ${leaveType}:`, result);
-            return result;
-        }
-        console.log(`No valid value found for ${leaveType}, returning 0`);
-        return 0;
+        const balance = this.getBalanceForType(leaveType);
+        console.log(`getRemainingDays called for ${leaveType}:`, balance);
+        return balance.available;
     }
 
     /**

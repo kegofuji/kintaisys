@@ -117,11 +117,17 @@ public class LeaveController {
     @GetMapping("/remaining/{employeeId}")
     public ResponseEntity<Map<String, Object>> remainingSummary(@PathVariable Long employeeId) {
         try {
-            Map<LeaveType, java.math.BigDecimal> summary = leaveRequestService.getRemainingLeaveSummary(employeeId);
+            Map<LeaveType, com.kintai.dto.LeaveBalanceView> summary = leaveRequestService.getRemainingLeaveSummary(employeeId);
             Map<String, Object> body = new HashMap<>();
             body.put("success", true);
             Map<String, Object> values = new LinkedHashMap<>();
-            summary.forEach((type, value) -> values.put(type.name(), value));
+            summary.forEach((type, view) -> {
+                Map<String, java.math.BigDecimal> entry = new LinkedHashMap<>();
+                entry.put("remaining", view.getRemaining());
+                entry.put("pending", view.getPending());
+                entry.put("available", view.getAvailable());
+                values.put(type.name(), entry);
+            });
             body.put("remaining", values);
             return ResponseEntity.ok(body);
         } catch (Exception e) {

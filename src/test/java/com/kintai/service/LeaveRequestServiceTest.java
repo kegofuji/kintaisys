@@ -1,5 +1,6 @@
 package com.kintai.service;
 
+import com.kintai.dto.LeaveBalanceView;
 import com.kintai.dto.LeaveRequestDto;
 import com.kintai.entity.Employee;
 import com.kintai.entity.LeaveBalance;
@@ -66,8 +67,10 @@ class LeaveRequestServiceTest {
         Long leaveRequestId = ((LeaveRequestDto.LeaveData) dto.getData()).getLeaveRequestId();
         leaveRequestService.updateStatus(leaveRequestId, LeaveStatus.APPROVED, approver.getEmployeeId(), null);
 
-        Map<LeaveType, BigDecimal> remaining = leaveRequestService.getRemainingLeaveSummary(employee.getEmployeeId());
-        assertThat(remaining.get(LeaveType.PAID_LEAVE)).isEqualByComparingTo("9");
+        Map<LeaveType, LeaveBalanceView> remaining = leaveRequestService.getRemainingLeaveSummary(employee.getEmployeeId());
+        LeaveBalanceView view = remaining.get(LeaveType.PAID_LEAVE);
+        assertThat(view.getRemaining()).isEqualByComparingTo("9");
+        assertThat(view.getPending()).isEqualByComparingTo("0");
     }
 
     @Test
@@ -84,8 +87,10 @@ class LeaveRequestServiceTest {
         Long leaveRequestId = ((LeaveRequestDto.LeaveData) dto.getData()).getLeaveRequestId();
         leaveRequestService.updateStatus(leaveRequestId, LeaveStatus.APPROVED, approver.getEmployeeId(), null);
 
-        Map<LeaveType, BigDecimal> remaining = leaveRequestService.getRemainingLeaveSummary(employee.getEmployeeId());
-        assertThat(remaining.get(LeaveType.PAID_LEAVE)).isEqualByComparingTo("9.5");
+        Map<LeaveType, LeaveBalanceView> remaining = leaveRequestService.getRemainingLeaveSummary(employee.getEmployeeId());
+        LeaveBalanceView view = remaining.get(LeaveType.PAID_LEAVE);
+        assertThat(view.getRemaining()).isEqualByComparingTo("9.5");
+        assertThat(view.getPending()).isEqualByComparingTo("0");
     }
 
     @Test
@@ -210,8 +215,12 @@ class LeaveRequestServiceTest {
                 second,
                 "2日目");
 
-        Map<LeaveType, BigDecimal> summary = leaveRequestService.getRemainingLeaveSummary(employee.getEmployeeId());
-        assertThat(summary.get(LeaveType.PAID_LEAVE)).isEqualByComparingTo("0");
+        Map<LeaveType, LeaveBalanceView> summary = leaveRequestService.getRemainingLeaveSummary(employee.getEmployeeId());
+        LeaveBalanceView balanceView = summary.get(LeaveType.PAID_LEAVE);
+        assertThat(balanceView.getRemaining()).isEqualByComparingTo("2");
+        assertThat(balanceView.getPending()).isEqualByComparingTo("2");
+        assertThat(balanceView.getAvailable()).isEqualByComparingTo("0");
+
         BigDecimal remainingDays = leaveRequestService.getRemainingLeaveDays(employee.getEmployeeId(), LeaveType.PAID_LEAVE);
         assertThat(remainingDays).isEqualByComparingTo("0");
 
@@ -265,13 +274,17 @@ class LeaveRequestServiceTest {
         Long leaveRequestId = ((LeaveRequestDto.LeaveData) dto.getData()).getLeaveRequestId();
         leaveRequestService.updateStatus(leaveRequestId, LeaveStatus.APPROVED, approver.getEmployeeId(), null);
 
-        Map<LeaveType, BigDecimal> afterApproval = leaveRequestService.getRemainingLeaveSummary(employee.getEmployeeId());
-        assertThat(afterApproval.get(LeaveType.PAID_LEAVE)).isEqualByComparingTo("9");
+        Map<LeaveType, LeaveBalanceView> afterApproval = leaveRequestService.getRemainingLeaveSummary(employee.getEmployeeId());
+        LeaveBalanceView afterApprovalView = afterApproval.get(LeaveType.PAID_LEAVE);
+        assertThat(afterApprovalView.getRemaining()).isEqualByComparingTo("9");
+        assertThat(afterApprovalView.getPending()).isEqualByComparingTo("0");
 
         leaveRequestService.cancelRequest(leaveRequestId, employee.getEmployeeId());
 
-        Map<LeaveType, BigDecimal> afterCancel = leaveRequestService.getRemainingLeaveSummary(employee.getEmployeeId());
-        assertThat(afterCancel.get(LeaveType.PAID_LEAVE)).isEqualByComparingTo("10");
+        Map<LeaveType, LeaveBalanceView> afterCancel = leaveRequestService.getRemainingLeaveSummary(employee.getEmployeeId());
+        LeaveBalanceView afterCancelView = afterCancel.get(LeaveType.PAID_LEAVE);
+        assertThat(afterCancelView.getRemaining()).isEqualByComparingTo("10");
+        assertThat(afterCancelView.getPending()).isEqualByComparingTo("0");
 
         LeaveBalance balance = leaveBalanceRepository.findByEmployeeIdAndLeaveType(employee.getEmployeeId(), LeaveType.PAID_LEAVE)
                 .orElseThrow();

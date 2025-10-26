@@ -2227,7 +2227,7 @@ class AdminScreen {
 
         // サイレント更新でない場合のみローディングメッセージを表示
         if (!silent) {
-            this.setTableState(this.vacationManagementTableBody, 8, 'データを読み込み中...', 'text-muted');
+            this.setTableState(this.vacationManagementTableBody, 9, 'データを読み込み中...', 'text-muted');
         }
 
         try {
@@ -2286,6 +2286,7 @@ class AdminScreen {
                     employeeFullName: identity.name,
                     startDate: item.startDate,
                     endDate: item.endDate,
+                    days: item.days, // 申請日数を追加
                     reason: item.reason || '',
                     leaveType: item.leaveType || 'PAID_LEAVE',
                     timeUnit: item.timeUnit || 'FULL_DAY',
@@ -2318,7 +2319,7 @@ class AdminScreen {
             this.renderVacationApprovals(entries);
         } catch (error) {
             console.error('休暇申請読み込みエラー:', error);
-            this.setTableState(this.vacationManagementTableBody, 8, '休暇申請の取得に失敗しました', 'text-danger');
+            this.setTableState(this.vacationManagementTableBody, 9, '休暇申請の取得に失敗しました', 'text-danger');
             success = false;
         } finally {
             this.vacationManagementLoading = false;
@@ -2364,6 +2365,19 @@ class AdminScreen {
             const typeLabel = this.getLeaveTypeLabel(entry.leaveType);
             const unitLabel = LEAVE_TIME_UNIT_LABELS[entry.timeUnit] || '';
 
+            // 申請日数（バックエンドのデータを使用）
+            const formatApplicationDays = (days) => {
+                if (days == null) return '-';
+                const num = Number(days);
+                if (!Number.isFinite(num)) return '-';
+                // 整数の場合は整数で、小数の場合は小数点以下1桁まで表示
+                if (num % 1 === 0) {
+                    return `${Math.trunc(num)}日`;
+                }
+                return `${num.toFixed(1)}日`;
+            };
+            const applicationDays = formatApplicationDays(entry.days);
+
             const reasonHtml = (() => {
                 const parts = [];
                 if (entry.reason) parts.push(`<div>${this.escapeHtml(entry.reason)}</div>`);
@@ -2384,6 +2398,7 @@ class AdminScreen {
                 <td>${typeLabel}</td>
                 <td>${this.formatDateRange(entry.startDate, entry.endDate)}</td>
                 <td>${unitLabel}</td>
+                <td>${applicationDays}</td>
                 <td>${reasonHtml}</td>
                 <td>${statusHtml}</td>
                 <td>${actionCell}</td>
@@ -2491,7 +2506,7 @@ class AdminScreen {
         
         message += `
                 </dl>
-                <div class="alert alert-warning mb-0 py-2 px-3" role="alert" style="font-size: 1rem; display: inline-flex; width: fit-content; white-space: nowrap;">この処理は取り消せません</div>
+<div class="mb-0 py-2" role="alert" style="font-size: 1rem; display: inline-flex; width: fit-content; white-space: nowrap; color: red;">この処理は取り消せません</div>
             </div>
         `;
         
@@ -2761,11 +2776,48 @@ class AdminScreen {
         if (!remaining || !(type in (remaining || {}))) {
             return '-';
         }
-        const value = Number(remaining[type]);
-        if (!Number.isFinite(value)) {
-            return String(remaining[type]);
+        const entry = remaining[type];
+        const balance = this.normalizeBalanceEntry(entry);
+        const remainingLabel = this.formatDaysLabel(balance.remaining);
+        // 申請中表記を廃止
+        return remainingLabel;
+    }
+
+    normalizeBalanceEntry(value) {
+        if (value && typeof value === 'object') {
+            const remaining = this.parseDays(value.remaining ?? value.available ?? value.value ?? 0);
+            const pending = this.parseDays(value.pending ?? 0);
+            const available = value.available != null
+                ? this.parseDays(value.available)
+                : this.parseDays(remaining - pending);
+            return {
+                remaining,
+                pending,
+                available: available < 0 ? 0 : available
+            };
         }
-        return value % 1 === 0 ? `${value}日` : `${value.toFixed(1)}日`;
+        const numeric = this.parseDays(value);
+        return { remaining: numeric, pending: 0, available: numeric };
+    }
+
+    parseDays(value) {
+        const num = Number(value);
+        if (!Number.isFinite(num)) {
+            return 0;
+        }
+        return Math.round(num * 100) / 100;
+    }
+
+    formatDaysLabel(value) {
+        const num = this.parseDays(value);
+        const rounded = Math.round(num * 100) / 100;
+        if (Number.isInteger(rounded)) {
+            return `${Math.trunc(rounded)}日`;
+        }
+        const text = rounded.toFixed(2)
+            .replace(/\.0+$/, '')
+            .replace(/(\.\d)0$/, '$1');
+        return `${text}日`;
     }
 
     /**
@@ -3479,6 +3531,19 @@ class AdminScreen {
         const reasonText = entry.reason ? this.escapeHtml(entry.reason) : '（理由なし）';
         const actionText = isApprove ? '承認' : '却下';
 
+                    // 申請日数（バックエンドのデータを使用）
+            const formatApplicationDays = (days) => {
+                if (days == null) return '-';
+                const num = Number(days);
+                if (!Number.isFinite(num)) return '-';
+                // 整数の場合は整数で、小数の場合は小数点以下1桁まで表示
+                if (num % 1 === 0) {
+                    return `${Math.trunc(num)}日`;
+                }
+                return `${num.toFixed(1)}日`;
+            };
+            const applicationDays = formatApplicationDays(entry.days);
+
         // 打刻修正承認モーダルと同じフォーマットで詳細情報を表示
         const message = `
             <div class="text-start small">
@@ -3493,6 +3558,8 @@ class AdminScreen {
                     <dd class="col-8 text-end mb-0 fw-semibold">${period}</dd>
                     <dt class="col-4 text-muted text-nowrap mb-0">取得単位</dt>
                     <dd class="col-8 text-end mb-0 fw-semibold">${unitLabel}</dd>
+                    <dt class="col-4 text-muted text-nowrap mb-0">申請日数</dt>
+                    <dd class="col-8 text-end mb-0 fw-semibold">${applicationDays}</dd>
                     <dt class="col-4 text-muted text-nowrap mb-0">理由</dt>
                     <dd class="col-8 text-end mb-0">${reasonText}</dd>
                 </dl>

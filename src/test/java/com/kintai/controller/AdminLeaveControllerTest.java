@@ -96,7 +96,8 @@ class AdminLeaveControllerTest {
                 .andExpect(jsonPath("$.distributedCount").value(2));
 
         var remaining = leaveRequestService.getRemainingLeaveSummary(employee.getEmployeeId());
-        assertThat(remaining.get(LeaveType.SUMMER)).isEqualByComparingTo("3");
+        assertThat(remaining.get(LeaveType.SUMMER).getRemaining()).isEqualByComparingTo("3");
+        assertThat(remaining.get(LeaveType.SUMMER).getPending()).isEqualByComparingTo("0");
     }
 
     @Test

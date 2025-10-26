@@ -1,5 +1,6 @@
 package com.kintai.service;
 
+import com.kintai.dto.LeaveBalanceView;
 import com.kintai.dto.LeaveRequestDto;
 import com.kintai.entity.*;
 import com.kintai.exception.VacationException;
@@ -183,8 +184,8 @@ public class LeaveRequestService {
         return leaveRequestRepository.findByEmployeeIdOrderByCreatedAtDesc(employeeId);
     }
 
-    public Map<LeaveType, BigDecimal> getRemainingLeaveSummary(Long employeeId) {
-        Map<LeaveType, BigDecimal> summary = new EnumMap<>(LeaveType.class);
+    public Map<LeaveType, LeaveBalanceView> getRemainingLeaveSummary(Long employeeId) {
+        Map<LeaveType, LeaveBalanceView> summary = new EnumMap<>(LeaveType.class);
         Employee employee = employeeRepository.findByEmployeeId(employeeId).orElse(null);
         boolean isRetired = employee != null && employee.isRetired();
         for (LeaveType type : LeaveType.values()) {
@@ -206,11 +207,8 @@ public class LeaveRequestService {
             } else {
                 remaining = balance.getRemainingDays();
             }
-            BigDecimal available = subtractPendingDays(employeeId, type, remaining);
-            if (available.signum() < 0) {
-                available = BigDecimal.ZERO;
-            }
-            summary.put(type, available.setScale(2, RoundingMode.HALF_UP));
+            LeaveBalanceView view = buildBalanceView(employeeId, type, remaining);
+            summary.put(type, view);
         }
         return summary;
     }
@@ -219,8 +217,7 @@ public class LeaveRequestService {
     public BigDecimal getRemainingLeaveDays(Long employeeId, LeaveType leaveType) {
         Optional<LeaveBalance> balanceOpt = leaveBalanceRepository.findByEmployeeIdAndLeaveType(employeeId, leaveType);
         BigDecimal remaining = balanceOpt.map(LeaveBalance::getRemainingDays).orElse(BigDecimal.ZERO);
-        BigDecimal available = subtractPendingDays(employeeId, leaveType, remaining);
-        return available.signum() < 0 ? BigDecimal.ZERO : available.setScale(2, RoundingMode.HALF_UP);
+        return buildBalanceView(employeeId, leaveType, remaining).getAvailable();
     }
 
     @Transactional(readOnly = true)
@@ -401,7 +398,7 @@ public class LeaveRequestService {
         cleanupExpiredGrants(balance.getEmployeeId(), leaveType);
 
         BigDecimal remaining = Optional.ofNullable(balance.getRemainingDays()).orElse(BigDecimal.ZERO);
-        BigDecimal available = subtractPendingDays(balance.getEmployeeId(), leaveType, remaining);
+        BigDecimal available = buildBalanceView(balance.getEmployeeId(), leaveType, remaining).getAvailable();
         if (available.compareTo(requestedDays) < 0) {
             throw new VacationException(VacationException.INVALID_REQUEST, "残日数が不足しています");
         }
@@ -616,12 +613,15 @@ public class LeaveRequestService {
         }
     }
 
-    private BigDecimal subtractPendingDays(Long employeeId, LeaveType leaveType, BigDecimal remainingDays) {
+    private LeaveBalanceView buildBalanceView(Long employeeId, LeaveType leaveType, BigDecimal remainingDays) {
         BigDecimal base = Optional.ofNullable(remainingDays).orElse(BigDecimal.ZERO);
-        BigDecimal pending = Optional.ofNullable(
-                leaveRequestRepository.sumPendingDays(employeeId, leaveType)
-        ).orElse(BigDecimal.ZERO);
-        return base.subtract(pending);
+        BigDecimal pending = getPendingDays(employeeId, leaveType);
+        return new LeaveBalanceView(base, pending);
+    }
+
+    private BigDecimal getPendingDays(Long employeeId, LeaveType leaveType) {
+        return Optional.ofNullable(leaveRequestRepository.sumPendingDays(employeeId, leaveType))
+                .orElse(BigDecimal.ZERO);
     }
 
     @Transactional(readOnly = true)
