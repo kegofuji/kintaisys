@@ -167,14 +167,12 @@ class AdminLeaveControllerTest {
     @Test
     void testLeaveRequestWithWorkPatternChange() throws Exception {
         // テスト用の従業員を作成
-        Employee employee = new Employee();
-        employee.setEmployeeId(998L);
-        employee.setEmployeeCode("TEST998");
+        Employee employee = new Employee("TEST998");
         employee.setLastName("勤務時間変更");
         employee.setFirstName("テスト従業員");
         employee.setPaidLeaveBaseDays(10);
         employee.setIsActive(true);
-        employeeRepository.save(employee);
+        employee = employeeRepository.save(employee);
 
         // 土日を含む期間での休暇申請（勤務日のみをカウント）
         LocalDate startDate = LocalDate.of(2025, 10, 27); // 月曜日
@@ -182,7 +180,7 @@ class AdminLeaveControllerTest {
 
         // 休暇申請を作成（勤務日のみをカウントするため9日になる）
         LeaveRequestDto result = leaveRequestService.createLeaveRequest(
-                998L,
+                employee.getEmployeeId(),
                 LeaveType.PAID_LEAVE,
                 LeaveTimeUnit.FULL_DAY,
                 startDate,
@@ -194,7 +192,7 @@ class AdminLeaveControllerTest {
         assertThat(result.isSuccess()).isTrue();
         if (result.getData() instanceof LeaveRequestDto.LeaveData) {
             LeaveRequestDto.LeaveData data = (LeaveRequestDto.LeaveData) result.getData();
-            assertThat(data.getDays()).isEqualTo(9.0);
+            assertThat(data.getDays()).isEqualByComparingTo("9");
         }
     }
 }
