@@ -55,7 +55,7 @@ class LeaveRequestServiceTest {
 
     @Test
     void approvePaidLeaveReducesRemainingDaysByOne() {
-        LocalDate start = nextBusinessDay(1);
+        LocalDate start = nextWorkingDay(1);
         LeaveRequestDto dto = leaveRequestService.createLeaveRequest(
                 employee.getEmployeeId(),
                 LeaveType.PAID_LEAVE,
@@ -75,7 +75,7 @@ class LeaveRequestServiceTest {
 
     @Test
     void approveHalfDayReducesRemainingDaysByPointFive() {
-        LocalDate start = nextBusinessDay(2);
+        LocalDate start = nextWorkingDay(2);
         LeaveRequestDto dto = leaveRequestService.createLeaveRequest(
                 employee.getEmployeeId(),
                 LeaveType.PAID_LEAVE,
@@ -95,7 +95,7 @@ class LeaveRequestServiceTest {
 
     @Test
     void paidLeaveWithoutReasonIsRejected() {
-        LocalDate start = nextBusinessDay(3);
+        LocalDate start = nextWorkingDay(3);
         assertThatThrownBy(() -> leaveRequestService.createLeaveRequest(
                 employee.getEmployeeId(),
                 LeaveType.PAID_LEAVE,
@@ -123,7 +123,7 @@ class LeaveRequestServiceTest {
 
     @Test
     void specialLeaveWithGrantIsAccepted() {
-        LocalDate specialDate = nextBusinessDay(5);
+        LocalDate specialDate = nextWorkingDay(5);
         leaveRequestService.applyGrant(
                 employee.getEmployeeId(),
                 LeaveType.SPECIAL,
@@ -238,7 +238,7 @@ class LeaveRequestServiceTest {
 
     @Test
     void summerLeaveAllowsOptionalReason() {
-        LocalDate target = nextBusinessDay(7);
+        LocalDate target = nextWorkingDay(7);
         leaveRequestService.applyGrant(
                 employee.getEmployeeId(),
                 LeaveType.SUMMER,
@@ -289,13 +289,6 @@ class LeaveRequestServiceTest {
         LeaveBalance balance = leaveBalanceRepository.findByEmployeeIdAndLeaveType(employee.getEmployeeId(), LeaveType.PAID_LEAVE)
                 .orElseThrow();
         assertThat(balance.getRemainingDays()).isEqualByComparingTo("10");
-    }
-    private LocalDate nextBusinessDay(int plusDays) {
-        LocalDate date = LocalDate.now().plusDays(plusDays);
-        while (date.getDayOfWeek().getValue() >= 6) { // 6=SAT,7=SUN
-            date = date.plusDays(1);
-        }
-        return date;
     }
 
     private LocalDate nextWorkingDay(int plusDays) {
