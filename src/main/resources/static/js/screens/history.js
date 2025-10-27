@@ -84,10 +84,10 @@ class HistoryScreen {
         this.handleWindowScrollBound = this.handleWindowScroll.bind(this);
         this.handleKeydownBound = this.handleKeydown.bind(this);
         this.calendarActionDefinitions = [
-            { key: 'adjustment', path: '/adjustment', label: '打刻修正申請', icon: 'fas fa-pen-to-square' },
-            { key: 'vacation', path: '/vacation', label: '休暇申請', icon: 'fas fa-plane-departure' },
-            { key: 'workPattern', path: '/work-pattern', label: '勤務時間変更', icon: 'fas fa-business-time' },
-            { key: 'holiday', path: '/holiday', label: '休日関連申請', icon: 'fas fa-sun' }
+            { key: 'adjustment', path: '/adjustment', label: '打刻修正申請', icon: '' },
+            { key: 'vacation', path: '/vacation', label: '休暇申請', icon: '' },
+            { key: 'workPattern', path: '/work-pattern', label: '勤務時間変更', icon: '' },
+            { key: 'holiday', path: '/holiday', label: '休日関連申請', icon: '' }
         ];
     }
 
