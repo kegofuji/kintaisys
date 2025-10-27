@@ -129,12 +129,22 @@ class AdjustmentScreen {
     init() {
         this.initializeElements();
         this.setupEventListeners();
+        const navigationPrefill = typeof window.consumeNavigationPrefill === 'function'
+            ? window.consumeNavigationPrefill('/adjustment')
+            : null;
+
         this.setDefaultDate();
         this.clearPrefillState();
+
+        if (navigationPrefill && (navigationPrefill.clockInDate || navigationPrefill.date)) {
+            this.applyNavigationPrefill(navigationPrefill);
+        }
         
-        // ブラウザの初期化完了後に再度空白を確実に設定
+        // ブラウザの初期化完了後に再度空白を確実に設定（ナビゲーションプレフィル時は保持）
         setTimeout(() => {
-            this.setDefaultDate();
+            if (!(navigationPrefill && (navigationPrefill.clockInDate || navigationPrefill.date))) {
+                this.setDefaultDate();
+            }
         }, 100);
     }
 
@@ -304,6 +314,64 @@ class AdjustmentScreen {
         this.setValidity(this.clockOutTimeInput, true);
         this.setValidity(this.breakTimeInput, true);
         this.setValidity(this.adjustmentReason, true);
+    }
+
+    applyNavigationPrefill(prefill = {}) {
+        const normalizeDate = (value) => {
+            if (!value) return '';
+            if (value instanceof Date) {
+                if (Number.isNaN(value.getTime())) return '';
+                const yyyy = value.getFullYear();
+                const mm = String(value.getMonth() + 1).padStart(2, '0');
+                const dd = String(value.getDate()).padStart(2, '0');
+                return `${yyyy}-${mm}-${dd}`;
+            }
+            if (typeof value === 'string') {
+                const trimmed = value.trim();
+                if (!trimmed) return '';
+                if (trimmed.includes('T')) {
+                    return trimmed.split('T')[0];
+                }
+                return trimmed.replace(/\//g, '-');
+            }
+            return '';
+        };
+
+        const isoDate = normalizeDate(prefill.clockInDate || prefill.date);
+        if (!isoDate) {
+            return;
+        }
+
+        if (this.clockInDateInput) {
+            this.clockInDateInput.value = isoDate;
+            this.setValidity(this.clockInDateInput, true);
+        }
+        if (this.clockOutDateInput) {
+            this.clockOutDateInput.value = normalizeDate(prefill.clockOutDate) || isoDate;
+            this.setValidity(this.clockOutDateInput, true);
+        }
+        if (this.clockInTimeInput) {
+            this.clockInTimeInput.value = '';
+            this.setValidity(this.clockInTimeInput, true);
+        }
+        if (this.clockOutTimeInput) {
+            this.clockOutTimeInput.value = '';
+            this.setValidity(this.clockOutTimeInput, true);
+        }
+        if (this.breakTimeInput) {
+            this.breakTimeInput.value = '';
+            this.setValidity(this.breakTimeInput, true);
+        }
+        if (this.adjustmentReason) {
+            this.adjustmentReason.value = '';
+            this.setValidity(this.adjustmentReason, true);
+        }
+
+        this.breakManuallyEdited = false;
+        this.autoCalculatedBreakMinutes = 0;
+        this.updateWorkingPreview();
+        this.updateSelectedDaySummaryFromInputs();
+        this.setSummaryStatus('');
     }
 
     /**

@@ -1,3 +1,68 @@
+const navigationPrefillStore = new Map();
+
+function normalizePrefillPath(path) {
+    if (typeof path !== 'string') {
+        return '';
+    }
+    const trimmed = path.trim();
+    if (!trimmed) {
+        return '';
+    }
+    if (trimmed === '/') {
+        return '/';
+    }
+    const withoutTrailingSlash = trimmed.endsWith('/') && trimmed.length > 1
+        ? trimmed.slice(0, -1)
+        : trimmed;
+    return withoutTrailingSlash.startsWith('/')
+        ? withoutTrailingSlash
+        : `/${withoutTrailingSlash}`;
+}
+
+window.setNavigationPrefill = function(path, payload = {}) {
+    const normalized = normalizePrefillPath(path);
+    if (!normalized) {
+        return;
+    }
+    const entry = { ...(payload || {}) };
+    entry.__timestamp = Date.now();
+    navigationPrefillStore.set(normalized, entry);
+};
+
+window.consumeNavigationPrefill = function(path) {
+    const normalized = normalizePrefillPath(path);
+    if (!normalized) {
+        return null;
+    }
+
+    if (!navigationPrefillStore.size && window.__navigationPrefillFallback) {
+        try {
+            const entries = window.__navigationPrefillFallback || {};
+            Object.keys(entries).forEach((key) => {
+                const normalizedKey = normalizePrefillPath(key);
+                if (!normalizedKey) {
+                    return;
+                }
+                const value = entries[key];
+                navigationPrefillStore.set(normalizedKey, {
+                    ...(value || {}),
+                    __timestamp: Date.now()
+                });
+            });
+        } finally {
+            delete window.__navigationPrefillFallback;
+        }
+    }
+
+    const entry = navigationPrefillStore.get(normalized);
+    if (!entry) {
+        return null;
+    }
+    navigationPrefillStore.delete(normalized);
+    const { __timestamp, ...payload } = entry;
+    return payload;
+};
+
 /**
  * メインアプリケーション
  * SPAの初期化と全体制御を行う

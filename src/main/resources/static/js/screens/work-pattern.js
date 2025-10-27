@@ -50,7 +50,16 @@ class WorkPatternScreen {
     }
 
     init() {
+        const navigationPrefill = typeof window.consumeNavigationPrefill === 'function'
+            ? window.consumeNavigationPrefill('/work-pattern')
+            : null;
+
         if (this.initialized) {
+            if (navigationPrefill && (navigationPrefill.startDate || navigationPrefill.date)) {
+                this.applyNavigationPrefill(navigationPrefill);
+            } else {
+                this.setDefaultValues();
+            }
             this.updateDaySelectionVisibility();
             this.updateDaySelectionAvailability();
             this.updateHolidayButtons();
@@ -63,6 +72,9 @@ class WorkPatternScreen {
         this.initializeElements();
         this.setupEventListeners();
         this.setDefaultValues();
+        if (navigationPrefill && (navigationPrefill.startDate || navigationPrefill.date)) {
+            this.applyNavigationPrefill(navigationPrefill);
+        }
         this.updateDaySelectionVisibility();
         this.refreshRequests();
         this.startSummaryPolling();
@@ -70,7 +82,9 @@ class WorkPatternScreen {
         
         // ブラウザの初期化完了後に再度空白を確実に設定
         setTimeout(() => {
-            this.setDefaultValues();
+            if (!(navigationPrefill && (navigationPrefill.startDate || navigationPrefill.date))) {
+                this.setDefaultValues();
+            }
         }, 100);
     }
 
@@ -270,6 +284,51 @@ class WorkPatternScreen {
         this.updateDaySelectionVisibility();
         this.updateWorkingPreview();
         this.updateDaySelectionAvailability();
+    }
+
+    applyNavigationPrefill(prefill = {}) {
+        const normalizeDate = (value) => {
+            if (!value) return '';
+            if (value instanceof Date) {
+                if (Number.isNaN(value.getTime())) return '';
+                const yyyy = value.getFullYear();
+                const mm = String(value.getMonth() + 1).padStart(2, '0');
+                const dd = String(value.getDate()).padStart(2, '0');
+                return `${yyyy}-${mm}-${dd}`;
+            }
+            if (typeof value === 'string') {
+                const trimmed = value.trim();
+                if (!trimmed) return '';
+                if (trimmed.includes('T')) {
+                    return trimmed.split('T')[0];
+                }
+                return trimmed.replace(/\//g, '-');
+            }
+            return '';
+        };
+
+        const start = normalizeDate(prefill.startDate || prefill.date);
+        if (!start) {
+            return;
+        }
+
+        if (this.startDateInput) {
+            this.startDateInput.value = start;
+            this.setValidity(this.startDateInput, true);
+        }
+        if (this.endDateInput) {
+            const end = normalizeDate(prefill.endDate) || start;
+            this.endDateInput.value = end;
+            this.setValidity(this.endDateInput, true);
+        }
+
+        this.updateDaySelectionVisibility();
+        this.updateDaySelectionAvailability();
+        this.handleDateChange();
+        this.updateWorkingPreview();
+        if (typeof this.updateHolidayButtons === 'function') {
+            this.updateHolidayButtons();
+        }
     }
 
     async handleFormSubmit() {

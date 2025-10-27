@@ -25,6 +25,18 @@ class CalendarScreen {
         this.adjustmentRequests = [];
         this.holidayRequests = [];
         this.customHolidays = [];
+        this.dayActionMenu = null;
+        this.activeActionButton = null;
+        this.actionMenuListenersBound = false;
+        this.handleDocumentClickBound = this.handleDocumentClick.bind(this);
+        this.handleWindowScrollBound = this.handleWindowScroll.bind(this);
+        this.handleKeydownBound = this.handleKeydown.bind(this);
+        this.calendarActionDefinitions = [
+            { key: 'adjustment', path: '/adjustment', label: '打刻修正申請', icon: 'fas fa-pen-to-square' },
+            { key: 'vacation', path: '/vacation', label: '休暇申請', icon: 'fas fa-plane-departure' },
+            { key: 'workPattern', path: '/work-pattern', label: '勤務時間変更', icon: 'fas fa-business-time' },
+            { key: 'holiday', path: '/holiday', label: '休日関連申請', icon: 'fas fa-sun' }
+        ];
     }
 
     /**
@@ -48,6 +60,11 @@ class CalendarScreen {
         this.nextMonthBtn = document.getElementById('nextMonthBtn');
         this.currentMonthDisplay = document.getElementById('currentMonthDisplay');
         this.monthlySubmitBtn = document.getElementById('monthlySubmitBtn');
+
+        if (this.calendarGrid && !this.calendarGrid.dataset.actionBound) {
+            this.calendarGrid.addEventListener('click', (event) => this.handleCalendarGridClick(event));
+            this.calendarGrid.dataset.actionBound = 'true';
+        }
     }
 
     /**
@@ -440,6 +457,9 @@ class CalendarScreen {
                         </div>
                         <div class="day-badges">${badges}</div>
                         ${attendance ? this.renderAttendanceInfo(attendance) : ''}
+                        <button type="button" class="calendar-add-btn" data-date="${dateString}" aria-label="${dateString}の申請を追加" aria-haspopup="menu" aria-expanded="false">
+                            <i class="fas fa-plus" aria-hidden="true"></i>
+                        </button>
                     </div>
                 `;
             }
@@ -449,8 +469,233 @@ class CalendarScreen {
 
         // 却下コメント表示のイベントリスナーを追加
         this.setupRejectionCommentListeners();
+        this.hideActionMenu();
+        this.ensureActionMenu();
 
         this.updateNavigationState();
+    }
+
+    ensureActionMenu() {
+        if (this.dayActionMenu) {
+            return this.dayActionMenu;
+        }
+        if (!Array.isArray(this.calendarActionDefinitions) || this.calendarActionDefinitions.length === 0) {
+            return null;
+        }
+        const menu = document.createElement('div');
+        menu.className = 'calendar-action-menu';
+        menu.setAttribute('role', 'menu');
+        menu.innerHTML = this.calendarActionDefinitions.map(({ key, label, icon }) => {
+            const iconHtml = icon ? `<i class="${icon}" aria-hidden="true"></i>` : '';
+            return `<button type="button" class="calendar-action-item" data-action="${key}" role="menuitem">${iconHtml}<span>${label}</span></button>`;
+        }).join('');
+        menu.addEventListener('click', (event) => this.handleActionMenuClick(event));
+        document.body.appendChild(menu);
+        this.dayActionMenu = menu;
+        this.bindActionMenuListeners();
+        return menu;
+    }
+
+    bindActionMenuListeners() {
+        if (this.actionMenuListenersBound) {
+            return;
+        }
+        document.addEventListener('click', this.handleDocumentClickBound);
+        window.addEventListener('scroll', this.handleWindowScrollBound, true);
+        window.addEventListener('resize', this.handleWindowScrollBound, true);
+        document.addEventListener('keydown', this.handleKeydownBound);
+        this.actionMenuListenersBound = true;
+    }
+
+    handleCalendarGridClick(event) {
+        const addButton = event.target.closest('.calendar-add-btn');
+        if (addButton) {
+            event.preventDefault();
+            event.stopPropagation();
+            const { date } = addButton.dataset;
+            this.toggleActionMenu(addButton, date);
+        }
+    }
+
+    toggleActionMenu(button, dateString) {
+        if (!button || !dateString) {
+            return;
+        }
+        const menu = this.ensureActionMenu();
+        if (!menu) {
+            return;
+        }
+        const isoDate = this.convertToIsoDate(dateString);
+        const alreadyOpen = menu.dataset.visible === 'true'
+            && menu.dataset.dateIso === isoDate
+            && this.activeActionButton === button;
+        if (alreadyOpen) {
+            this.hideActionMenu();
+            return;
+        }
+        this.showActionMenu(button, dateString, isoDate);
+    }
+
+    showActionMenu(button, displayDate, isoDate) {
+        const menu = this.ensureActionMenu();
+        if (!menu) {
+            return;
+        }
+
+        if (this.activeActionButton && this.activeActionButton !== button) {
+            this.activeActionButton.setAttribute('aria-expanded', 'false');
+        }
+
+        this.activeActionButton = button;
+        button.setAttribute('aria-expanded', 'true');
+
+        menu.dataset.visible = 'true';
+        menu.dataset.dateIso = isoDate;
+        menu.dataset.dateDisplay = displayDate;
+        menu.style.display = 'block';
+        menu.style.visibility = 'hidden';
+
+        requestAnimationFrame(() => {
+            if (!this.activeActionButton || menu.dataset.visible !== 'true') {
+                return;
+            }
+            const rect = this.activeActionButton.getBoundingClientRect();
+            const menuWidth = menu.offsetWidth;
+            const menuHeight = menu.offsetHeight;
+            const scrollX = window.scrollX || window.pageXOffset || 0;
+            const scrollY = window.scrollY || window.pageYOffset || 0;
+            const preferredTop = scrollY + rect.bottom + 6;
+            const preferredLeft = scrollX + rect.right - menuWidth;
+
+            let top = preferredTop;
+            let left = preferredLeft;
+
+            const viewportBottom = scrollY + window.innerHeight;
+            if (preferredTop + menuHeight + 8 > viewportBottom) {
+                top = Math.max(scrollY + rect.top - menuHeight - 6, scrollY + 8);
+            }
+
+            left = Math.max(left, scrollX + 8);
+
+            menu.style.top = `${top}px`;
+            menu.style.left = `${left}px`;
+            menu.style.visibility = 'visible';
+        });
+    }
+
+    hideActionMenu() {
+        if (!this.dayActionMenu || this.dayActionMenu.dataset.visible !== 'true') {
+            if (this.activeActionButton) {
+                this.activeActionButton.setAttribute('aria-expanded', 'false');
+                this.activeActionButton = null;
+            }
+            return;
+        }
+        this.dayActionMenu.style.display = 'none';
+        this.dayActionMenu.style.visibility = 'hidden';
+        this.dayActionMenu.dataset.visible = 'false';
+        this.dayActionMenu.removeAttribute('data-date-iso');
+        this.dayActionMenu.removeAttribute('data-date-display');
+        if (this.activeActionButton) {
+            this.activeActionButton.setAttribute('aria-expanded', 'false');
+            this.activeActionButton = null;
+        }
+    }
+
+    convertToIsoDate(value) {
+        if (!value || typeof value !== 'string') {
+            return '';
+        }
+        const trimmed = value.trim();
+        if (!trimmed) {
+            return '';
+        }
+        if (trimmed.includes('/')) {
+            return trimmed.replace(/\//g, '-');
+        }
+        return trimmed;
+    }
+
+    handleActionMenuClick(event) {
+        const item = event.target.closest('.calendar-action-item');
+        if (!item) {
+            return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        const actionKey = item.dataset.action;
+        const isoDate = this.dayActionMenu?.dataset?.dateIso || '';
+        const displayDate = this.dayActionMenu?.dataset?.dateDisplay || '';
+        this.performActionNavigation(actionKey, isoDate, displayDate);
+    }
+
+    performActionNavigation(actionKey, isoDate, displayDate) {
+        const action = (this.calendarActionDefinitions || []).find((candidate) => candidate.key === actionKey);
+        if (!action || !isoDate) {
+            this.hideActionMenu();
+            return;
+        }
+
+        const payload = {
+            source: 'calendar',
+            date: isoDate,
+            startDate: isoDate,
+            displayDate
+        };
+
+        switch (action.key) {
+            case 'adjustment':
+                payload.clockInDate = isoDate;
+                payload.clockOutDate = isoDate;
+                break;
+            case 'workPattern':
+                payload.endDate = isoDate;
+                break;
+            case 'holiday':
+                payload.workDate = isoDate;
+                payload.transferWorkDate = isoDate;
+                break;
+            default:
+                break;
+        }
+
+        if (typeof window.setNavigationPrefill === 'function') {
+            window.setNavigationPrefill(action.path, payload);
+        } else {
+            window.__navigationPrefillFallback = window.__navigationPrefillFallback || {};
+            window.__navigationPrefillFallback[action.path] = payload;
+        }
+
+        this.hideActionMenu();
+
+        if (window.router && typeof window.router.navigate === 'function') {
+            window.router.navigate(action.path, { updateHistory: true });
+        } else {
+            window.location.href = action.path;
+        }
+    }
+
+    handleDocumentClick(event) {
+        if (!this.dayActionMenu || this.dayActionMenu.dataset.visible !== 'true') {
+            return;
+        }
+        const target = event.target;
+        if (target && typeof target.closest === 'function') {
+            if (target.closest('.calendar-action-menu') || target.closest('.calendar-add-btn')) {
+                return;
+            }
+        }
+        this.hideActionMenu();
+    }
+
+    handleWindowScroll() {
+        this.hideActionMenu();
+    }
+
+    handleKeydown(event) {
+        if (event.key === 'Escape') {
+            this.hideActionMenu();
+        }
     }
 
     /**

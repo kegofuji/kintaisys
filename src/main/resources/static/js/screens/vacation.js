@@ -54,12 +54,22 @@ class VacationScreen {
     async init() {
         this.initializeElements();
         this.setupEventListeners();
+        const navigationPrefill = typeof window.consumeNavigationPrefill === 'function'
+            ? window.consumeNavigationPrefill('/vacation')
+            : null;
+
         this.clearPrefillState();
+        if (navigationPrefill && (navigationPrefill.startDate || navigationPrefill.date)) {
+            this.applyNavigationPrefill(navigationPrefill);
+        }
+
         await this.loadAllSupportingData();
         
-        // ブラウザの初期化完了後に再度空白を確実に設定
+        // ブラウザの初期化完了後に再度空白を確実に設定 (ナビゲーションプレフィル時は保持)
         setTimeout(() => {
-            this.clearPrefillState();
+            if (!(navigationPrefill && (navigationPrefill.startDate || navigationPrefill.date))) {
+                this.clearPrefillState();
+            }
         }, 100);
     }
 
@@ -238,6 +248,32 @@ class VacationScreen {
             };
         }
 
+        this.handleLeaveTypeChange();
+    }
+
+    applyNavigationPrefill(prefill = {}) {
+        const startDate = this.normalizeDateString(prefill.startDate || prefill.date);
+        if (!startDate) {
+            return;
+        }
+        if (this.vacationStartDate) {
+            this.vacationStartDate.value = startDate;
+            this.setValidity(this.vacationStartDate, true);
+            // changeイベントを発火して依存UIを更新
+            this.vacationStartDate.dispatchEvent(new Event('change'));
+        }
+        if (this.vacationEndDate) {
+            this.vacationEndDate.value = startDate;
+            this.setValidity(this.vacationEndDate, true);
+            this.vacationEndDate.dispatchEvent(new Event('change'));
+        }
+        if (this.formTitle) {
+            this.formTitle.textContent = '休暇申請';
+        }
+        if (this.prefillCancelButton) {
+            this.prefillCancelButton.style.display = 'none';
+            this.prefillCancelButton.onclick = null;
+        }
         this.handleLeaveTypeChange();
     }
 

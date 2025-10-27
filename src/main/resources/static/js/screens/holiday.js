@@ -7,13 +7,26 @@ class HolidayScreen {
     }
 
     async init() {
-        if (this.initialized) return;
-        this.initialized = true;
-        this.initializeElements();
-        // 勤務パターンの事前取得（履歴画面のローダーを流用）
-        await this.prefetchWorkPatterns();
-        this.setupEventListeners();
+        const navigationPrefill = typeof window.consumeNavigationPrefill === 'function'
+            ? window.consumeNavigationPrefill('/holiday')
+            : null;
+
+        if (!this.initialized) {
+            this.initialized = true;
+            this.initializeElements();
+            // 勤務パターンの事前取得（履歴画面のローダーを流用）
+            await this.prefetchWorkPatterns();
+            this.setupEventListeners();
+        }
+
         this.resetForm();
+        if (navigationPrefill && (navigationPrefill.workDate || navigationPrefill.date || navigationPrefill.transferWorkDate)) {
+            this.applyNavigationPrefill(navigationPrefill);
+        } else {
+            this.updateHolidayWorkHints();
+            this.updateUpcomingHolidaysHint();
+            this.updateTransferHints();
+        }
     }
 
     initializeElements() {
@@ -164,6 +177,69 @@ class HolidayScreen {
         this.setValidity(this.transferWorkDate, true);
         this.setValidity(this.transferHolidayDate, true);
         this.setValidity(this.reason, true);
+        this.updateHolidayWorkHints();
+        this.updateUpcomingHolidaysHint();
+        this.updateTransferHints();
+    }
+
+    applyNavigationPrefill(prefill = {}) {
+        const normalizeDate = (value) => {
+            if (!value) return '';
+            if (value instanceof Date) {
+                if (Number.isNaN(value.getTime())) return '';
+                const yyyy = value.getFullYear();
+                const mm = String(value.getMonth() + 1).padStart(2, '0');
+                const dd = String(value.getDate()).padStart(2, '0');
+                return `${yyyy}-${mm}-${dd}`;
+            }
+            if (typeof value === 'string') {
+                const trimmed = value.trim();
+                if (!trimmed) return '';
+                if (trimmed.includes('T')) {
+                    return trimmed.split('T')[0];
+                }
+                return trimmed.replace(/\//g, '-');
+            }
+            return '';
+        };
+
+        const primaryDate = normalizeDate(prefill.workDate || prefill.date || prefill.transferWorkDate);
+        if (!primaryDate) {
+            return;
+        }
+
+        if (this.typeWorkRadio) this.typeWorkRadio.checked = true;
+        if (this.typeTransferRadio) this.typeTransferRadio.checked = false;
+        if (this.typeWorkRadio) {
+            this.typeWorkRadio.dispatchEvent(new Event('change'));
+        }
+
+        if (this.workDate) {
+            this.workDate.value = primaryDate;
+            this.setValidity(this.workDate, true);
+            this.workDate.dispatchEvent(new Event('change'));
+        }
+
+        if (this.transferWorkDate) {
+            const transferWork = normalizeDate(prefill.transferWorkDate) || primaryDate;
+            this.transferWorkDate.value = transferWork;
+            this.setValidity(this.transferWorkDate, true);
+        }
+
+        if (this.compSwitch) {
+            this.compSwitch.checked = false;
+        }
+        if (this.compDate) {
+            this.compDate.disabled = true;
+            this.compDate.value = '';
+            this.setValidity(this.compDate, true);
+        }
+
+        this.updateHolidayWorkHints();
+        this.updateUpcomingHolidaysHint();
+        this.updateTransferHints();
+        this.validateWorkDate();
+        this.validateTransferWorkDate();
     }
 
     // 休日（非勤務日）かどうか

@@ -15,6 +15,7 @@ Spring Securityの設定をプロファイル別に実装し、開発環境（de
 - **認証**: ID/パスワード認証必須
 - **認可**: ロールベース制御（EMPLOYEE, ADMIN）
 - **CSRF**: 有効
+- **CSRF除外**: `/api/reports/**`（PDF ダウンロード用）
 - **データベース**: MySQL
 - **用途**: 本番環境
 
@@ -34,7 +35,7 @@ Spring Securityの設定をプロファイル別に実装し、開発環境（de
 - dev/prodプロファイルの自動切替
 
 ### 4. login.html
-- 美しいログインページ
+- ログインページ
 - エラーメッセージ表示機能
 
 ## エンドポイント権限設定
@@ -43,14 +44,17 @@ Spring Securityの設定をプロファイル別に実装し、開発環境（de
 
 | エンドポイント | 権限 | 説明 |
 |---|---|---|
-| `/css/**`, `/js/**`, `/images/**` | permitAll | 静的リソース |
+| `/css/**`, `/js/**`, `/images/**`, `/favicon.ico` | permitAll | 静的リソース |
 | `/h2-console/**` | denyAll | H2コンソール（本番では無効） |
-| `/api/attendance/health` | authenticated | ヘルスチェック |
-| `/api/attendance/**`, `/api/vacation/**` | ROLE_EMPLOYEE | 従業員用API |
+| `/api/auth/**` | permitAll | 認証関連API |
+| `/api/attendance/**`, `/api/leave/**`, `/api/work-pattern-change/**`, `/api/holiday/**` | ROLE_EMPLOYEE | 従業員用API |
 | `/api/admin/**` | ROLE_ADMIN | 管理者用API |
-| `/api/**` | authenticated | その他のAPI |
+| `/api/reports/**` | authenticated | PDF レポート生成（いずれのロールでも可） |
+| `/api/**` | authenticated | 上記以外の API |
 | `/login`, `/logout` | permitAll | 認証ページ |
 | その他 | permitAll | フロントエンドページ |
+
+> 現状 `/api/attendance/health` も `ROLE_EMPLOYEE` が必要です。Render 等で外部ヘルスチェックを行いたい場合は、公開ヘルスエンドポイント（例: `/api/health`）を追加し、`SecurityConfig` 側で `permitAll` を設定してください。
 
 ## 使用方法
 
@@ -73,21 +77,15 @@ curl http://localhost:8080/api/attendance/health
 
 # prodプロファイル（認証必須）
 curl http://localhost:8080/api/attendance/health
-# 期待値: 403 Forbidden
+# 期待値: 401/403（ログイン前）
 
 # ログイン（prodプロファイル）
-curl -X POST http://localhost:8080/api/auth/login \
+curl -c cookies.txt -X POST http://localhost:8080/api/auth/login \
   -H 'Content-Type: application/json' \
   -d '{"username":"admin","password":"pass"}'
 
-# PDF出力機能は現在無効化されています
-```
-
-### テストスクリプト
-
-```bash
-# 自動テストスクリプトを実行
-./test_security_profiles.sh
+curl -b cookies.txt http://localhost:8080/api/attendance/health
+# 期待値: 200 OK（ログイン済みセッションを送る場合）
 ```
 
 ## 環境変数設定
@@ -96,12 +94,18 @@ curl -X POST http://localhost:8080/api/auth/login \
 
 ```bash
 # データベース設定
-DATABASE_URL=jdbc:mysql://localhost:3306/kintai
-DB_USERNAME=root
-DB_PASSWORD=password
+SPRING_PROFILES_ACTIVE=prod
+DATABASE_URL=jdbc:mysql://localhost:3306/kintai?useSSL=false&serverTimezone=Asia/Tokyo&characterEncoding=UTF-8&allowPublicKeyRetrieval=true&useUnicode=true
+DB_USERNAME=kintai
+DB_PASSWORD=kintai
+SPRING_DATASOURCE_PASSWORD=kintai     # root${DB_PASSWORD} 形式を回避したい場合
+SPRING_FLYWAY_PASSWORD=kintai         # Flyway も同値で上書き
 
-# セッション設定
-SERVER_PORT=8080
+# タイムゾーン
+TZ=Asia/Tokyo
+
+# サーバーポート（Render など PaaS では自動付与される）
+PORT=8080
 ```
 
 ## セキュリティ機能
@@ -158,4 +162,3 @@ tail -f server.log
 - `src/main/java/com/kintai/config/CustomUserDetailsService.java`
 - `src/main/resources/application.yml`
 - `src/main/resources/static/login.html`
-- `test_security_profiles.sh`

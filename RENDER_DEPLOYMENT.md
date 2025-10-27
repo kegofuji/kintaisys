@@ -50,18 +50,26 @@
 
 Render Web Service の **Environment ➜ Environment Variables** に以下を登録します。
 
+### 4.1 必須
+
 | Key | Value | 備考 |
 | --- | --- | --- |
 | `SPRING_PROFILES_ACTIVE` | `prod` | プロダクション設定を有効化 |
 | `DATABASE_URL` | `<JDBC URL>` | 例: `jdbc:mysql://…`（クエリパラメータは上記参照） |
 | `DB_USERNAME` | `<DBユーザー>` | MySQL のユーザー名 |
-| `DB_PASSWORD` | `<DBパスワード>` | `application.yml` の仕様上「root」を前置しないよう、MySQL 側で `root` ユーザーを用いるか、アプリ側設定を必要に応じて調整してください |
-| `PORT` | `10000` など | Render が自動付与するため通常は不要ですが、明示的に指定したい場合に設定 |
-| `PDF_SERVICE_URL` | `https://<pdf-service>` | PDF 機能を有効にする場合のみ |
-| `PDF_SERVICE_API_KEY` | `<key>` | 同上 |
-| `PDF_SERVICE_REQUIRE_AUTH` | `false` | デフォルト値のままで可 |
+| `DB_PASSWORD` | `<DBパスワード>` | デフォルト設定では `root${DB_PASSWORD}` 形式で解釈されるため、Render 側のパスワードも先頭が `root` になるようにするか、下記の追加設定で上書きしてください |
+| `TZ` | `Asia/Tokyo` | Java のシステムタイムゾーンを日本時間に固定 |
 
-> Render の MySQL を利用している場合、接続情報は **Internal Database URL** を基に JDBC 形式に整形するのが安全です。サンプル:
+### 4.2 推奨オプション
+
+| Key | Value | 備考 |
+| --- | --- | --- |
+| `SPRING_DATASOURCE_PASSWORD` | `<DBパスワード>` | `root` 付与を避けたい場合の上書き用 |
+| `SPRING_FLYWAY_PASSWORD` | `<DBパスワード>` | 同上。Flyway の接続パスワード |
+| `SPRING_FLYWAY_ENABLED` | `true` | 起動時に Flyway マイグレーションを自動適用したい場合 |
+| `PORT` | `10000` など | Render が自動付与するため通常は未指定で可 |
+
+> Render の MySQL を利用している場合、接続情報は **Internal Database URL** を基に JDBC 形式に整形するのが安全です。`SPRING_DATASOURCE_PASSWORD` / `SPRING_FLYWAY_PASSWORD` を併用する場合でも以下の形式で問題ありません。サンプル:
 >
 > ```text
 > DATABASE_URL=jdbc:mysql://<internal-hostname>:3306/<db>?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Tokyo&useUnicode=true&characterEncoding=UTF-8
@@ -77,15 +85,32 @@ Render Web Service の **Environment ➜ Environment Variables** に以下を登
 2. **Logs** で Spring Boot が `Started KintaiApplication` と出力していれば成功
 3. 公開 URL は `https://<service-name>.onrender.com` 形式
    - SPA: `https://<service>.onrender.com/login`
-   - API ヘルスチェック: `https://<service>.onrender.com/api/attendance/health`
+   - API ヘルスチェック（要認証）: `https://<service>.onrender.com/api/attendance/health`
    - 管理画面: `https://<service>.onrender.com/#/admin`
 
 ### ヘルスチェック例
 
 ```bash
-curl https://<service>.onrender.com/api/attendance/health
+curl -c cookies.txt -X POST https://<service>.onrender.com/api/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"admin","password":"pass"}'
+
+curl -b cookies.txt https://<service>.onrender.com/api/attendance/health
 # => "勤怠管理システムは正常に動作しています"
 ```
+
+> Render のビルトイン Health Check にはセッション情報を渡せないため、`/api/health` など公開ヘルスエンドポイントを別途用意するか、Health Check を無効化する運用を検討してください。
+
+### サンプルアカウント
+
+本リポジトリは起動時にサンプルデータ（`DataInitializer`）を投入します。Render へデプロイすると以下の認証情報が作成されます。
+
+| ロール | ユーザーID | パスワード | 備考 |
+| --- | --- | --- | --- |
+| 従業員 | `emp1` | `pass` | 勤怠入力および履歴確認用 |
+| 管理者 | `admin` | `pass` | 申請承認や従業員管理用 |
+
+> 実運用で既存データを扱う場合は、`DataInitializer` を無効化するか削除し、上記の初期化処理が走らないよう調整してください。
 
 ---
 
@@ -93,8 +118,9 @@ curl https://<service>.onrender.com/api/attendance/health
 
 - **ログ**: Render ダッシュボードの Logs タブから確認。`render logs <service>` CLI も利用可
 - **スケール**: インスタンスタイプはダッシュボードの Settings で変更可能
-- **DB マイグレーション**: Flyway を利用する場合は `SPRING_FLYWAY_ENABLED=true` を追加し、ビルド時に DDL を適用する
-- **バックアップ**: Managed MySQL の自動バックアップを有効にするか、`mysqldump` を cron などで取得する
+- **DB マイグレーション**: Flyway を使う場合は `SPRING_FLYWAY_ENABLED=true` と `SPRING_FLYWAY_PASSWORD` を設定し、起動時にマイグレーションを適用
+- **初期データ**: `DataInitializer` が本番でも動作すると既存データが削除されるため、実運用では Bean を無効化するかプロファイルを分離してからリリース
+- **バックアップ**: Managed MySQL の自動バックアップを有効化、または `mysqldump` を cron などで取得する
 
 ---
 
@@ -105,7 +131,7 @@ curl https://<service>.onrender.com/api/attendance/health
 | 起動直後にクラッシュする | `DATABASE_URL` や認証情報が誤っている。Render の環境変数を再確認 |
 | 502 / 503 が返る | アプリがまだ起動していないか、ログで例外が発生していないかを確認 |
 | MySQL 接続がタイムアウトする | Render Free プランの MySQL はスリープすることがある。Pro プランまたは外部サービスを検討 |
-| PDF 機能が失敗する | `PDF_SERVICE_URL` などの補助サービスが未設定の場合は、`application.yml` のデフォルトで `http://localhost:8081` を参照するため、Render 上では無効化するか URL を変更 |
+| データが初期化される / サンプルデータしか残らない | `DataInitializer` が起動時にテーブルを削除している。実運用では `@Profile("dev")` などに変更するか Bean を削除してからデプロイ |
 
 ---
 
@@ -128,5 +154,5 @@ mvn spring-boot:run
 
 ## 9. 更新履歴
 
+- 2025-10-27: DataInitializer に関する注意と環境変数の最新構成を追記、PDF サービス依存の記述を整理
 - 2025-09-28: Render 向け手順に刷新（旧 Railway ガイドを置き換え）
-
