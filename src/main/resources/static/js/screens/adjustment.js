@@ -517,8 +517,8 @@ class AdjustmentScreen {
             this.setValidity(this.clockInDateInput, true);
         }
         if (this.clockOutDateInput) {
-            const outDate = normalizeDate(prefill.clockOutDate) || isoDate;
-            this.clockOutDateInput.value = outDate;
+            const outDate = normalizeDate(prefill.clockOutDate || prefill.clockOut);
+            this.clockOutDateInput.value = outDate || '';
             this.setValidity(this.clockOutDateInput, true);
         }
 
@@ -609,25 +609,60 @@ class AdjustmentScreen {
         const breakTimeValueRaw = this.breakTimeInput?.value || '';
         const breakTimeValue = breakTimeValueRaw.trim();
 
-        const requiredChecks = [
-            { input: this.clockInDateInput, ok: !!clockInDate },
-            { input: this.clockOutDateInput, ok: !!clockOutDate },
-            { input: this.clockInTimeInput, ok: !!clockInTime },
-            { input: this.clockOutTimeInput, ok: !!clockOutTime },
-            { input: this.adjustmentReason, ok: reason.length > 0 }
-        ];
+        this.setValidity(this.clockInDateInput, true);
+        this.setValidity(this.clockInTimeInput, true);
+        this.setValidity(this.clockOutDateInput, true);
+        this.setValidity(this.clockOutTimeInput, true);
+        this.setValidity(this.breakTimeInput, true);
+        this.setValidity(this.adjustmentReason, true);
 
-        let firstInvalid = null;
-        requiredChecks.forEach(({ input, ok }) => {
-            this.setValidity(input, ok, '必須項目を入力してください');
-            if (!ok && !firstInvalid) {
-                firstInvalid = input;
-            }
-        });
+        const hasClockInDate = Boolean(clockInDate);
+        const hasClockInTime = Boolean(clockInTime);
+        const hasClockOutDate = Boolean(clockOutDate);
+        const hasClockOutTime = Boolean(clockOutTime);
 
-        if (firstInvalid) {
-            this.showAlert('必須項目を入力してください', 'warning');
-            firstInvalid?.focus();
+        if (hasClockInDate !== hasClockInTime) {
+            this.setValidity(this.clockInDateInput, false, '出勤日と出勤時刻はセットで入力してください');
+            this.setValidity(this.clockInTimeInput, false, '出勤日と出勤時刻はセットで入力してください');
+            this.showAlert('出勤日と出勤時刻はセットで入力してください', 'warning');
+            (hasClockInDate ? this.clockInTimeInput : this.clockInDateInput)?.focus();
+            return;
+        }
+
+        if (hasClockOutDate !== hasClockOutTime) {
+            this.setValidity(this.clockOutDateInput, false, '退勤日と退勤時刻はセットで入力してください');
+            this.setValidity(this.clockOutTimeInput, false, '退勤日と退勤時刻はセットで入力してください');
+            this.showAlert('退勤日と退勤時刻はセットで入力してください', 'warning');
+            (hasClockOutDate ? this.clockOutTimeInput : this.clockOutDateInput)?.focus();
+            return;
+        }
+
+        const clockInProvided = hasClockInDate && hasClockInTime;
+        const clockOutProvided = hasClockOutDate && hasClockOutTime;
+
+        if (!clockInProvided && !clockOutProvided) {
+            this.setValidity(this.clockInDateInput, false, '出勤または退勤のどちらかは入力してください');
+            this.setValidity(this.clockInTimeInput, false, '出勤または退勤のどちらかは入力してください');
+            this.setValidity(this.clockOutDateInput, false, '出勤または退勤のどちらかは入力してください');
+            this.setValidity(this.clockOutTimeInput, false, '出勤または退勤のどちらかは入力してください');
+            this.showAlert('出勤または退勤のどちらかは入力してください', 'warning');
+            (this.clockInDateInput || this.clockOutDateInput)?.focus();
+            return;
+        }
+
+        if (!clockInProvided) {
+            this.setValidity(this.clockInDateInput, true);
+            this.setValidity(this.clockInTimeInput, true);
+        }
+        if (!clockOutProvided) {
+            this.setValidity(this.clockOutDateInput, true);
+            this.setValidity(this.clockOutTimeInput, true);
+        }
+
+        if (reason.length === 0) {
+            this.setValidity(this.adjustmentReason, false, '理由を入力してください');
+            this.showAlert('理由を入力してください', 'warning');
+            this.adjustmentReason?.focus();
             return;
         }
 
@@ -635,7 +670,7 @@ class AdjustmentScreen {
             return;
         }
 
-        if (!this.validateTimeRange()) {
+        if (clockInProvided && clockOutProvided && !this.validateTimeRange()) {
             return;
         }
 
@@ -651,44 +686,49 @@ class AdjustmentScreen {
         }
 
         const breakMinutes = TimeUtils.timeStringToMinutes(breakTimeValue);
+        const breakMinutesForSubmit = breakTimeValue.length > 0 ? breakMinutes : null;
+        let totalMinutes = null;
+        let workingMinutes = null;
+
+        if (clockInProvided && clockOutProvided) {
+            totalMinutes = this.calculateTotalMinutes(clockInDate, clockInTime, clockOutDate, clockOutTime);
+            if (totalMinutes === null) {
+                this.showAlert('有効な勤務時間を入力してください', 'danger');
+                this.setValidity(this.clockInTimeInput, false, '有効な勤務時間を入力してください');
+                this.setValidity(this.clockOutTimeInput, false, '有効な勤務時間を入力してください');
+                return;
+            }
+
+            if (breakMinutes > totalMinutes) {
+                this.showAlert('休憩時間が勤務時間を超えています', 'danger');
+                this.setValidity(this.breakTimeInput, false, '休憩時間が勤務時間を超えています');
+                this.breakTimeInput?.focus();
+                return;
+            }
+
+            workingMinutes = Math.max(totalMinutes - breakMinutes, 0);
+
+            // 実働時間に応じた最小休憩時間の検証
+            // 実働6時間以上8時間未満：45分以上の休憩が必要
+            // 実働8時間以上：60分以上の休憩が必要
+            if (workingMinutes >= 360 && workingMinutes < 480 && breakMinutes < 45) {
+                this.showAlert('実働6時間以上8時間未満の場合、休憩時間は45分以上必要です', 'danger');
+                this.setValidity(this.breakTimeInput, false, '45分以上の休憩が必要です');
+                this.breakTimeInput?.focus();
+                return;
+            } else if (workingMinutes >= 480 && breakMinutes < 60) {
+                this.showAlert('実働8時間以上の場合、休憩時間は60分以上必要です', 'danger');
+                this.setValidity(this.breakTimeInput, false, '60分以上の休憩が必要です');
+                this.breakTimeInput?.focus();
+                return;
+            }
+        }
+
         this.setValidity(this.breakTimeInput, true);
-        const totalMinutes = this.calculateTotalMinutes(clockInDate, clockInTime, clockOutDate, clockOutTime);
-        if (totalMinutes === null) {
-            this.showAlert('有効な勤務時間を入力してください', 'danger');
-            this.setValidity(this.clockInTimeInput, false, '有効な勤務時間を入力してください');
-            this.setValidity(this.clockOutTimeInput, false, '有効な勤務時間を入力してください');
-            return;
-        }
-
-        if (breakMinutes > totalMinutes) {
-            this.showAlert('休憩時間が勤務時間を超えています', 'danger');
-            this.setValidity(this.breakTimeInput, false, '休憩時間が勤務時間を超えています');
-            this.breakTimeInput?.focus();
-            return;
-        }
-
-        const workingMinutes = Math.max(totalMinutes - breakMinutes, 0);
-
-        // 実働時間に応じた最小休憩時間の検証
-        // 実働6時間以上8時間未満：45分以上の休憩が必要
-        // 実働8時間以上：60分以上の休憩が必要
-        if (workingMinutes >= 360 && workingMinutes < 480 && breakMinutes < 45) {
-            this.showAlert('実働6時間以上8時間未満の場合、休憩時間は45分以上必要です', 'danger');
-            this.setValidity(this.breakTimeInput, false, '45分以上の休憩が必要です');
-            this.breakTimeInput?.focus();
-            return;
-        } else if (workingMinutes >= 480 && breakMinutes < 60) {
-            this.showAlert('実働8時間以上の場合、休憩時間は60分以上必要です', 'danger');
-            this.setValidity(this.breakTimeInput, false, '60分以上の休憩が必要です');
-            this.breakTimeInput?.focus();
-            return;
-        }
-
         this.setValidity(this.clockInDateInput, true);
         this.setValidity(this.clockOutDateInput, true);
         this.setValidity(this.clockInTimeInput, true);
         this.setValidity(this.clockOutTimeInput, true);
-        this.setValidity(this.breakTimeInput, true);
         this.setValidity(this.adjustmentReason, true);
 
         if (!window.currentEmployeeId) {
@@ -696,7 +736,9 @@ class AdjustmentScreen {
             return;
         }
 
-        const targetDates = this.expandDateRange(clockInDate, clockOutDate);
+        const dateRangeStart = clockInDate || clockOutDate;
+        const dateRangeEnd = clockOutDate || clockInDate;
+        const targetDates = this.expandDateRange(dateRangeStart, dateRangeEnd);
         try {
             const conflicts = await this.getActiveVacationConflicts(targetDates);
             if (conflicts.length > 0) {
@@ -719,35 +761,47 @@ class AdjustmentScreen {
             return value.replace(/-/g, '/');
         };
 
-        const readableBreak = TimeUtils.formatMinutesToTime(breakMinutes);
-        const readableWork = TimeUtils.formatMinutesToTime(workingMinutes);
+        const readableBreak = clockInProvided && clockOutProvided
+            ? TimeUtils.formatMinutesToTime(breakMinutes)
+            : (breakTimeValue.length > 0 ? TimeUtils.formatMinutesToTime(breakMinutes) : '未入力');
+        const readableWork = workingMinutes !== null
+            ? TimeUtils.formatMinutesToTime(workingMinutes)
+            : '未計算';
         const reasonDisplay = reason || '記載なし';
         const escapeHtml = (value) => String(value ?? '').replace(/&/g, '&amp;')
             .replace(/</g, '&lt;')
             .replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;')
             .replace(/'/g, '&#39;');
-        const modalMessageText = [
-            `出勤 ${formatDateForDialog(clockInDate)} ${clockInTime}`,
-            `退勤 ${formatDateForDialog(clockOutDate)} ${clockOutTime}`,
-            `休憩 ${readableBreak}`,
-            `勤務 ${readableWork}`,
-            `理由 ${reasonDisplay}`,
-            '申請してよろしいですか？'
-        ].join('\n');
+        const summaryLines = [
+            `出勤 ${clockInProvided ? `${formatDateForDialog(clockInDate)} ${clockInTime}` : '未入力'}`,
+            `退勤 ${clockOutProvided ? `${formatDateForDialog(clockOutDate)} ${clockOutTime}` : '未入力'}`
+        ];
+        if (clockInProvided && clockOutProvided) {
+            summaryLines.push(`休憩 ${readableBreak}`);
+            summaryLines.push(`勤務 ${readableWork}`);
+        }
+        summaryLines.push(`理由 ${reasonDisplay}`);
+        summaryLines.push('申請してよろしいですか？');
+        const modalMessageText = summaryLines.join('\n');
+
+        const summaryRows = [
+            { label: '出勤', value: clockInProvided ? `${formatDateForDialog(clockInDate)} ${clockInTime}` : '未入力' },
+            { label: '退勤', value: clockOutProvided ? `${formatDateForDialog(clockOutDate)} ${clockOutTime}` : '未入力' }
+        ];
+        if (clockInProvided && clockOutProvided) {
+            summaryRows.push({ label: '休憩', value: readableBreak });
+            summaryRows.push({ label: '勤務', value: readableWork });
+        }
+        summaryRows.push({ label: '理由', value: reasonDisplay });
+
         const modalMessageHtml = `
             <div class="text-start small">
                 <dl class="row g-1 mb-3 align-items-center">
-                    <dt class="col-4 text-muted text-nowrap mb-0">出勤</dt>
-                    <dd class="col-8 text-end mb-0 fw-semibold">${formatDateForDialog(clockInDate)} ${clockInTime}</dd>
-                    <dt class="col-4 text-muted text-nowrap mb-0">退勤</dt>
-                    <dd class="col-8 text-end mb-0 fw-semibold">${formatDateForDialog(clockOutDate)} ${clockOutTime}</dd>
-                    <dt class="col-4 text-muted text-nowrap mb-0">休憩</dt>
-                    <dd class="col-8 text-end mb-0 fw-semibold">${readableBreak}</dd>
-                    <dt class="col-4 text-muted text-nowrap mb-0">勤務</dt>
-                    <dd class="col-8 text-end mb-0 fw-semibold">${readableWork}</dd>
-                    <dt class="col-4 text-muted text-nowrap mb-0">理由</dt>
-                    <dd class="col-8 text-end mb-0">${escapeHtml(reasonDisplay)}</dd>
+                    ${summaryRows.map(({ label, value }) => `
+                        <dt class="col-4 text-muted text-nowrap mb-0">${label}</dt>
+                        <dd class="col-8 text-end mb-0 fw-semibold">${escapeHtml(value)}</dd>
+                    `.trim()).join('')}
                 </dl>
                 <p class="mb-0">申請してよろしいですか？</p>
             </div>
@@ -773,13 +827,13 @@ class AdjustmentScreen {
             const data = await fetchWithAuth.handleApiCall(
                 () => fetchWithAuth.post('/api/attendance/adjustment-request', {
                     employeeId: window.currentEmployeeId,
-                    date: clockInDate,
-                    clockInDate: clockInDate,
-                    clockInTime: clockInTime,
-                    clockOutDate: clockOutDate,
-                    clockOutTime: clockOutTime,
-                    reason: reason,
-                    breakMinutes: breakMinutes,
+                    date: clockInDate || clockOutDate,
+                    clockInDate: clockInProvided ? clockInDate : '',
+                    clockInTime: clockInProvided ? clockInTime : '',
+                    clockOutDate: clockOutProvided ? clockOutDate : '',
+                    clockOutTime: clockOutProvided ? clockOutTime : '',
+                    reason,
+                    breakMinutes: breakMinutesForSubmit,
                     breakTime: breakTimeValue
                 }),
                 '打刻修正申請に失敗しました'

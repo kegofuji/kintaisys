@@ -646,7 +646,6 @@ class CalendarScreen {
         switch (action.key) {
             case 'adjustment':
                 payload.clockInDate = isoDate;
-                payload.clockOutDate = isoDate;
                 break;
             case 'workPattern':
                 payload.endDate = isoDate;

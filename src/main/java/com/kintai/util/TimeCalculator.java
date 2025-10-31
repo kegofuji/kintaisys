@@ -64,6 +64,10 @@ public class TimeCalculator {
 
         // 1秒でもあれば1分に切り上げる
         long totalSeconds = ChronoUnit.SECONDS.between(clockInTime, clockOutTime);
+        // 同じ分の場合（totalSeconds = 0）は0分を返す
+        if (totalSeconds <= 0) {
+            return 0;
+        }
         long totalMinutes = (totalSeconds + 59) / 60; // 切り上げ処理
         
         int effectiveBreakMinutes = resolveBreakMinutes(clockInTime, clockOutTime, breakMinutes);

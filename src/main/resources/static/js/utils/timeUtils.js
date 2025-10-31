@@ -129,6 +129,10 @@ class TimeUtils {
 
             // 総勤務分（1秒でもあれば1分に切り上げ）
             let totalSeconds = Math.floor((clockOut - clockIn) / 1000);
+            // 同じ分の場合（totalSeconds < 60）は0分を返す
+            if (totalSeconds < 60) {
+                return '0:00';
+            }
             let totalMinutes = Math.ceil(totalSeconds / 60);
 
             let breakMinutes = this.normalizeMinutesValue(customBreakMinutes);

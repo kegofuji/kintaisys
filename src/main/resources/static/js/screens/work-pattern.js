@@ -1240,7 +1240,6 @@ class WorkPatternScreen {
         }
         this.tableBody.innerHTML = '';
         if (!Array.isArray(entries) || entries.length === 0) {
-            this.setTableState('申請履歴はありません', 'text-muted');
             return;
         }
 
