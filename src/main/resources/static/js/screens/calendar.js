@@ -646,62 +646,7 @@ class CalendarScreen {
         switch (action.key) {
             case 'adjustment':
                 payload.clockInDate = isoDate;
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
                 payload.clockOutDate = isoDate;
-=======
->>>>>>> theirs
-=======
-                payload.clockOutDate = isoDate;
->>>>>>> theirs
-=======
-                payload.clockOutDate = isoDate;
->>>>>>> theirs
-=======
-                payload.clockOutDate = isoDate;
->>>>>>> theirs
-=======
-                payload.clockOutDate = isoDate;
->>>>>>> theirs
-=======
-                payload.clockOutDate = isoDate;
->>>>>>> theirs
-=======
-                payload.clockOutDate = isoDate;
->>>>>>> theirs
-=======
-                payload.clockOutDate = isoDate;
->>>>>>> theirs
-=======
-                payload.clockOutDate = isoDate;
->>>>>>> theirs
-=======
-                payload.clockOutDate = isoDate;
->>>>>>> theirs
-=======
-                payload.clockOutDate = isoDate;
->>>>>>> theirs
-=======
-                payload.clockOutDate = isoDate;
->>>>>>> theirs
-=======
-                payload.clockOutDate = isoDate;
->>>>>>> theirs
-=======
-                payload.clockOutDate = isoDate;
->>>>>>> theirs
                 break;
             case 'workPattern':
                 payload.endDate = isoDate;
@@ -898,8 +843,7 @@ class CalendarScreen {
         return `
             <div class="attendance-info">
                 <div class="clock-times">
-                    <small>出勤: ${clockInTime}</small><br>
-                    <small>退勤: ${clockOutTime}</small>
+                    <small>出勤: ${clockInTime} / 退勤: ${clockOutTime}</small>
                 </div>
             </div>
         `;

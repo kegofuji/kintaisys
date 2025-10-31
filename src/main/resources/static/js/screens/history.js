@@ -4037,8 +4037,7 @@ class HistoryScreen {
             // 両方ある場合
             timeDisplay = `
                 <div class="clock-times">
-                    <small>出勤：${clockInTime}</small>
-                    <small>退勤：${clockOutTime}</small>
+                    <small>出勤：${clockInTime} / 退勤：${clockOutTime}</small>
                 </div>
             `;
         } else if (clockInTime) {
@@ -4052,8 +4051,7 @@ class HistoryScreen {
             // 退勤のみ（通常はないが念のため）
             timeDisplay = `
                 <div class="clock-times">
-                    <small>出勤：--:--</small>
-                    <small>退勤：${clockOutTime}</small>
+                    <small>出勤：--:-- / 退勤：${clockOutTime}</small>
                 </div>
             `;
         }
