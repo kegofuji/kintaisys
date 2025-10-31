@@ -13,8 +13,10 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
+import java.time.LocalDate;
 import java.util.Map;
 import java.util.HashMap;
+import org.springframework.format.annotation.DateTimeFormat;
 
 /**
  * 勤怠管理コントローラー
@@ -112,6 +114,20 @@ public class AttendanceController {
         } else {
             response = attendanceService.getAttendanceHistory(employeeId);
         }
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * 指定日の勤怠情報取得API
+     * @param employeeId 従業員ID
+     * @param date 日付
+     * @return 指定日の勤怠記録
+     */
+    @GetMapping("/history/{employeeId}/{date}")
+    public ResponseEntity<ClockResponse> getAttendanceRecordByDate(
+            @PathVariable Long employeeId,
+            @PathVariable @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+        ClockResponse response = attendanceService.getAttendanceRecordForDate(employeeId, date);
         return ResponseEntity.ok(response);
     }
     

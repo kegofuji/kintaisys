@@ -126,23 +126,28 @@ class AdjustmentScreen {
     /**
      * 初期化
      */
-    init() {
+    async init() {
         this.initializeElements();
         this.setupEventListeners();
         const navigationPrefill = typeof window.consumeNavigationPrefill === 'function'
             ? window.consumeNavigationPrefill('/adjustment')
             : null;
+        const pathPrefill = this.extractDateFromPath();
+        const hasNavigationPrefill = Boolean(navigationPrefill && (navigationPrefill.clockInDate || navigationPrefill.date));
+        const hasPathPrefill = Boolean(pathPrefill);
 
         this.setDefaultDate();
         this.clearPrefillState();
 
-        if (navigationPrefill && (navigationPrefill.clockInDate || navigationPrefill.date)) {
-            this.applyNavigationPrefill(navigationPrefill);
+        if (hasNavigationPrefill) {
+            await this.applyNavigationPrefill(navigationPrefill);
+        } else if (hasPathPrefill) {
+            await this.applyPathPrefill(pathPrefill);
         }
         
         // ブラウザの初期化完了後に再度空白を確実に設定（ナビゲーションプレフィル時は保持）
         setTimeout(() => {
-            if (!(navigationPrefill && (navigationPrefill.clockInDate || navigationPrefill.date))) {
+            if (!(hasNavigationPrefill || hasPathPrefill)) {
                 this.setDefaultDate();
             }
         }, 100);
@@ -316,7 +321,172 @@ class AdjustmentScreen {
         this.setValidity(this.adjustmentReason, true);
     }
 
-    applyNavigationPrefill(prefill = {}) {
+    extractDateFromPath() {
+        try {
+            if (window.router && typeof window.router.getCurrentRouteParams === 'function') {
+                const params = window.router.getCurrentRouteParams();
+                const candidate = params && params.date ? this.normalizePathDate(params.date) : '';
+                if (candidate) {
+                    return candidate;
+                }
+            }
+            const path = window.location?.pathname || '';
+            const match = path.match(/^\/adjustment\/(\d{4}-\d{2}-\d{2})$/);
+            if (match && match[1]) {
+                return this.normalizePathDate(match[1]);
+            }
+        } catch (error) {
+            console.warn('Failed to extract adjustment date from path:', error);
+        }
+        return '';
+    }
+
+    normalizePathDate(value) {
+        if (!value) {
+            return '';
+        }
+        if (value instanceof Date) {
+            if (Number.isNaN(value.getTime())) {
+                return '';
+            }
+            const yyyy = value.getFullYear();
+            const mm = String(value.getMonth() + 1).padStart(2, '0');
+            const dd = String(value.getDate()).padStart(2, '0');
+            return `${yyyy}-${mm}-${dd}`;
+        }
+        if (typeof value === 'string') {
+            const trimmed = value.trim();
+            if (!trimmed) {
+                return '';
+            }
+            if (trimmed.includes('T')) {
+                return trimmed.split('T')[0];
+            }
+            return trimmed.replace(/\//g, '-');
+        }
+        return '';
+    }
+
+    formatTimeForInput(value) {
+        if (!value) {
+            return '';
+        }
+        if (value instanceof Date && !Number.isNaN(value.getTime())) {
+            const hh = String(value.getHours()).padStart(2, '0');
+            const mm = String(value.getMinutes()).padStart(2, '0');
+            return `${hh}:${mm}`;
+        }
+        if (typeof value === 'string') {
+            const trimmed = value.trim();
+            if (!trimmed) {
+                return '';
+            }
+            if (trimmed.includes('T')) {
+                const timePart = trimmed.split('T')[1] || '';
+                return timePart.slice(0, 5);
+            }
+            if (/^\d{2}:\d{2}(:\d{2})?$/.test(trimmed)) {
+                return trimmed.slice(0, 5);
+            }
+        }
+        return '';
+    }
+
+    async applyPathPrefill(dateString) {
+        const normalized = this.normalizePathDate(dateString);
+        if (!normalized) {
+            return;
+        }
+
+        if (this.clockInDateInput) {
+            this.clockInDateInput.value = normalized;
+            this.setValidity(this.clockInDateInput, true);
+        }
+        if (this.clockOutDateInput) {
+            this.clockOutDateInput.value = normalized;
+            this.setValidity(this.clockOutDateInput, true);
+        }
+
+        await this.prefillAttendanceFields(normalized);
+        this.updateSelectedDaySummaryFromInputs();
+    }
+
+    async prefillAttendanceFields(dateStr) {
+        const record = await this.fetchAttendanceRecord(dateStr);
+
+        const clockInInput = this.clockInTimeInput;
+        const clockOutInput = this.clockOutTimeInput;
+
+        const applyTimeValue = (input, value) => {
+            if (!input) {
+                return;
+            }
+            const formatted = this.formatTimeForInput(value);
+            if (formatted) {
+                input.value = formatted;
+                this.setValidity(input, true);
+            } else {
+                input.value = '';
+                this.setValidity(input, true);
+            }
+        };
+
+        if (!record) {
+            applyTimeValue(clockInInput, '');
+            applyTimeValue(clockOutInput, '');
+            if (this.breakTimeInput) {
+                this.breakTimeInput.value = '';
+                this.setValidity(this.breakTimeInput, true);
+            }
+            this.breakManuallyEdited = false;
+            this.autoCalculatedBreakMinutes = 0;
+            this.autoCalculateBreak();
+            this.updateWorkingPreview();
+            return null;
+        }
+
+        applyTimeValue(clockInInput, record.clockInTime);
+        applyTimeValue(clockOutInput, record.clockOutTime);
+
+        if (this.breakTimeInput) {
+            if (typeof record.breakMinutes === 'number' && Number.isFinite(record.breakMinutes)) {
+                const minutes = Math.max(0, record.breakMinutes);
+                this.breakTimeInput.value = TimeUtils.formatMinutesToTime(minutes);
+                this.autoCalculatedBreakMinutes = minutes;
+                this.breakManuallyEdited = false;
+                this.setValidity(this.breakTimeInput, true);
+            } else {
+                this.breakManuallyEdited = false;
+                this.autoCalculatedBreakMinutes = 0;
+                this.autoCalculateBreak();
+            }
+        }
+
+        this.updateWorkingPreview();
+        return record;
+    }
+
+    async fetchAttendanceRecord(dateStr) {
+        if (!window.currentEmployeeId || !dateStr) {
+            return null;
+        }
+        try {
+            const encodedDate = encodeURIComponent(dateStr);
+            const response = await fetchWithAuth.handleApiCall(
+                () => fetchWithAuth.get(`/api/attendance/history/${window.currentEmployeeId}/${encodedDate}`),
+                '指定日の勤怠情報の取得に失敗しました'
+            );
+            const data = response?.data ?? (response?.success === undefined ? response : null);
+            if (data && typeof data === 'object') {
+                return data;
+            }
+        } catch (error) {
+            console.warn('Failed to fetch attendance record for adjustment prefill:', error);
+        }
+        return null;
+    }
+
+    async applyNavigationPrefill(prefill = {}) {
         const normalizeDate = (value) => {
             if (!value) return '';
             if (value instanceof Date) {
@@ -347,29 +517,78 @@ class AdjustmentScreen {
             this.setValidity(this.clockInDateInput, true);
         }
         if (this.clockOutDateInput) {
-            this.clockOutDateInput.value = normalizeDate(prefill.clockOutDate) || isoDate;
+            const outDate = normalizeDate(prefill.clockOutDate) || isoDate;
+            this.clockOutDateInput.value = outDate;
             this.setValidity(this.clockOutDateInput, true);
         }
+
+        const normalizedClockIn = this.formatTimeForInput(prefill.clockInTime || prefill.clockIn);
+        const normalizedClockOut = this.formatTimeForInput(prefill.clockOutTime || prefill.clockOut);
+
         if (this.clockInTimeInput) {
-            this.clockInTimeInput.value = '';
+            this.clockInTimeInput.value = normalizedClockIn || '';
             this.setValidity(this.clockInTimeInput, true);
         }
         if (this.clockOutTimeInput) {
-            this.clockOutTimeInput.value = '';
+            this.clockOutTimeInput.value = normalizedClockOut || '';
             this.setValidity(this.clockOutTimeInput, true);
         }
+
+        const hasPrefillBreak = typeof prefill.breakMinutes === 'number' && Number.isFinite(prefill.breakMinutes);
+        let prefillBreakMinutes = null;
         if (this.breakTimeInput) {
-            this.breakTimeInput.value = '';
+            if (hasPrefillBreak) {
+                prefillBreakMinutes = Math.max(0, prefill.breakMinutes);
+                this.breakTimeInput.value = TimeUtils.formatMinutesToTime(prefillBreakMinutes);
+                this.autoCalculatedBreakMinutes = prefillBreakMinutes;
+                this.breakManuallyEdited = false;
+            } else {
+                this.breakTimeInput.value = '';
+                this.autoCalculatedBreakMinutes = 0;
+            }
             this.setValidity(this.breakTimeInput, true);
         }
+
         if (this.adjustmentReason) {
             this.adjustmentReason.value = '';
             this.setValidity(this.adjustmentReason, true);
         }
 
         this.breakManuallyEdited = false;
-        this.autoCalculatedBreakMinutes = 0;
-        this.updateWorkingPreview();
+
+        const shouldFetchAttendance = Boolean(isoDate) && (!normalizedClockIn || !normalizedClockOut);
+
+        if (shouldFetchAttendance) {
+            const record = await this.prefillAttendanceFields(isoDate);
+            if (!record) {
+                if (this.clockInTimeInput) {
+                    this.clockInTimeInput.value = normalizedClockIn || '';
+                }
+                if (this.clockOutTimeInput) {
+                    this.clockOutTimeInput.value = normalizedClockOut || '';
+                }
+                if (this.breakTimeInput) {
+                    if (hasPrefillBreak && prefillBreakMinutes !== null) {
+                        this.breakTimeInput.value = TimeUtils.formatMinutesToTime(prefillBreakMinutes);
+                        this.autoCalculatedBreakMinutes = prefillBreakMinutes;
+                    } else if (normalizedClockIn && normalizedClockOut) {
+                        this.autoCalculateBreak();
+                    } else {
+                        this.breakTimeInput.value = '';
+                        this.autoCalculatedBreakMinutes = 0;
+                    }
+                }
+                this.updateWorkingPreview();
+            }
+        } else {
+            if (this.breakTimeInput) {
+                if (!hasPrefillBreak && normalizedClockIn && normalizedClockOut) {
+                    this.autoCalculateBreak();
+                }
+            }
+            this.updateWorkingPreview();
+        }
+
         this.updateSelectedDaySummaryFromInputs();
         this.setSummaryStatus('');
     }

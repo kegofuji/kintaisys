@@ -80,9 +80,14 @@ class HistoryScreen {
         this.dayActionMenu = null;
         this.activeActionButton = null;
         this.actionMenuListenersBound = false;
+        this.ignoreDocumentClickForCurrentEvent = false;
         this.handleDocumentClickBound = this.handleDocumentClick.bind(this);
         this.handleWindowScrollBound = this.handleWindowScroll.bind(this);
         this.handleKeydownBound = this.handleKeydown.bind(this);
+        this.selectedDateString = null; // 現在選択されている日付（YYYY-MM-DD形式）
+        this.isInitialDateSelection = true; // 初回の日付選択かどうか
+        this.menuOpenedAt = null; // メニューを開いた時刻（タイムスタンプ）
+        this.menuMinDisplayTimeMs = 5000; // メニューの最低表示時間（5秒）
         this.calendarActionDefinitions = [
             { key: 'adjustment', path: '/adjustment', label: '打刻修正申請', icon: '' },
             { key: 'vacation', path: '/vacation', label: '休暇申請', icon: '' },
@@ -1026,22 +1031,47 @@ class HistoryScreen {
         
         console.log('=== カレンダー生成完了 ===');
 
-        // 表示中の月が「今日」と同一なら、当日セルを自動選択し、明細も当日に同期
+        // 日付選択の復元処理
         try {
-            const today = new Date();
-            if (this.currentYear === today.getFullYear() && this.currentMonth === today.getMonth()) {
-                const yyyy = today.getFullYear();
-                const mm = String(today.getMonth() + 1).padStart(2, '0');
-                const dd = String(today.getDate()).padStart(2, '0');
-                const todayStr = `${yyyy}-${mm}-${dd}`;
-                const todayCell = this.calendarGrid.querySelector(`.calendar-day[data-date="${todayStr}"]`);
-                if (todayCell) {
-                    this.updateSelectedDate(todayCell);
-                    this.filterAttendanceTableByDate(todayStr);
+            let dateToSelect = null;
+            
+            // 既に選択されている日付がある場合、それを再選択
+            if (this.selectedDateString) {
+                const selectedCell = this.calendarGrid.querySelector(`.calendar-day[data-date="${this.selectedDateString}"]`);
+                if (selectedCell) {
+                    dateToSelect = this.selectedDateString;
+                } else {
+                    // 選択されていた日付が現在表示中の月に含まれていない場合はクリア
+                    this.selectedDateString = null;
+                }
+            }
+            
+            // 初回のみ、または選択日付がない場合のみ、今日の日付を自動選択
+            if (!dateToSelect && this.isInitialDateSelection) {
+                const today = new Date();
+                if (this.currentYear === today.getFullYear() && this.currentMonth === today.getMonth()) {
+                    const yyyy = today.getFullYear();
+                    const mm = String(today.getMonth() + 1).padStart(2, '0');
+                    const dd = String(today.getDate()).padStart(2, '0');
+                    const todayStr = `${yyyy}-${mm}-${dd}`;
+                    const todayCell = this.calendarGrid.querySelector(`.calendar-day[data-date="${todayStr}"]`);
+                    if (todayCell) {
+                        dateToSelect = todayStr;
+                        this.selectedDateString = todayStr;
+                    }
+                }
+            }
+            
+            // 日付を選択
+            if (dateToSelect) {
+                const cellToSelect = this.calendarGrid.querySelector(`.calendar-day[data-date="${dateToSelect}"]`);
+                if (cellToSelect) {
+                    this.updateSelectedDate(cellToSelect);
+                    this.filterAttendanceTableByDate(dateToSelect);
                 }
             }
         } catch (e) {
-            console.warn('当日セル自動選択中にエラー:', e);
+            console.warn('日付選択の復元中にエラー:', e);
         }
 
         this.currentSnapshot = this.calculateSnapshot();
@@ -1175,7 +1205,9 @@ class HistoryScreen {
         if (this.actionMenuListenersBound) {
             return;
         }
-        document.addEventListener('click', this.handleDocumentClickBound);
+        // バブリングフェーズで処理（プラスボタンのクリック後に発火するようにするため）
+        // useCaptureをfalseにすることで、バブリングフェーズで処理され、stopPropagation()が効く
+        document.addEventListener('click', this.handleDocumentClickBound, false);
         window.addEventListener('scroll', this.handleWindowScrollBound, true);
         window.addEventListener('resize', this.handleWindowScrollBound, true);
         document.addEventListener('keydown', this.handleKeydownBound);
@@ -1185,8 +1217,14 @@ class HistoryScreen {
     handleCalendarGridClick(event) {
         const addButton = event.target.closest('.calendar-add-btn');
         if (addButton) {
+            // このクリックイベントがドキュメントクリックハンドラーで処理されないようにする
+            // 先にフラグを設定することで、バブリングで到達する前に無視される
+            this.ignoreDocumentClickForCurrentEvent = true;
+            
             event.preventDefault();
             event.stopPropagation();
+            event.stopImmediatePropagation();
+            
             const { date } = addButton.dataset;
             this.toggleActionMenu(addButton, date);
         }
@@ -1205,7 +1243,7 @@ class HistoryScreen {
             && menu.dataset.dateIso === isoDate
             && this.activeActionButton === button;
         if (alreadyOpen) {
-            this.hideActionMenu();
+            this.hideActionMenu(true); // 同じボタンをクリックした場合は強制的に閉じる
             return;
         }
         this.showActionMenu(button, dateString, isoDate);
@@ -1239,7 +1277,7 @@ class HistoryScreen {
             const menuHeight = menu.offsetHeight;
             const scrollX = window.scrollX || window.pageXOffset || 0;
             const scrollY = window.scrollY || window.pageYOffset || 0;
-            const preferredTop = scrollY + rect.bottom + 6;
+            const preferredTop = scrollY + rect.bottom + 12;
             const preferredLeft = scrollX + rect.right - menuWidth;
 
             let top = preferredTop;
@@ -1247,7 +1285,7 @@ class HistoryScreen {
 
             const viewportBottom = scrollY + window.innerHeight;
             if (preferredTop + menuHeight + 8 > viewportBottom) {
-                top = Math.max(scrollY + rect.top - menuHeight - 6, scrollY + 8);
+                top = Math.max(scrollY + rect.top - menuHeight - 12, scrollY + 8);
             }
 
             left = Math.max(left, scrollX + 8);
@@ -1255,17 +1293,44 @@ class HistoryScreen {
             menu.style.top = `${top}px`;
             menu.style.left = `${left}px`;
             menu.style.visibility = 'visible';
+            
+            // メニューを開いた時刻を記録
+            this.menuOpenedAt = Date.now();
+            
+            // メニューが完全に表示された後にフラグをリセット（メニューが表示されている間は維持）
+            setTimeout(() => {
+                // メニューがまだ表示されている場合はフラグを維持
+                if (menu.dataset.visible !== 'true') {
+                    this.ignoreDocumentClickForCurrentEvent = false;
+                } else {
+                    // メニューが表示されている間はフラグを維持し、メニューが閉じられた時にリセット
+                    // フラグは hideActionMenu でリセットされる
+                }
+            }, 200);
         });
     }
 
-    hideActionMenu() {
+    hideActionMenu(force = false) {
         if (!this.dayActionMenu || this.dayActionMenu.dataset.visible !== 'true') {
             if (this.activeActionButton) {
                 this.activeActionButton.setAttribute('aria-expanded', 'false');
                 this.activeActionButton = null;
             }
+            // メニューが閉じられたらフラグをリセット
+            this.ignoreDocumentClickForCurrentEvent = false;
+            this.menuOpenedAt = null;
             return;
         }
+        
+        // 5秒経過していない場合は閉じない（強制閉じる場合は除く）
+        if (!force && this.menuOpenedAt !== null) {
+            const elapsed = Date.now() - this.menuOpenedAt;
+            if (elapsed < this.menuMinDisplayTimeMs) {
+                // まだ5秒経過していないので閉じない
+                return;
+            }
+        }
+        
         this.dayActionMenu.style.display = 'none';
         this.dayActionMenu.style.visibility = 'hidden';
         this.dayActionMenu.dataset.visible = 'false';
@@ -1275,6 +1340,9 @@ class HistoryScreen {
             this.activeActionButton.setAttribute('aria-expanded', 'false');
             this.activeActionButton = null;
         }
+        // メニューが閉じられたらフラグをリセット
+        this.ignoreDocumentClickForCurrentEvent = false;
+        this.menuOpenedAt = null;
     }
 
     convertToIsoDate(value) {
@@ -1307,28 +1375,40 @@ class HistoryScreen {
     performActionNavigation(actionKey, isoDate, displayDate) {
         const action = (this.calendarActionDefinitions || []).find((candidate) => candidate.key === actionKey);
         if (!action || !isoDate) {
-            this.hideActionMenu();
+            this.hideActionMenu(true); // メニュー項目をクリックした時は強制的に閉じる
             return;
         }
 
+        const normalizedIsoDate = this.normalizeDateKey(isoDate) || isoDate;
         const payload = {
             source: 'history-calendar',
-            date: isoDate,
-            startDate: isoDate,
+            date: normalizedIsoDate,
+            startDate: normalizedIsoDate,
             displayDate
         };
 
         switch (action.key) {
             case 'adjustment':
-                payload.clockInDate = isoDate;
-                payload.clockOutDate = isoDate;
+                payload.clockInDate = normalizedIsoDate;
+                payload.clockOutDate = normalizedIsoDate;
+                try {
+                    const attendance = this.getAttendanceForDate(normalizedIsoDate);
+                    if (attendance) {
+                        payload.clockIn = attendance.clockInTime || attendance.clockIn;
+                        payload.clockOut = attendance.clockOutTime || attendance.clockOut;
+                        if (attendance.breakMinutes !== undefined) {
+                            payload.breakMinutes = attendance.breakMinutes;
+                        }
+                    }
+                } catch (error) {
+                    console.warn('Failed to attach attendance data for adjustment prefill:', error);
+                }
                 break;
             case 'workPattern':
-                payload.endDate = isoDate;
                 break;
             case 'holiday':
-                payload.workDate = isoDate;
-                payload.transferWorkDate = isoDate;
+                payload.workDate = normalizedIsoDate;
+                payload.transferWorkDate = normalizedIsoDate;
                 break;
             default:
                 break;
@@ -1341,35 +1421,60 @@ class HistoryScreen {
             window.__navigationPrefillFallback[action.path] = payload;
         }
 
-        this.hideActionMenu();
+        this.hideActionMenu(true); // メニュー項目をクリックした時は強制的に閉じる
 
+        const targetPath = `${action.path}/${normalizedIsoDate}`;
         if (window.router && typeof window.router.navigate === 'function') {
-            window.router.navigate(action.path, { updateHistory: true });
+            window.router.navigate(targetPath, { updateHistory: true });
         } else {
-            window.location.href = action.path;
+            window.location.href = targetPath;
         }
     }
 
     handleDocumentClick(event) {
-        if (!this.dayActionMenu || this.dayActionMenu.dataset.visible !== 'true') {
-            return;
-        }
         const target = event.target;
+        
+        // クリックがプラスボタンやその子要素（アイコンなど）の場合は何もしない
         if (target && typeof target.closest === 'function') {
-            if (target.closest('.calendar-action-menu') || target.closest('.calendar-add-btn')) {
+            if (target.closest('.calendar-add-btn')) {
+                // プラスボタンのクリック時はフラグを設定して無視
+                this.ignoreDocumentClickForCurrentEvent = true;
+                return;
+            }
+            
+            // カレンダーの日付セルをクリックした場合も何もしない（別のハンドラーで処理される）
+            if (target.closest('.calendar-day')) {
                 return;
             }
         }
+        
+        // プラスボタンをクリックしたときのイベントを無視（メニュー表示中）
+        if (this.ignoreDocumentClickForCurrentEvent) {
+            return;
+        }
+        
+        if (!this.dayActionMenu || this.dayActionMenu.dataset.visible !== 'true') {
+            return;
+        }
+        
+        // クリックがメニュー内の場合は何もしない
+        if (target && typeof target.closest === 'function') {
+            if (target.closest('.calendar-action-menu')) {
+                return;
+            }
+        }
+        
+        // それ以外の場所をクリックした場合はメニューを閉じる
         this.hideActionMenu();
     }
 
     handleWindowScroll() {
-        this.hideActionMenu();
+        this.hideActionMenu(true); // スクロール時は強制的に閉じる
     }
 
     handleKeydown(event) {
         if (event.key === 'Escape') {
-            this.hideActionMenu();
+            this.hideActionMenu(true); // Escapeキーを押した時は強制的に閉じる
         }
     }
 
@@ -2655,8 +2760,20 @@ class HistoryScreen {
     setupCalendarClickEvents() {
         const calendarDays = this.calendarGrid.querySelectorAll('.calendar-day');
         calendarDays.forEach(day => {
-            day.addEventListener('click', () => {
+            day.addEventListener('click', (event) => {
+                // プラスボタンがクリックされた場合は処理をスキップ
+                if (event.target.closest('.calendar-add-btn')) {
+                    return;
+                }
+                
+                // 日付クリックイベントがドキュメントクリックハンドラーに到達しないようにする
+                event.stopPropagation();
+                
                 const dateString = day.getAttribute('data-date');
+                
+                // 選択された日付を保存
+                this.selectedDateString = dateString;
+                this.isInitialDateSelection = false; // ユーザーが明示的に日付を選択した
                 
                 // 選択状態の視覚的フィードバック
                 this.updateSelectedDate(day);

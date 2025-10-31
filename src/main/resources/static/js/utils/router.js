@@ -5,7 +5,10 @@
 class Router {
     constructor() {
         this.routes = new Map();
+        this.dynamicRoutes = [];
         this.currentRoute = null;
+        this.currentFullPath = null;
+        this.currentRouteParams = {};
 
         // thisにバインドしたルート変更ハンドラを保持
         this.handleRouteChange = this.handleRouteChange.bind(this);
@@ -48,7 +51,8 @@ class Router {
             return;
         }
 
-        if (!this.routes.has(initialPath)) {
+        const initialMatch = this.matchRoute(initialPath);
+        if (!initialMatch) {
             // 管理者権限がある場合は管理者TOPに、ない場合はダッシュボードに遷移
             if (this.isAdmin()) {
                 this.navigate('/admin', { updateHistory: true, replace: true });
@@ -85,6 +89,64 @@ class Router {
         this.routes.set('/admin/vacation-management', { screen: 'adminVacationManagementScreen', title: '休暇管理', admin: true });
         // 管理者: 休日関連
         this.routes.set('/admin/holiday', { screen: 'adminHolidayScreen', title: '休日関連', admin: true });
+
+        this.registerDynamicRoutes();
+    }
+
+    registerDynamicRoutes() {
+        this.dynamicRoutes = [
+            { basePath: '/vacation', paramNames: ['date'], pattern: /^\/vacation\/(\d{4}-\d{2}-\d{2})$/ },
+            { basePath: '/adjustment', paramNames: ['date'], pattern: /^\/adjustment\/(\d{4}-\d{2}-\d{2})$/ },
+            { basePath: '/work-pattern', paramNames: ['date'], pattern: /^\/work-pattern\/(\d{4}-\d{2}-\d{2})$/ },
+            { basePath: '/holiday', paramNames: ['date'], pattern: /^\/holiday\/(\d{4}-\d{2}-\d{2})$/ }
+        ];
+    }
+
+    matchRoute(path) {
+        const normalized = this.normalizePath(path);
+        if (this.routes.has(normalized)) {
+            return {
+                route: this.routes.get(normalized),
+                basePath: normalized,
+                params: {},
+                resolvedPath: normalized
+            };
+        }
+
+        if (!Array.isArray(this.dynamicRoutes) || this.dynamicRoutes.length === 0) {
+            return null;
+        }
+
+        for (const entry of this.dynamicRoutes) {
+            if (!entry || !entry.pattern || !entry.basePath) {
+                continue;
+            }
+            const match = normalized.match(entry.pattern);
+            if (!match) {
+                continue;
+            }
+            const route = this.routes.get(entry.basePath);
+            if (!route) {
+                continue;
+            }
+            const params = {};
+            if (Array.isArray(entry.paramNames)) {
+                entry.paramNames.forEach((name, idx) => {
+                    const value = match[idx + 1];
+                    if (name && value !== undefined) {
+                        params[name] = value;
+                    }
+                });
+            }
+            return {
+                route,
+                basePath: entry.basePath,
+                params,
+                resolvedPath: normalized
+            };
+        }
+
+        return null;
     }
 
     /**
@@ -110,10 +172,10 @@ class Router {
             replace = false
         } = normalizedOptions;
 
-        let normalizedPath = this.normalizePath(path);
+        let requestedPath = this.normalizePath(path);
 
         // /history/YYYYMM のディープリンクを /history に解決してプレフィルを付与
-        const historyMatch = normalizedPath.match(/^\/history\/(\d{6})$/);
+        const historyMatch = requestedPath.match(/^\/history\/(\d{6})$/);
         if (historyMatch) {
             const yyyymm = historyMatch[1];
             const year = parseInt(yyyymm.slice(0, 4), 10);
@@ -122,22 +184,25 @@ class Router {
                 if (typeof window.setNavigationPrefill === 'function') {
                     window.setNavigationPrefill('/history', { year, month });
                 }
-                normalizedPath = '/history';
+                requestedPath = '/history';
             }
         }
 
-        if (normalizedPath === '/') {
-            normalizedPath = '/dashboard';
+        if (requestedPath === '/') {
+            requestedPath = '/dashboard';
         }
 
-        const route = this.routes.get(normalizedPath);
-        if (!route) {
-            console.warn(`ルートが見つかりません: ${normalizedPath}`);
-            if (normalizedPath !== '/dashboard') {
+        const match = this.matchRoute(requestedPath);
+        if (!match || !match.route) {
+            console.warn(`ルートが見つかりません: ${requestedPath}`);
+            if (requestedPath !== '/dashboard') {
                 this.navigate('/dashboard', { updateHistory: true, replace: true });
             }
             return;
         }
+
+        const { route, basePath, params, resolvedPath } = match;
+        const fullPath = resolvedPath || basePath;
 
         if (route.admin && !this.isAdmin()) {
             console.warn('管理者権限が必要です');
@@ -147,18 +212,20 @@ class Router {
 
         const currentPath = window.location.pathname;
         if (updateHistory) {
-            const state = { path: normalizedPath };
+            const state = { path: fullPath, basePath };
             if (replace) {
-                window.history.replaceState(state, '', normalizedPath);
-            } else if (currentPath !== normalizedPath) {
-                window.history.pushState(state, '', normalizedPath);
+                window.history.replaceState(state, '', fullPath);
+            } else if (currentPath !== fullPath) {
+                window.history.pushState(state, '', fullPath);
             }
-        } else if (replace && currentPath !== normalizedPath) {
-            window.history.replaceState({ path: normalizedPath }, '', normalizedPath);
+        } else if (replace && currentPath !== fullPath) {
+            window.history.replaceState({ path: fullPath, basePath }, '', fullPath);
         }
 
-        if (this.currentRoute === normalizedPath) {
-            this.updateNavigation(normalizedPath);
+        const isSameRoute = this.currentRoute === basePath && this.currentFullPath === fullPath;
+        if (isSameRoute) {
+            this.currentRouteParams = params || {};
+            this.updateNavigation(basePath);
             return;
         }
 
@@ -173,8 +240,10 @@ class Router {
             this.updateTitle(route.title);
         }
 
-        this.currentRoute = normalizedPath;
-        this.updateNavigation(normalizedPath);
+        this.currentRoute = basePath;
+        this.currentFullPath = fullPath;
+        this.currentRouteParams = params || {};
+        this.updateNavigation(basePath);
     }
 
     /**
@@ -381,14 +450,17 @@ class Router {
         return this.currentRoute;
     }
 
+    getCurrentRouteParams() {
+        return { ...(this.currentRouteParams || {}) };
+    }
+
     /**
      * ルートが存在するかチェック
      * @param {string} path - パス
      * @returns {boolean} - 存在するかどうか
      */
     hasRoute(path) {
-        const normalizedPath = this.normalizePath(path);
-        return this.routes.has(normalizedPath);
+        return Boolean(this.matchRoute(path));
     }
 
     /**

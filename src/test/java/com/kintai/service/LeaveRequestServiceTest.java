@@ -292,7 +292,14 @@ class LeaveRequestServiceTest {
     }
 
     private LocalDate nextWorkingDay(int plusDays) {
-        LocalDate date = LocalDate.now().plusDays(plusDays);
+        LocalDate date = LocalDate.now();
+        int remaining = plusDays;
+        while (remaining > 0) {
+            date = date.plusDays(1);
+            if (businessDayCalculator.isBusinessDay(date)) {
+                remaining--;
+            }
+        }
         while (!businessDayCalculator.isBusinessDay(date)) {
             date = date.plusDays(1);
         }

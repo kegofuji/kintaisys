@@ -558,11 +558,56 @@ public class AttendanceService {
             throw new AttendanceException("INTERNAL_ERROR", "月別勤怠履歴の取得に失敗しました: " + e.getMessage());
         }
     }
-    
-    
-    
-    
-    
+    /**
+     * 指定日の勤怠情報取得
+     * @param employeeId 従業員ID
+     * @param targetDate 対象日
+     * @return 勤怠レスポンス
+     */
+    @Transactional(readOnly = true)
+    public ClockResponse getAttendanceRecordForDate(Long employeeId, LocalDate targetDate) {
+        try {
+            if (targetDate == null) {
+                throw new AttendanceException(AttendanceException.INVALID_REQUEST, "対象日が指定されていません");
+            }
+
+            Employee employee = employeeRepository.findByEmployeeId(employeeId)
+                    .orElseThrow(() -> new AttendanceException(
+                            AttendanceException.EMPLOYEE_NOT_FOUND,
+                            "従業員が見つかりません"));
+
+            if (employee.isRetired()) {
+                throw new AttendanceException(
+                        AttendanceException.RETIRED_EMPLOYEE,
+                        "退職済みの従業員です");
+            }
+
+            Optional<AttendanceRecord> recordOpt = attendanceRecordRepository
+                    .findByEmployeeIdAndAttendanceDate(employeeId, targetDate);
+
+            ClockResponse response = new ClockResponse();
+            response.setSuccess(true);
+
+            if (recordOpt.isPresent()) {
+                AttendanceRecord record = recordOpt.get();
+                recalculateAttendanceRecord(record);
+                attendanceRecordRepository.save(record);
+                response.setMessage("指定日の勤怠情報を取得しました");
+                response.setData(toClockData(record));
+            } else {
+                response.setMessage("指定日の勤怠情報はありません");
+                response.setData(null);
+            }
+            setUserInfoToResponse(response);
+            return response;
+        } catch (AttendanceException e) {
+            throw e;
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new AttendanceException("INTERNAL_ERROR", "指定日の勤怠情報の取得に失敗しました: " + e.getMessage());
+        }
+    }
+
     
     /**
      * 今日の勤怠状況取得

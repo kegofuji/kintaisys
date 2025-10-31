@@ -10,6 +10,9 @@ class HolidayScreen {
         const navigationPrefill = typeof window.consumeNavigationPrefill === 'function'
             ? window.consumeNavigationPrefill('/holiday')
             : null;
+        const pathPrefill = this.extractDateFromPath();
+        const hasNavigationPrefill = Boolean(navigationPrefill && (navigationPrefill.workDate || navigationPrefill.date || navigationPrefill.transferWorkDate));
+        const hasPathPrefill = Boolean(pathPrefill);
 
         if (!this.initialized) {
             this.initialized = true;
@@ -20,11 +23,12 @@ class HolidayScreen {
         }
 
         this.resetForm();
-        if (navigationPrefill && (navigationPrefill.workDate || navigationPrefill.date || navigationPrefill.transferWorkDate)) {
+        if (hasNavigationPrefill) {
             this.applyNavigationPrefill(navigationPrefill);
+        } else if (hasPathPrefill) {
+            this.applyPathPrefill(pathPrefill);
         } else {
             this.updateHolidayWorkHints();
-            this.updateUpcomingHolidaysHint();
             this.updateTransferHints();
         }
     }
@@ -36,7 +40,8 @@ class HolidayScreen {
         this.typeTransferRadio = document.getElementById('holidayTypeTransfer');
         this.transferRow = document.getElementById('transferRow');
         this.compSwitch = document.getElementById('compensatoryOffSwitch');
-        this.compSwitchContainer = this.compSwitch ? this.compSwitch.closest('.col-md-6') : null;
+        this.compSwitchContainer = document.getElementById('compensatoryOffContainer');
+        this.compSwitchLabel = document.getElementById('compensatoryOffLabel');
         this.workDate = document.getElementById('holidayWorkDate');
         this.compDate = document.getElementById('compensatoryDate');
         this.holidayWorkRow = this.workDate ? this.workDate.closest('.row') : null;
@@ -45,26 +50,33 @@ class HolidayScreen {
         this.reason = document.getElementById('holidayReason');
         this.resetBtn = document.getElementById('holidayFormResetBtn');
         this.submitBtn = document.getElementById('holidaySubmitBtn');
-        this.summaryClockIn = document.querySelector('[data-hol-sum-clock-in]');
-        this.summaryClockOut = document.querySelector('[data-hol-sum-clock-out]');
-        this.summaryStatus = document.querySelector('[data-hol-sum-status]');
-        this.summaryTitleEl = document.querySelector('#holidaySelectedDaySummary .fw-semibold.text-body.mb-1');
         this.holidayWorkHelp = document.getElementById('holidayWorkHelp');
         this.compensatoryHelp = document.getElementById('compensatoryHelp');
         this.transferWorkHelp = document.getElementById('transferWorkHelp');
         this.transferHolidayHelp = document.getElementById('transferHolidayHelp');
-        this.upcomingHolidaysHint = document.getElementById('upcomingHolidaysHint');
     }
 
     setupEventListeners() {
         if (!this.holidayForm) return;
 
         // タブ切り替え
-        const updateMode = () => {
+        this.updateMode = () => {
             const isTransfer = this.typeTransferRadio?.checked === true;
             if (this.transferRow) this.transferRow.style.display = isTransfer ? '' : 'none';
             if (this.holidayWorkRow) this.holidayWorkRow.style.display = isTransfer ? 'none' : '';
-            if (this.compSwitchContainer) this.compSwitchContainer.style.display = isTransfer ? 'none' : '';
+            if (this.compSwitchContainer) {
+                this.compSwitchContainer.hidden = isTransfer;
+                this.compSwitchContainer.style.display = isTransfer ? 'none' : '';
+                this.compSwitchContainer.classList.toggle('d-none', isTransfer);
+            }
+            if (this.compSwitchLabel) {
+                this.compSwitchLabel.hidden = isTransfer;
+                this.compSwitchLabel.style.display = isTransfer ? 'none' : '';
+            }
+            if (this.compSwitch) {
+                this.compSwitch.hidden = isTransfer;
+                this.compSwitch.style.display = isTransfer ? 'none' : '';
+            }
             // 休日出勤モード
             this.workDate.required = !isTransfer;
             this.compSwitch.disabled = isTransfer;
@@ -92,8 +104,8 @@ class HolidayScreen {
                 this.setValidity(this.compDate, true);
             }
         };
-        this.typeWorkRadio?.addEventListener('change', updateMode);
-        this.typeTransferRadio?.addEventListener('change', updateMode);
+        this.typeWorkRadio?.addEventListener('change', this.updateMode);
+        this.typeTransferRadio?.addEventListener('change', this.updateMode);
 
         const resetValidity = (input) => {
             if (!input) return;
@@ -148,7 +160,6 @@ class HolidayScreen {
                 const success = await this.handleRefreshButton(this.refreshBtn, async () => {
                     await this.prefetchWorkPatterns();
                     this.updateHolidayWorkHints();
-                    this.updateUpcomingHolidaysHint();
                     this.updateTransferHints();
                 });
                 if (!success) {
@@ -158,9 +169,8 @@ class HolidayScreen {
             this.refreshBtn.dataset.bound = 'true';
         }
 
-        updateMode();
+        this.updateMode();
         this.updateHolidayWorkHints();
-        this.updateUpcomingHolidaysHint();
         this.updateTransferHints();
     }
 
@@ -177,9 +187,60 @@ class HolidayScreen {
         this.setValidity(this.transferWorkDate, true);
         this.setValidity(this.transferHolidayDate, true);
         this.setValidity(this.reason, true);
+        this.updateMode();
         this.updateHolidayWorkHints();
-        this.updateUpcomingHolidaysHint();
         this.updateTransferHints();
+    }
+
+    extractDateFromPath() {
+        try {
+            if (window.router && typeof window.router.getCurrentRouteParams === 'function') {
+                const params = window.router.getCurrentRouteParams();
+                const candidate = params && params.date ? params.date : '';
+                if (candidate) {
+                    return candidate;
+                }
+            }
+            const path = window.location?.pathname || '';
+            const match = path.match(/^\/holiday\/(\d{4}-\d{2}-\d{2})$/);
+            if (match && match[1]) {
+                return match[1];
+            }
+        } catch (error) {
+            console.warn('Failed to extract holiday date from path:', error);
+        }
+        return '';
+    }
+
+    applyPathPrefill(dateString) {
+        const normalized = typeof dateString === 'string' ? dateString.trim() : '';
+        if (!normalized) {
+            return;
+        }
+
+        if (this.typeWorkRadio) {
+            this.typeWorkRadio.checked = true;
+            this.typeWorkRadio.dispatchEvent(new Event('change'));
+        }
+        if (this.typeTransferRadio) {
+            this.typeTransferRadio.checked = false;
+        }
+
+        if (this.workDate) {
+            this.workDate.value = normalized;
+            this.setValidity(this.workDate, true);
+            this.workDate.dispatchEvent(new Event('change'));
+        }
+
+        if (this.transferWorkDate) {
+            this.transferWorkDate.value = normalized;
+            this.setValidity(this.transferWorkDate, true);
+            this.transferWorkDate.dispatchEvent(new Event('change'));
+        }
+        if (this.transferHolidayDate) {
+            this.transferHolidayDate.value = '';
+            this.setValidity(this.transferHolidayDate, true);
+        }
     }
 
     applyNavigationPrefill(prefill = {}) {
@@ -221,9 +282,14 @@ class HolidayScreen {
         }
 
         if (this.transferWorkDate) {
-            const transferWork = normalizeDate(prefill.transferWorkDate) || primaryDate;
-            this.transferWorkDate.value = transferWork;
-            this.setValidity(this.transferWorkDate, true);
+            const transferWork = normalizeDate(prefill.transferWorkDate);
+            if (transferWork) {
+                this.transferWorkDate.value = transferWork;
+                this.setValidity(this.transferWorkDate, true);
+            } else {
+                this.transferWorkDate.value = '';
+                this.setValidity(this.transferWorkDate, true);
+            }
         }
 
         if (this.compSwitch) {
@@ -236,7 +302,6 @@ class HolidayScreen {
         }
 
         this.updateHolidayWorkHints();
-        this.updateUpcomingHolidaysHint();
         this.updateTransferHints();
         this.validateWorkDate();
         this.validateTransferWorkDate();
@@ -381,42 +446,6 @@ class HolidayScreen {
         return new Date(y, m - 1, d);
     }
 
-    updateUpcomingHolidaysHint() {
-        if (!this.upcomingHolidaysHint) return;
-        try {
-            const today = new Date();
-            const list = [];
-            // 今日から先の休日を10件収集（上限90日走査）
-            for (let i = 0; list.length < 10 && i < 90; i++) {
-                const d = new Date(today);
-                d.setDate(today.getDate() + i);
-                const patternWork = this.resolveWorkingByPattern(d);
-                const isWeekend = d.getDay() === 0 || d.getDay() === 6;
-                const isHolidayCal = window.BusinessDayUtils && typeof window.BusinessDayUtils.isHoliday === 'function' ? window.BusinessDayUtils.isHoliday(d) : false;
-                const isHoliday = patternWork === null ? (isWeekend || isHolidayCal) : !patternWork;
-                if (isHoliday) {
-                    const mm = String(d.getMonth() + 1).padStart(2, '0');
-                    const dd = String(d.getDate()).padStart(2, '0');
-                    list.push(`${mm}/${dd}`);
-                }
-            }
-            // タイトルを置き換え
-            if (this.summaryTitleEl) {
-                this.summaryTitleEl.textContent = '休日予定日';
-            }
-            // 1行に統一して表示（フォーマット固定 MM/DD）
-            const oneLine = list.join(' / ');
-            if (this.summaryClockIn) this.summaryClockIn.textContent = oneLine || '-';
-            if (this.summaryClockOut) this.summaryClockOut.textContent = '';
-            if (this.summaryStatus) this.summaryStatus.hidden = true;
-            if (this.upcomingHolidaysHint) {
-                this.upcomingHolidaysHint.textContent = '';
-                this.upcomingHolidaysHint.style.display = 'none';
-            }
-        } catch (e) {
-            // noop
-        }
-    }
 
     // 勤務パターンに基づく勤務日判定の解決
     resolveWorkingByPattern(dateObj) {

@@ -47,42 +47,60 @@ class WorkPatternScreen {
         this.latestRequestCache = [];
         this.lastRequestsSignature = '';
         this.requestsLoading = false;
+        this.screenCard = null;
     }
 
-    init() {
+    async init() {
         const navigationPrefill = typeof window.consumeNavigationPrefill === 'function'
             ? window.consumeNavigationPrefill('/work-pattern')
             : null;
+        const pathPrefill = this.extractDateFromPath();
+        const hasNavigationPrefill = Boolean(navigationPrefill && (navigationPrefill.startDate || navigationPrefill.date));
+        const hasPathPrefill = Boolean(pathPrefill);
 
         if (this.initialized) {
-            if (navigationPrefill && (navigationPrefill.startDate || navigationPrefill.date)) {
-                this.applyNavigationPrefill(navigationPrefill);
-            } else {
-                this.setDefaultValues();
+            this.setLoadingState(true);
+            try {
+                if (hasNavigationPrefill) {
+                    this.applyNavigationPrefill(navigationPrefill);
+                } else if (hasPathPrefill) {
+                    this.applyPathPrefill(pathPrefill);
+                } else {
+                    this.setDefaultValues();
+                }
+                this.updateDaySelectionVisibility();
+                this.updateDaySelectionAvailability();
+                this.updateHolidayButtons();
+                this.updateWorkingPreview();
+                await this.refreshRequests();
+            } finally {
+                this.setLoadingState(false);
             }
-            this.updateDaySelectionVisibility();
-            this.updateDaySelectionAvailability();
-            this.updateHolidayButtons();
-            this.updateWorkingPreview();
-            this.refreshRequests();
             this.startSummaryPolling(true);
             return;
         }
 
         this.initializeElements();
         this.setupEventListeners();
-        this.setDefaultValues();
-        if (navigationPrefill && (navigationPrefill.startDate || navigationPrefill.date)) {
-            this.applyNavigationPrefill(navigationPrefill);
+        this.setLoadingState(true);
+        try {
+            this.setDefaultValues();
+            if (hasNavigationPrefill) {
+                this.applyNavigationPrefill(navigationPrefill);
+            } else if (hasPathPrefill) {
+                this.applyPathPrefill(pathPrefill);
+            }
+            this.updateDaySelectionVisibility();
+            await this.refreshRequests();
+        } finally {
+            this.setLoadingState(false);
         }
-        this.updateDaySelectionVisibility();
-        this.refreshRequests();
         this.startSummaryPolling();
         this.initialized = true;
         
         // ブラウザの初期化完了後に再度空白を確実に設定
         setTimeout(() => {
-            if (!(navigationPrefill && (navigationPrefill.startDate || navigationPrefill.date))) {
+            if (!(hasNavigationPrefill || hasPathPrefill)) {
                 this.setDefaultValues();
             }
         }, 100);
@@ -94,6 +112,7 @@ class WorkPatternScreen {
         if (this.currentSummaryContainer) {
             this.renderDefaultSummary();
         }
+        this.screenCard = document.querySelector('#workPatternScreen .card');
         this.startDateInput = document.getElementById('workPatternStartDate');
         this.endDateInput = document.getElementById('workPatternEndDate');
         this.startTimeInput = document.getElementById('workPatternStartTime');
@@ -128,6 +147,17 @@ class WorkPatternScreen {
         }
         if (this.reasonInput) {
             this.reasonInput.value = '';
+        }
+    }
+
+    setLoadingState(isLoading) {
+        if (!this.screenCard) {
+            return;
+        }
+        if (isLoading) {
+            this.screenCard.style.display = 'none';
+        } else {
+            this.screenCard.style.display = '';
         }
     }
 
@@ -286,6 +316,42 @@ class WorkPatternScreen {
         this.updateDaySelectionAvailability();
     }
 
+    extractDateFromPath() {
+        try {
+            if (window.router && typeof window.router.getCurrentRouteParams === 'function') {
+                const params = window.router.getCurrentRouteParams();
+                const candidate = params && params.date ? params.date : '';
+                if (candidate) {
+                    return candidate;
+                }
+            }
+            const path = window.location?.pathname || '';
+            const match = path.match(/^\/work-pattern\/(\d{4}-\d{2}-\d{2})$/);
+            if (match && match[1]) {
+                return match[1];
+            }
+        } catch (error) {
+            console.warn('Failed to extract work pattern date from path:', error);
+        }
+        return '';
+    }
+
+    applyPathPrefill(dateString) {
+        const normalized = typeof dateString === 'string' ? dateString.trim() : '';
+        if (!normalized) {
+            return;
+        }
+        if (this.startDateInput) {
+            this.startDateInput.value = normalized;
+            this.setValidity(this.startDateInput, true);
+            this.startDateInput.dispatchEvent(new Event('change'));
+        }
+        if (this.endDateInput) {
+            this.endDateInput.value = '';
+            this.setValidity(this.endDateInput, true);
+        }
+    }
+
     applyNavigationPrefill(prefill = {}) {
         const normalizeDate = (value) => {
             if (!value) return '';
@@ -317,9 +383,14 @@ class WorkPatternScreen {
             this.setValidity(this.startDateInput, true);
         }
         if (this.endDateInput) {
-            const end = normalizeDate(prefill.endDate) || start;
-            this.endDateInput.value = end;
-            this.setValidity(this.endDateInput, true);
+            const end = normalizeDate(prefill.endDate);
+            if (end) {
+                this.endDateInput.value = end;
+                this.setValidity(this.endDateInput, true);
+            } else {
+                this.endDateInput.value = '';
+                this.setValidity(this.endDateInput, true);
+            }
         }
 
         this.updateDaySelectionVisibility();
@@ -1227,12 +1298,12 @@ class WorkPatternScreen {
             return this.lastSummaryData;
         }
         if (!silent) {
-            this.setSummaryMessage('現在の勤務パターンを読み込み中です...', false);
+            this.setSummaryMessage('勤務時間を読み込み中です...', false);
         }
         try {
             const response = await fetchWithAuth.handleApiCall(
                 () => fetchWithAuth.get(`/api/work-pattern-change/current/${window.currentEmployeeId}`),
-                '現在の勤務パターンの取得に失敗しました'
+                '勤務時間の取得に失敗しました'
             );
             const apiSummary = response?.data ?? (response?.success === undefined ? response : null);
             const { summary: effectiveSummary } = this.resolveEffectiveSummary(apiSummary);
@@ -1290,7 +1361,7 @@ class WorkPatternScreen {
                 this.renderDefaultSummary();
             }
             if (!silent) {
-                this.setSummaryMessage('現在の勤務パターンを取得できませんでした。', true);
+                this.setSummaryMessage('勤務時間を取得できませんでした。', true);
             }
             return null;
         }

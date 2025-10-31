@@ -10,6 +10,7 @@ import com.kintai.entity.LeaveType;
 import com.kintai.repository.EmployeeRepository;
 import com.kintai.repository.LeaveRequestRepository;
 import com.kintai.service.LeaveRequestService;
+import com.kintai.util.BusinessDayCalculator;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -34,6 +35,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 @Transactional
 class AdminLeaveControllerTest {
+
+    private final BusinessDayCalculator businessDayCalculator = new BusinessDayCalculator();
 
     @Autowired
     private MockMvc mockMvc;
@@ -149,17 +152,31 @@ class AdminLeaveControllerTest {
 
     // adjustBalanceEndpointIncrementsPaidLeaveAdjustment テストは廃止（有休調整機能の廃止により）
 
-    private LocalDate nextBusinessDay(int plusDays) {
-        LocalDate date = LocalDate.now().plusDays(plusDays);
-        while (date.getDayOfWeek().getValue() >= 6) { // 6=SAT, 7=SUN
+    private LocalDate nextBusinessDay(int offset) {
+        LocalDate date = LocalDate.now();
+        int remaining = offset;
+        while (remaining > 0) {
+            date = date.plusDays(1);
+            if (businessDayCalculator.isBusinessDay(date)) {
+                remaining--;
+            }
+        }
+        while (!businessDayCalculator.isBusinessDay(date)) {
             date = date.plusDays(1);
         }
         return date;
     }
 
-    private LocalDate nextBusinessDayFrom(LocalDate base, int plusDays) {
-        LocalDate date = base.plusDays(plusDays);
-        while (date.getDayOfWeek().getValue() >= 6) {
+    private LocalDate nextBusinessDayFrom(LocalDate base, int offset) {
+        LocalDate date = base;
+        int remaining = offset;
+        while (remaining > 0) {
+            date = date.plusDays(1);
+            if (businessDayCalculator.isBusinessDay(date)) {
+                remaining--;
+            }
+        }
+        while (!businessDayCalculator.isBusinessDay(date)) {
             date = date.plusDays(1);
         }
         return date;

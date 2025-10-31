@@ -905,15 +905,6 @@
                         </button>
                     </div>
                     <div class="card-body">
-                        <div class="mb-3">
-                            <div id="holidaySelectedDaySummary" class="bg-light border rounded p-3 d-inline-block" role="status" aria-live="polite" style="font-size: 1rem; max-width: 700px;">
-                                <div class="fw-semibold text-body mb-1">選択日の打刻情報</div>
-                                <div><span class="fw-semibold text-body" data-hol-sum-clock-in></span> <span class="fw-semibold text-body" data-hol-sum-clock-out></span></div>
-                                <div class="mt-1 small text-muted" data-hol-sum-status hidden></div>
-                                <div class="mt-2 small text-muted" id="upcomingHolidaysHint"></div>
-                            </div>
-                        </div>
-
                         <div class="row g-3">
                             <div class="col-md-6">
                                 <label class="form-label">申請区分 <span class="text-danger">*</span></label>
@@ -924,10 +915,10 @@
                                     <label class="btn btn-outline-primary" for="holidayTypeTransfer">振替</label>
                                 </div>
                             </div>
-                            <div class="col-md-6 d-flex align-items-end">
+                            <div class="col-md-6 d-flex align-items-end" id="compensatoryOffContainer">
                                 <div class="form-check form-switch">
                                     <input class="form-check-input" type="checkbox" role="switch" id="compensatoryOffSwitch">
-                                    <label class="form-check-label" for="compensatoryOffSwitch">代休を取得する</label>
+                                    <label class="form-check-label" for="compensatoryOffSwitch" id="compensatoryOffLabel">代休を取得する</label>
                                 </div>
                             </div>
                         </div>
@@ -979,14 +970,6 @@
                         <h5 class="mb-0" id="adjustmentFormTitle">打刻修正申請</h5>
                     </div>
                     <div class="card-body">
-                        <!-- 選択日の打刻情報（勤務時間変更の現在の勤務時間表示を踏襲） -->
-                        <div class="mb-3">
-                            <div id="adjustmentSelectedDaySummary" class="bg-light border rounded p-3 d-inline-block" role="status" aria-live="polite" style="font-size: 1rem; max-width: 500px;">
-                                <div class="fw-semibold text-body mb-1">選択日の打刻情報</div>
-                                <div>出勤: <span class="fw-semibold text-body" data-adj-sum-clock-in></span>　退勤: <span class="fw-semibold text-body" data-adj-sum-clock-out></span></div>
-                                <div class="mt-1 small text-muted" data-adj-sum-status hidden></div>
-                            </div>
-                        </div>
                         <form id="adjustmentForm" novalidate>
                             <div class="row g-2">
                                 <div class="col-6 col-sm-4 col-md-2">

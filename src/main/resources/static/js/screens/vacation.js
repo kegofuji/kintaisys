@@ -57,17 +57,22 @@ class VacationScreen {
         const navigationPrefill = typeof window.consumeNavigationPrefill === 'function'
             ? window.consumeNavigationPrefill('/vacation')
             : null;
+        const pathPrefill = this.extractDateFromPath();
+        const hasNavigationPrefill = Boolean(navigationPrefill && (navigationPrefill.startDate || navigationPrefill.date));
+        const hasPathPrefill = Boolean(pathPrefill);
 
         this.clearPrefillState();
-        if (navigationPrefill && (navigationPrefill.startDate || navigationPrefill.date)) {
+        if (hasNavigationPrefill) {
             this.applyNavigationPrefill(navigationPrefill);
+        } else if (hasPathPrefill) {
+            this.applyPathPrefill(pathPrefill);
         }
 
         await this.loadAllSupportingData();
         
         // ブラウザの初期化完了後に再度空白を確実に設定 (ナビゲーションプレフィル時は保持)
         setTimeout(() => {
-            if (!(navigationPrefill && (navigationPrefill.startDate || navigationPrefill.date))) {
+            if (!(hasNavigationPrefill || hasPathPrefill)) {
                 this.clearPrefillState();
             }
         }, 100);
@@ -202,6 +207,47 @@ class VacationScreen {
         this.handleLeaveTypeChange();
     }
 
+    extractDateFromPath() {
+        try {
+            if (window.router && typeof window.router.getCurrentRouteParams === 'function') {
+                const params = window.router.getCurrentRouteParams();
+                const candidate = params && params.date ? this.normalizeDateString(params.date) : '';
+                if (candidate) {
+                    return candidate;
+                }
+            }
+            const path = window.location?.pathname || '';
+            const match = path.match(/^\/vacation\/(\d{4}-\d{2}-\d{2})$/);
+            if (match && match[1]) {
+                return this.normalizeDateString(match[1]);
+            }
+        } catch (error) {
+            console.warn('Failed to extract vacation date from path:', error);
+        }
+        return '';
+    }
+
+    applyPathPrefill(dateString) {
+        const normalized = this.normalizeDateString(dateString);
+        if (!normalized) {
+            return;
+        }
+        if (this.vacationStartDate) {
+            this.vacationStartDate.value = normalized;
+            this.setValidity(this.vacationStartDate, true);
+            this.vacationStartDate.dispatchEvent(new Event('change'));
+        }
+        if (this.vacationEndDate) {
+            this.vacationEndDate.value = '';
+            this.setValidity(this.vacationEndDate, true);
+        }
+        if (this.prefillCancelButton) {
+            this.prefillCancelButton.style.display = 'none';
+            this.prefillCancelButton.onclick = null;
+        }
+        this.handleLeaveTypeChange();
+    }
+
     /**
      * プレフィル
      */
@@ -253,6 +299,7 @@ class VacationScreen {
 
     applyNavigationPrefill(prefill = {}) {
         const startDate = this.normalizeDateString(prefill.startDate || prefill.date);
+        const endDate = this.normalizeDateString(prefill.endDate);
         if (!startDate) {
             return;
         }
@@ -263,9 +310,14 @@ class VacationScreen {
             this.vacationStartDate.dispatchEvent(new Event('change'));
         }
         if (this.vacationEndDate) {
-            this.vacationEndDate.value = startDate;
-            this.setValidity(this.vacationEndDate, true);
-            this.vacationEndDate.dispatchEvent(new Event('change'));
+            if (endDate) {
+                this.vacationEndDate.value = endDate;
+                this.setValidity(this.vacationEndDate, true);
+                this.vacationEndDate.dispatchEvent(new Event('change'));
+            } else {
+                this.vacationEndDate.value = '';
+                this.setValidity(this.vacationEndDate, true);
+            }
         }
         if (this.formTitle) {
             this.formTitle.textContent = '休暇申請';
@@ -1270,6 +1322,9 @@ class VacationScreen {
             }
             if (trimmed.includes('T')) {
                 return trimmed.split('T')[0];
+            }
+            if (trimmed.includes('/')) {
+                return trimmed.replace(/\//g, '-');
             }
             return trimmed;
         }
