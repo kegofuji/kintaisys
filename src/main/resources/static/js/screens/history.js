@@ -12,6 +12,10 @@ const HISTORY_CALENDAR_RANGE = {
 class HistoryScreen {
     constructor() {
         this.historyMonthSelect = null;
+        this.previousMonthButton = null;
+        this.todayButton = null;
+        this.nextMonthButton = null;
+        this.currentMonthLabel = null;
         this.monthlySubmitHistoryBtn = null;
         this.historyTableBody = null;
         this.calendarGrid = null;
@@ -183,6 +187,10 @@ class HistoryScreen {
     initializeElements() {
         this.historyMonthSelect = document.getElementById('historyMonthSelect');
         this.historyRefreshBtn = document.getElementById('historyRefreshBtn');
+        this.previousMonthButton = document.getElementById('historyPrevMonthBtn');
+        this.todayButton = document.getElementById('historyTodayBtn');
+        this.nextMonthButton = document.getElementById('historyNextMonthBtn');
+        this.currentMonthLabel = document.getElementById('historyCurrentMonthLabel');
         this.monthlySubmitHistoryBtn = document.getElementById('monthlySubmitHistoryBtn');
         this.historyTableBody = document.getElementById('historyTableBody');
         this.calendarGrid = document.getElementById('calendarGrid');
@@ -235,6 +243,24 @@ class HistoryScreen {
         // ドロップダウンの変更イベント
         if (this.historyMonthSelect) {
             this.historyMonthSelect.addEventListener('change', () => this.handleMonthSelectChange());
+        }
+
+        if (this.previousMonthButton) {
+            this.previousMonthButton.addEventListener('click', async () => {
+                await this.navigateMonth(-1);
+            });
+        }
+
+        if (this.todayButton) {
+            this.todayButton.addEventListener('click', async () => {
+                await this.goToToday();
+            });
+        }
+
+        if (this.nextMonthButton) {
+            this.nextMonthButton.addEventListener('click', async () => {
+                await this.navigateMonth(1);
+            });
         }
 
         // 更新ボタンのクリックイベント
@@ -328,8 +354,6 @@ class HistoryScreen {
                 this.generateCalendar();
             }
             
-            // 所定労働日数を更新
-            this.updatePrescribedWorkingDays();
         } catch (error) {
             success = false;
             console.error('勤怠履歴読み込みエラー:', error);
@@ -358,9 +382,6 @@ class HistoryScreen {
                 console.log('エラー発生時でもカレンダーを生成します');
                 this.generateCalendar();
             }
-            
-            // 所定労働日数を更新
-            this.updatePrescribedWorkingDays();
         }
         return success;
     }
@@ -638,15 +659,86 @@ class HistoryScreen {
         this.currentYear = clamped.year;
         this.currentMonth = clamped.month; // JavaScriptの月は0ベース
 
-        const normalizedValue = this.formatYearMonth(this.currentYear, this.currentMonth);
-        if (this.historyMonthSelect.value !== normalizedValue) {
-            this.historyMonthSelect.value = normalizedValue;
-        }
+        this.syncMonthSelect();
 
         // URL も更新
         this.updateUrlForCurrentMonth(true);
         await this.loadCalendarData(true); // 月変更時はカレンダーを再生成
 
+    }
+
+    /**
+     * 月移動ボタンクリック時の処理
+     * @param {number} offset - 現在月からのオフセット（例: -1 = 前月, 1 = 次月）
+     */
+    async navigateMonth(offset) {
+        if (!Number.isInteger(offset) || offset === 0) {
+            return;
+        }
+
+        const tentative = new Date(this.currentYear, this.currentMonth + offset, 1);
+        const target = this.clampYearMonth(tentative.getFullYear(), tentative.getMonth());
+
+        if (target.year === this.currentYear && target.month === this.currentMonth) {
+            return;
+        }
+
+        this.currentYear = target.year;
+        this.currentMonth = target.month;
+        this.syncMonthSelect();
+        this.updateUrlForCurrentMonth(true);
+        await this.loadCalendarData(true);
+    }
+
+    /**
+     * 今日ボタン押下時の処理
+     */
+    async goToToday() {
+        const today = this.clampDateToRange(new Date());
+
+        if (today.year === this.currentYear && today.month === this.currentMonth) {
+            await this.loadCalendarData(true);
+            return;
+        }
+
+        this.currentYear = today.year;
+        this.currentMonth = today.month;
+        this.syncMonthSelect();
+        this.updateUrlForCurrentMonth(true);
+        await this.loadCalendarData(true);
+    }
+
+    /**
+     * 月選択プルダウンの表示値を現在年月に合わせる
+     */
+    syncMonthSelect() {
+        if (this.historyMonthSelect) {
+            const normalizedValue = this.formatYearMonth(this.currentYear, this.currentMonth);
+            if (this.historyMonthSelect.value !== normalizedValue) {
+                this.historyMonthSelect.value = normalizedValue;
+            }
+        }
+        this.updateMonthLabel();
+    }
+
+    /**
+     * カードヘッダーの現在月表示を更新
+     */
+    updateMonthLabel() {
+        if (!this.currentMonthLabel) return;
+        if (typeof this.currentYear !== 'number' || typeof this.currentMonth !== 'number') {
+            this.currentMonthLabel.textContent = '--';
+            return;
+        }
+        try {
+            const year = this.currentYear || new Date().getFullYear();
+            const month = (this.currentMonth ?? 0) + 1;
+            this.currentMonthLabel.textContent = `${year}/${String(month).padStart(2, '0')}`;
+        } catch (error) {
+            const year = this.currentYear || new Date().getFullYear();
+            const month = (this.currentMonth ?? 0) + 1;
+            this.currentMonthLabel.textContent = `${year}/${String(month).padStart(2, '0')}`;
+        }
     }
 
 
@@ -689,6 +781,7 @@ class HistoryScreen {
 
         this.currentYear = selected.year;
         this.currentMonth = selected.month;
+        this.updateMonthLabel();
     }
 
     /**
@@ -771,17 +864,26 @@ class HistoryScreen {
         const firstDay = new Date(this.currentYear, this.currentMonth, 1);
         const lastDay = new Date(this.currentYear, this.currentMonth + 1, 0);
 
+        // 月曜始まりのカレンダー計算
+        const mondayOffset = (firstDay.getDay() + 6) % 7; // Mon=0 ... Sun=6
+        const startDate = new Date(firstDay);
+        startDate.setDate(startDate.getDate() - mondayOffset);
+        const totalCells = Math.ceil((mondayOffset + lastDay.getDate()) / 7) * 7;
+
         let calendarHtml = headerHtml;
 
-        // 月曜始まりの空白を先頭に挿入（他月のセルは描画しない）
-        const mondayOffset = (firstDay.getDay() + 6) % 7; // Mon=0 ... Sun=6
-        for (let i = 0; i < mondayOffset; i++) {
-            calendarHtml += `<div class="calendar-empty"></div>`;
-        }
+        for (let index = 0; index < totalCells; index++) {
+            const currentDate = new Date(startDate);
+            currentDate.setDate(startDate.getDate() + index);
 
-        // 対象月のみ描画
-        for (let d = 1; d <= lastDay.getDate(); d++) {
-            const currentDate = new Date(this.currentYear, this.currentMonth, d);
+            const isCurrentMonth = currentDate.getFullYear() === this.currentYear
+                && currentDate.getMonth() === this.currentMonth;
+
+            if (!isCurrentMonth) {
+                calendarHtml += `<div class="calendar-empty"></div>`;
+                continue;
+            }
+
             const isToday = this.isToday(currentDate);
             const weekday = currentDate.getDay();
             const isWeekend = weekday === 0 || weekday === 6;
@@ -794,54 +896,52 @@ class HistoryScreen {
             const workPatternRequest = this.getWorkPatternRequestForDate(dateString);
             const holidayRequest = this.getHolidayRequestForDate(dateString);
             const customHoliday = this.getCustomHolidayForDate(dateString);
-            
+
+            let hasApprovedWorkPattern = false;
+            let isWorkPatternHoliday = false;
+            let isNonWorkingDay = false;
+
+            let dayClasses = ['calendar-day'];
+            if (isToday) dayClasses.push('today');
+            if (weekday === 0) dayClasses.push('sunday');
+            if (weekday === 6) dayClasses.push('saturday');
+            if (isWeekend) dayClasses.push('weekend');
+            if (isHoliday) dayClasses.push('holiday');
+
+            let badges = '';
+            let customHolidayLabel = '';
+            let holidayLabel = '';
+            let attendanceInfoHtml = '';
+            let styleAttr = 'cursor: pointer;';
+            const titleAttr = 'クリックして詳細を表示';
+
             // デバッグ用：勤務時間変更申請のデータを確認
             if (workPatternRequest) {
                 console.log(`${dateString}: 勤務時間変更申請データ:`, workPatternRequest);
             }
-            
+
             // デバッグ用：打刻修正申請のデータを確認
             if (adjustmentRequest) {
                 console.log(`日付 ${dateString} の打刻修正申請:`, adjustmentRequest);
             }
 
-            // 勤務時間変更申請で承認済の期間があるかチェック
-            let hasApprovedWorkPattern = false;
-            let isWorkPatternHoliday = false;
-            
             if (workPatternRequest && workPatternRequest.status === 'APPROVED' && workPatternRequest.request) {
                 hasApprovedWorkPattern = true;
-                // 実際の勤務パターンに基づいて判定
                 const isInWorkPattern = this.isDateInWorkPattern(currentDate, workPatternRequest.request, isWeekend, isHoliday);
-                // 勤務パターンに含まれていない場合のみ休日として扱う
                 isWorkPatternHoliday = !isInWorkPattern;
                 console.log(`${dateString}: 勤務時間変更申請あり - isInWorkPattern: ${isInWorkPattern}, isWorkPatternHoliday: ${isWorkPatternHoliday}`);
             }
-            
-            let dayClasses = ['calendar-day'];
-            if (isToday) dayClasses.push('today');
-            if (isWeekend) dayClasses.push('weekend');
-            if (isHoliday) dayClasses.push('holiday');
-            if (weekday === 0) dayClasses.push('sunday');
-            if (weekday === 6) dayClasses.push('saturday');
-            
-            // 従来の土日祝日 + 勤務時間変更申請で承認済の場合の休日判定
-            // 勤務時間変更申請がある場合は、その申請の勤務パターンに基づいて判定
-            let isNonWorkingDay;
+
             if (hasApprovedWorkPattern) {
                 isNonWorkingDay = isWorkPatternHoliday;
             } else {
                 isNonWorkingDay = isWeekend || isHoliday;
             }
+
             if (attendance) dayClasses.push('has-attendance');
             if (attendance && attendance.clockOutTime) dayClasses.push('clocked-out');
             if (attendance && attendance.clockInTime && !attendance.clockOutTime) dayClasses.push('clocked-in');
-            // 勤務時間変更申請で承認済の休日の場合は特別なクラスは追加しない（赤字表示のため）
 
-            let badges = '';
-            
-            // 申請状況を表示（申請中・承認済・却下のみ）
-            // デバッグ用ログ
             if (attendance) {
                 console.log(`日付 ${dateString}: 勤怠データあり`, {
                     clockInTime: attendance.clockInTime,
@@ -857,8 +957,7 @@ class HistoryScreen {
                     adjustmentRequest: adjustmentRequest ? `${adjustmentRequest.status}` : 'なし'
                 });
             }
-            
-            // 休暇申請状況の表示（申請がある場合のみ）。休日（勤務時間変更による休日を含む）は表示しない
+
             if (vacationRequest && !isNonWorkingDay) {
                 const statusUpper = (vacationRequest.status || '').toUpperCase();
                 let statusClass = 'bg-secondary';
@@ -884,8 +983,7 @@ class HistoryScreen {
                 const leaveTypeText = LEAVE_TYPE_LABELS[vacationRequest.leaveType] || '有休';
                 const unitLabel = LEAVE_TIME_UNIT_LABELS[vacationRequest.timeUnit] || '';
                 const unitMarker = LEAVE_TIME_UNIT_MARKERS[vacationRequest.timeUnit] || '';
-                
-                // 申請中の場合は「有休申請中」「AM有休申請中」、承認済みの場合は「有休承認済」「AM有休承認済」などの単位を表示
+
                 let badgeMain;
                 if (statusUpper === 'PENDING') {
                     if (leaveTypeText === '有休') {
@@ -900,7 +998,7 @@ class HistoryScreen {
                         badgeMain = unitLabel ? `${leaveTypeText}（${unitLabel}） ${statusLabel}` : `${leaveTypeText}休暇${statusLabel}`;
                     }
                 }
-                
+
                 const badgeText = badgeMain;
                 const dataAttrs = [
                     `data-vacation-id="${vacationRequest.vacationId || ''}"`,
@@ -912,7 +1010,6 @@ class HistoryScreen {
                 badges += `<span class="badge ${statusClass} badge-sm vacation-badge clickable" ${dataAttrs} title="クリックして申請内容を確認">${badgeText}</span>`;
             }
 
-            // 打刻修正申請状況の表示（申請がある場合のみ）
             if (adjustmentRequest) {
                 let statusClass, label, title;
 
@@ -937,7 +1034,6 @@ class HistoryScreen {
                 badges += `<span class="badge ${statusClass} badge-sm adjustment-badge clickable" ${dataAttrs} title="${title}">打刻修正${label}</span>`;
             }
 
-            // 休日出勤・振替休日出勤申請状況の表示（申請がある場合のみ）
             if (holidayRequest) {
                 console.log(`日付 ${dateString}: 休日出勤・振替休日出勤申請表示`, holidayRequest);
                 let statusClass, label, title, requestTypeLabel;
@@ -959,7 +1055,6 @@ class HistoryScreen {
                         title = 'クリックして申請内容を確認';
                 }
 
-                // 申請タイプに応じたラベル
                 if (holidayRequest.requestType === 'HOLIDAY_WORK') {
                     requestTypeLabel = '休日出勤';
                 } else if (holidayRequest.requestType === 'TRANSFER') {
@@ -972,15 +1067,10 @@ class HistoryScreen {
                 badges += `<span class="badge ${statusClass} badge-sm holiday-badge clickable" ${dataAttrs} title="${title}">${requestTypeLabel}${label}</span>`;
             }
 
-            // カスタム休日の表示（代休/振替休日など）。承認時はバックエンドでCustomHolidayが作成される
-            let customHolidayLabel = '';
             if (customHoliday) {
                 customHolidayLabel = `<div class="holiday-label text-danger fw-semibold">${customHoliday.holidayType}</div>`;
             }
-            
-            // 通常の土日祝の「休日」表記。
-            // ただし、承認済みの休日出勤/振替出勤がある日は「休日」を表示しない。
-            let holidayLabel = '';
+
             if (isNonWorkingDay && !customHoliday) {
                 const approvedHolidayReq = this.holidayRequests.find(r => r.date === dateString && (r.status || '').toUpperCase() === 'APPROVED');
                 if (!approvedHolidayReq) {
@@ -988,22 +1078,25 @@ class HistoryScreen {
                 }
             }
 
-            // 勤務時間変更申請で承認済の場合は緑背景を避ける
-            let styleAttr = 'cursor: pointer;';
             if (hasApprovedWorkPattern) {
-                // 承認済の勤務時間変更申請がある場合、背景色を通常の白に設定
                 styleAttr += ' background-color: white !important;';
             }
 
+            if (attendance || adjustmentRequest?.status === 'APPROVED') {
+                attendanceInfoHtml = this.renderAttendanceInfo(attendance, dateString, adjustmentRequest);
+            }
+
             calendarHtml += `
-                <div class="${dayClasses.join(' ')}" data-date="${dateString}" style="${styleAttr}" title="クリックして詳細を表示">
-                    <div class="day-header">
-                        <div class="day-number">${d}</div>
-                        ${customHolidayLabel}
-                        ${holidayLabel}
+                <div class="${dayClasses.join(' ')}" data-date="${dateString}" style="${styleAttr}" title="${titleAttr}">
+                    <div class="calendar-day-content">
+                        <div class="day-header">
+                            <div class="day-number">${currentDate.getDate()}</div>
+                            ${customHolidayLabel}
+                            ${holidayLabel}
+                        </div>
+                        <div class="day-badges">${badges}</div>
+                        ${attendanceInfoHtml}
                     </div>
-                    <div class="day-badges">${badges}</div>
-                    ${attendance || adjustmentRequest?.status === 'APPROVED' ? this.renderAttendanceInfo(attendance, dateString, adjustmentRequest) : ''}
                     <button type="button" class="calendar-add-btn" data-date="${dateString}" aria-label="${dateString}の申請を追加" aria-haspopup="menu" aria-expanded="false">
                         <i class="fas fa-plus" aria-hidden="true"></i>
                     </button>
@@ -1075,109 +1168,6 @@ class HistoryScreen {
         }
 
         this.currentSnapshot = this.calculateSnapshot();
-        
-        // 所定労働日数を更新
-        this.updatePrescribedWorkingDays();
-    }
-
-    /**
-     * 今月の所定労働日数を計算して表示を更新
-     */
-    updatePrescribedWorkingDays() {
-        const valueElement = document.getElementById('prescribedWorkingDaysValue');
-        if (!valueElement) {
-            return;
-        }
-
-        // 月が選択されていない場合は "-" を表示
-        if (!this.currentYear || this.currentMonth === null || this.currentMonth === undefined) {
-            valueElement.textContent = '-';
-            return;
-        }
-
-        try {
-            // 月の日数を取得
-            const firstDay = new Date(this.currentYear, this.currentMonth, 1);
-            const lastDay = new Date(this.currentYear, this.currentMonth + 1, 0);
-            const daysInMonth = lastDay.getDate();
-            
-            let holidayCount = 0;
-            
-            // 各日について休日かどうかを判定
-            for (let d = 1; d <= daysInMonth; d++) {
-                const currentDate = new Date(this.currentYear, this.currentMonth, d);
-                const weekday = currentDate.getDay();
-                const isWeekend = weekday === 0 || weekday === 6;
-                const isHoliday = this.isHoliday(currentDate);
-                const dateString = this.formatDateString(currentDate);
-                
-                // カスタム休日の確認
-                const customHoliday = this.getCustomHolidayForDate(dateString);
-                
-                // 勤務時間変更申請の確認
-                const workPatternRequest = this.getWorkPatternRequestForDate(dateString);
-                let hasApprovedWorkPattern = false;
-                let isWorkPatternWorkingDay = false;
-                
-                if (workPatternRequest && workPatternRequest.status === 'APPROVED' && workPatternRequest.request) {
-                    hasApprovedWorkPattern = true;
-                    const isInWorkPattern = this.isDateInWorkPattern(currentDate, workPatternRequest.request, isWeekend, isHoliday);
-                    isWorkPatternWorkingDay = isInWorkPattern;
-                }
-                
-                // 休日出勤申請の確認（承認済み）
-                const holidayRequest = this.getHolidayRequestForDate(dateString);
-                const hasApprovedHolidayWork = holidayRequest && 
-                    holidayRequest.status === 'APPROVED' && 
-                    holidayRequest.requestType === 'HOLIDAY_WORK';
-                
-                // 休日かどうかを判定
-                let isNonWorkingDay;
-                
-                // 勤務時間変更申請がある場合は、その申請の勤務パターンに基づいて判定
-                if (hasApprovedWorkPattern) {
-                    isNonWorkingDay = !isWorkPatternWorkingDay;
-                } else {
-                    // 通常の判定（土日祝日）
-                    isNonWorkingDay = isWeekend || isHoliday;
-                }
-                
-                // カスタム休日がある場合は休日扱い
-                if (customHoliday) {
-                    isNonWorkingDay = true;
-                }
-                
-                // ただし、承認済みの休日出勤がある日は勤務日として扱う（休日から除外）
-                if (hasApprovedHolidayWork) {
-                    isNonWorkingDay = false;
-                }
-                
-                // 振替申請の場合、workDateは勤務日、transferHolidayDateは休日になる
-                if (holidayRequest && holidayRequest.status === 'APPROVED' && 
-                    holidayRequest.requestType === 'TRANSFER') {
-                    // workDate（振替出勤日）は勤務日として扱う
-                    if (holidayRequest.workDate === dateString) {
-                        isNonWorkingDay = false;
-                    }
-                    // transferHolidayDate（振替休日）は休日として扱う
-                    if (holidayRequest.transferHolidayDate === dateString) {
-                        isNonWorkingDay = true;
-                    }
-                }
-                
-                if (isNonWorkingDay) {
-                    holidayCount++;
-                }
-            }
-            
-            // 所定労働日数 = 月日数 - 休日日数
-            const prescribedDays = daysInMonth - holidayCount;
-            valueElement.textContent = prescribedDays;
-            
-        } catch (error) {
-            console.error('所定労働日数の計算でエラー:', error);
-            valueElement.textContent = '-';
-        }
     }
 
     ensureActionMenu() {
@@ -2765,7 +2755,7 @@ class HistoryScreen {
                 if (event.target.closest('.calendar-add-btn')) {
                     return;
                 }
-                
+
                 // 日付クリックイベントがドキュメントクリックハンドラーに到達しないようにする
                 event.stopPropagation();
                 
@@ -3843,12 +3833,8 @@ class HistoryScreen {
                 if (newSnapshot !== previousSnapshot) {
                     console.log('申請データの更新を検知したためカレンダーを再描画します');
                     this.generateCalendar();
-                    // 所定労働日数を更新
-                    this.updatePrescribedWorkingDays();
                     this.currentSnapshot = newSnapshot;
                 } else {
-                    // データが変更されていなくても、所定労働日数を更新（承認処理などの可能性を考慮）
-                    this.updatePrescribedWorkingDays();
                     this.currentSnapshot = newSnapshot;
                 }
             } catch (error) {

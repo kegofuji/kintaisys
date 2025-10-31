@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.Optional;
 
 @Service
@@ -148,11 +149,13 @@ public class AuthService {
                 LocalDate today = LocalDate.now();
                 
                 if (employee.getHireDate() != null && today.isBefore(employee.getHireDate())) {
-                    return "入社日（" + employee.getHireDate() + "）までログインできません";
+                    String formattedDate = employee.getHireDate().format(DateTimeFormatter.ofPattern("yyyy/MM/dd"));
+                    return "入社日（" + formattedDate + "）までログインできません";
                 }
                 
                 if (employee.getRetirementDate() != null && !today.isBefore(employee.getRetirementDate())) {
-                    return "退職日（" + employee.getRetirementDate() + "）以降はログインできません";
+                    String formattedDate = employee.getRetirementDate().format(DateTimeFormatter.ofPattern("yyyy/MM/dd"));
+                    return "退職日（" + formattedDate + "）以降はログインできません";
                 }
             }
         }

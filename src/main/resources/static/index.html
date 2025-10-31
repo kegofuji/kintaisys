@@ -85,29 +85,46 @@
         /* カレンダースタイル */
         .calendar-grid {
             display: grid;
-            grid-template-columns: repeat(7, 1fr);
+            grid-template-columns: repeat(7, minmax(0, 1fr));
             gap: 1px;
             background-color: #dee2e6;
             border: 1px solid #dee2e6;
             border-radius: 8px;
             overflow: hidden;
+            --calendar-header-height: 40px;
+            --calendar-day-size: clamp(110px, 16vh, 160px);
+            grid-template-rows: var(--calendar-header-height);
+            grid-auto-rows: var(--calendar-day-size);
         }
         
         .calendar-day {
             background-color: white;
-            min-height: 120px;
-            padding: 8px;
-            padding-bottom: 40px;
+            height: 100%;
+            padding: 6px;
+            padding-bottom: 32px;
             border: 1px solid #dee2e6;
             position: relative;
-            transition: background-color 0.2s ease;
             display: flex;
             flex-direction: column;
+            box-sizing: border-box;
         }
-        
-        .calendar-day.other-month {
-            background-color: #f8f9fa;
-            color: #6c757d;
+
+        .calendar-day-content {
+            flex: 1 1 auto;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            overflow-y: auto;
+            min-height: 0;
+        }
+
+        .calendar-empty {
+            background-color: #f5f5f5;
+            border: 1px solid #e0e0e0;
+            height: 100%;
+            box-sizing: border-box;
+            min-height: 0;
+            opacity: 0.6;
         }
         
         .calendar-day.today {
@@ -119,11 +136,6 @@
         .calendar-day.weekend {
             background-color: #ffffff;
             color: inherit;
-        }
-        
-        .calendar-day.weekend.other-month {
-            background-color: #f5f5f5;
-            color: #999;
         }
         
         .calendar-day.has-attendance {
@@ -156,6 +168,11 @@
             text-align: center;
             font-weight: bold;
             border: 1px solid #dee2e6;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            box-sizing: border-box;
         }
         
         .day-header {
@@ -167,6 +184,7 @@
         
         .day-number {
             font-weight: bold;
+            font-size: 1.1rem;
         }
         
         .day-badges {
@@ -174,45 +192,116 @@
         }
         
         .holiday-label {
-            font-size: 0.75rem;
+            font-size: 1rem;
+            line-height: 1.2;
             color: #dc3545;
+            font-weight: 700;
+            margin-left: 6px;
+        }
+
+        .calendar-nav {
+            background-color: transparent;
+            border: none;
+            border-radius: 999px;
+            padding: 0;
+            justify-content: center;
+        }
+
+        .calendar-header-controls {
+            display: grid;
+            grid-template-columns: 1fr auto 1fr;
+            align-items: center;
+            gap: 0.5rem;
+            width: 100%;
+        }
+
+        .calendar-header-controls .calendar-nav {
+            grid-column: 2;
+            justify-self: center;
+        }
+
+        .calendar-header-actions {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            grid-column: 3;
+            justify-self: end;
+        }
+
+        @media (max-width: 767.98px) {
+            .calendar-header-controls {
+                grid-template-columns: 1fr;
+                justify-items: center;
+            }
+
+            .calendar-header-actions {
+                justify-content: center;
+                width: 100%;
+            }
+        }
+
+        .calendar-nav button {
             font-weight: 600;
-            margin-left: 4px;
+            color: #495057;
+        }
+
+        .calendar-nav .btn-light {
+            background-color: #ffffff;
+        }
+
+        .calendar-nav .btn-light:hover {
+            background-color: #e9ecef;
+        }
+
+        .calendar-nav .btn-outline-primary {
+            border-color: #0d6efd;
+            color: #0d6efd;
+        }
+
+        .calendar-nav .btn-outline-primary:hover {
+            background-color: #0d6efd;
+            color: #ffffff;
+        }
+
+        #historyCurrentMonthLabel {
+            min-width: 120px;
+            text-align: center;
+            font-size: 1.05rem;
+            color: #000;
+        }
+
+        #historyScreen .card-header h5 {
+            white-space: nowrap;
         }
 
         .calendar-add-btn {
             position: absolute;
-            right: 8px;
-            bottom: 8px;
-            width: 32px;
-            height: 32px;
-            border-radius: 50%;
+            right: 6px;
+            bottom: 6px;
+            width: 26px;
+            height: 26px;
+            border-radius: 8px;
             border: none;
-            background: transparent;
-            color: #c0c0c0;
+            background: #f1f3f5;
+            color: #6c757d;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 1rem;
+            font-size: 0.85rem;
             cursor: pointer;
             box-shadow: none;
-            transition: background-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+            outline: none;
             z-index: 2;
         }
 
-        .calendar-add-btn:hover {
-            background: rgba(0, 0, 0, 0.1);
-            box-shadow: none;
-            transform: translateY(-1px);
-        }
-
         .calendar-add-btn:focus {
-            outline: 2px solid rgba(0, 0, 0, 0.3);
+            outline: 2px solid rgba(108, 117, 125, 0.4);
             outline-offset: 2px;
         }
 
         .calendar-add-btn[aria-expanded="true"] {
-            background: rgba(0, 0, 0, 0.1);
+            background: #e9ecef;
+            color: #495057;
         }
 
         .calendar-action-menu {
@@ -404,7 +493,7 @@
         }
         
         .attendance-info {
-            font-size: 0.9em;
+            font-size: 1rem;
             color: #000;
             margin-top: 4px;
         }
@@ -414,7 +503,7 @@
         }
         
         .clock-times small {
-            font-size: 0.85em;
+            font-size: 0.9em;
             display: block;
             margin: 1px 0;
             color: #000;
@@ -616,18 +705,31 @@
             <!-- 勤怠履歴画面 -->
             <div id="historyScreen" class="screen-container">
                 <div class="card">
-                    <div class="card-header d-flex justify-content-between align-items-center">
-                        <h5 class="mb-0">
-                            勤怠履歴
-                        </h5>
-                        <div class="d-flex justify-content-end align-items-center">
-                            <span id="prescribedWorkingDays" class="me-3 text-muted small" style="font-weight: 500;">今月所定労働日数：<span id="prescribedWorkingDaysValue">-</span>日</span>
-                            <select id="historyMonthSelect" class="form-select form-select-sm me-3" style="width: 160px;">
-                                <option value="">月を選択</option>
-                            </select>
-                            <button id="historyRefreshBtn" class="btn btn-outline-primary btn-sm" type="button" title="カレンダーを更新">
-                                <i class="fas fa-sync-alt me-1"></i>更新
-                            </button>
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0">
+                                勤怠履歴
+                            </h5>
+                            <div class="calendar-header-controls gap-2">
+                                <div class="calendar-nav d-flex align-items-center gap-2">
+                                    <button id="historyPrevMonthBtn" class="btn btn-sm btn-light border rounded-pill px-3" type="button">
+                                        <i class="fas fa-chevron-left me-1"></i>前月
+                                    </button>
+                                    <div class="calendar-current-month fw-semibold" id="historyCurrentMonthLabel">--</div>
+                                    <button id="historyNextMonthBtn" class="btn btn-sm btn-light border rounded-pill px-3" type="button">
+                                        次月<i class="fas fa-chevron-right ms-1"></i>
+                                    </button>
+                                    <button id="historyTodayBtn" class="btn btn-sm btn-outline-primary rounded-pill px-3" type="button">
+                                        今日
+                                    </button>
+                                </div>
+                                <div class="calendar-header-actions">
+                                    <select id="historyMonthSelect" class="form-select form-select-sm" style="width: 160px;">
+                                        <option value="">月を選択</option>
+                                    </select>
+                                    <button id="historyRefreshBtn" class="btn btn-outline-primary btn-sm" type="button" title="カレンダーを更新">
+                                        <i class="fas fa-sync-alt me-1"></i>更新
+                                    </button>
+                                </div>
                         </div>
                     </div>
                     <div class="card-body">
@@ -1864,16 +1966,6 @@
             margin-bottom: 0.125rem !important;
         }
         
-        .calendar-day:hover {
-            background-color: #e3f2fd !important;
-            transform: scale(1.05);
-            transition: all 0.2s ease;
-        }
-        
-        .calendar-day.has-attendance:hover {
-            background-color: #c8e6c9 !important;
-        }
-        
         .calendar-day.selected {
             background-color: #ffe58f !important;
             color: #333 !important;
@@ -1881,15 +1973,10 @@
             font-weight: bold;
         }
         
-        .calendar-day.selected:hover {
-            background-color: #fadb14 !important;
-            color: #333 !important;
-        }
-        
         .day-number {
             font-weight: bold;
-            font-size: 1.1em;
-            margin-bottom: 4px;
+            font-size: 1.1rem;
+            margin-bottom: 2px;
         }
         
         .day-badges {
