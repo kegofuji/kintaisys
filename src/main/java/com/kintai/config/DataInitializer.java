@@ -60,16 +60,25 @@ public class DataInitializer {
             }
         
         // emp1用の従業員データを作成（employeeId=1）
-        if (!employeeRepository.existsById(1L)) {
-            Employee emp1Employee = new Employee("EMP001");
+        Employee emp1Employee = employeeRepository.findById(1L).orElse(null);
+        if (emp1Employee == null) {
+            emp1Employee = new Employee("EMP001");
             emp1Employee.setEmployeeId(1L);
             emp1Employee.setIsActive(true);
             // 表示名が emp1 にフォールバックしないよう、氏名を初期設定（テスト仕様）
             emp1Employee.setLastName("テスト");
             emp1Employee.setFirstName("");
+            // 入社日を設定
+            emp1Employee.setHireDate(java.time.LocalDate.of(2025, 8, 1));
             Employee savedEmp1 = employeeRepository.save(emp1Employee);
             System.out.println("Created emp1 employee with ID: " + savedEmp1.getEmployeeId());
         } else {
+            // 既存のemp1の入社日を設定（未設定の場合）
+            if (emp1Employee.getHireDate() == null) {
+                emp1Employee.setHireDate(java.time.LocalDate.of(2025, 8, 1));
+                employeeRepository.save(emp1Employee);
+                System.out.println("Updated emp1 employee hire date to 2025/8/1");
+            }
             System.out.println("emp1 employee already exists");
         }
         

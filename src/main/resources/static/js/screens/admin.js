@@ -1818,7 +1818,6 @@ class AdminScreen {
                 displayName = employeeIdDisplay; // 氏名未設定時は社員IDで表示
             }
             const email = employee.email || `${username}@example.com`;
-            const hireDate = employee.hireDate ? new Date(employee.hireDate).toLocaleDateString('ja-JP') : '-';
 
             // 有休調整機能は廃止
             const vacationAdjustButton = '';
@@ -1839,12 +1838,58 @@ class AdminScreen {
             // ふりがなは廃止
             const birthday = employee.birthday || employee.birthDate || employee.dateOfBirth;
             const birthdayDisplay = birthday ? new Date(birthday).toLocaleDateString('ja-JP') : '-';
+            
+            // 入社日の表示
+            const hireDate = employee.hireDate || employee.hire_date;
+            let hireDateDisplay = '-';
+            if (hireDate) {
+                try {
+                    // ISO形式 (YYYY-MM-DD) を直接パース
+                    const date = new Date(hireDate + 'T00:00:00');
+                    if (!isNaN(date)) {
+                        const y = date.getFullYear();
+                        const m = date.getMonth() + 1;
+                        const d = date.getDate();
+                        hireDateDisplay = `${y}/${m}/${d}`;
+                    }
+                } catch (e) {
+                    // フォールバック: toLocaleDateStringを使用
+                    const date = new Date(hireDate);
+                    if (!isNaN(date)) {
+                        hireDateDisplay = date.toLocaleDateString('ja-JP');
+                    }
+                }
+            }
+            
+            // 退職日の表示
+            const retirementDate = employee.retirementDate || employee.retirement_date;
+            let retirementDateDisplay = '-';
+            if (retirementDate) {
+                try {
+                    // ISO形式 (YYYY-MM-DD) を直接パース
+                    const date = new Date(retirementDate + 'T00:00:00');
+                    if (!isNaN(date)) {
+                        const y = date.getFullYear();
+                        const m = date.getMonth() + 1;
+                        const d = date.getDate();
+                        retirementDateDisplay = `${y}/${m}/${d}`;
+                    }
+                } catch (e) {
+                    // フォールバック: toLocaleDateStringを使用
+                    const date = new Date(retirementDate);
+                    if (!isNaN(date)) {
+                        retirementDateDisplay = date.toLocaleDateString('ja-JP');
+                    }
+                }
+            }
 
             row.innerHTML = `
                 <td>${employeeIdDisplay}</td>
                 <td>${displayName}</td>
                 
                 <td>${birthdayDisplay}</td>
+                <td>${hireDateDisplay}</td>
+                <td>${retirementDateDisplay}</td>
                 <td><span class="${statusClass}">${statusText}</span></td>
                 <td>
                     ${editButton}
@@ -3641,13 +3686,12 @@ class AdminScreen {
         // モーダル要素
         const modalEl = document.getElementById('editEmployeeModal');
         const idEl = document.getElementById('editEmployeeId');
-        const lastNameEl = document.getElementById('editLastName');
-        const firstNameEl = document.getElementById('editFirstName');
+        const fullNameEl = document.getElementById('editFullName');
         // ふりがな入力は廃止
         const birthdayEl = document.getElementById('editBirthday');
         const saveBtn = document.getElementById('saveEditEmployee');
 
-        if (!modalEl || !idEl || !lastNameEl || !firstNameEl || !birthdayEl || !saveBtn) {
+        if (!modalEl || !idEl || !fullNameEl || !birthdayEl || !saveBtn) {
             this.showAlert('編集モーダルの初期化に失敗しました', 'danger');
             return;
         }
@@ -3660,8 +3704,11 @@ class AdminScreen {
         
         // 値をセット
         idEl.value = String(employee.employeeId);
-        lastNameEl.value = employee.lastName || '';
-        firstNameEl.value = employee.firstName || '';
+        // 苗字と名前を結合して表示
+        const lastName = employee.lastName || '';
+        const firstName = employee.firstName || '';
+        const fullName = `${lastName} ${firstName}`.trim();
+        fullNameEl.value = fullName;
         if (employee.birthday) {
             // YYYY-MM-DD形式に整形
             const d = new Date(employee.birthday);
@@ -3676,21 +3723,16 @@ class AdminScreen {
         } else {
             birthdayEl.value = '';
         }
-
+        
         // 入力フィールドのエラー状態クリア機能を追加
         const clearErrorState = (inputEl, errorIconEl) => {
             inputEl.classList.remove('is-invalid');
             if (errorIconEl) errorIconEl.classList.add('d-none');
         };
 
-        // 姓フィールドの入力リスナー
-        lastNameEl.addEventListener('input', () => {
-            clearErrorState(lastNameEl, null);
-        });
-
-        // 名フィールドの入力リスナー
-        firstNameEl.addEventListener('input', () => {
-            clearErrorState(firstNameEl, null);
+        // 名前フィールドの入力リスナー
+        fullNameEl.addEventListener('input', () => {
+            clearErrorState(fullNameEl, null);
         });
 
         // 保存ボタンの既存リスナーを一旦解除してから登録
@@ -3698,9 +3740,26 @@ class AdminScreen {
             saveBtn.removeEventListener('click', this._boundSaveEditHandler);
         }
         this._boundSaveEditHandler = async () => {
+            // 名前フィールドから苗字と名前に分割
+            const fullName = fullNameEl.value.trim();
+            let lastName = '';
+            let firstName = '';
+            
+            if (fullName) {
+                // スペース（全角/半角）で分割
+                const parts = fullName.split(/[\s　]+/).filter(part => part.length > 0);
+                if (parts.length > 0) {
+                    lastName = parts[0];
+                    firstName = parts.slice(1).join(' ') || '';
+                } else {
+                    // スペースがない場合は全体を苗字とする
+                    lastName = fullName;
+                }
+            }
+            
             const update = {
-                lastName: lastNameEl.value.trim(),
-                firstName: firstNameEl.value.trim(),
+                lastName: lastName,
+                firstName: firstName,
                 birthday: birthdayEl.value.trim() || null
             };
 
@@ -3711,20 +3770,14 @@ class AdminScreen {
             if (errorMessageEl) errorMessageEl.classList.add('d-none');
             
             // 個別フィールドのエラー状態をリセット
-            lastNameEl.classList.remove('is-invalid');
-            firstNameEl.classList.remove('is-invalid');
+            fullNameEl.classList.remove('is-invalid');
             
             
             let hasError = false;
             
-            if (!update.lastName) {
+            if (!fullName || !lastName) {
                 hasError = true;
-                lastNameEl.classList.add('is-invalid');
-            }
-            
-            if (!update.firstName) {
-                hasError = true;
-                firstNameEl.classList.add('is-invalid');
+                fullNameEl.classList.add('is-invalid');
             }
             
             if (hasError) {
@@ -3861,14 +3914,26 @@ class AdminScreen {
         const employeeName = employee ? this.getDisplayEmployeeName(employee) : `社員ID: ${employeeId}`;
         
         // 専用モーダルを使用
-        const confirmed = await this.showDeactivateEmployeeModal(employeeName);
-        if (!confirmed) {
+        const result = await this.showDeactivateEmployeeModal(employeeName);
+        if (!result || !result.confirmed) {
+            return;
+        }
+        
+        // 退職日の必須チェック
+        if (!result.retirementDate || !result.retirementDate.trim()) {
+            this.showAlert('退職日は必須です', 'danger');
             return;
         }
 
         try {
+            // 退職日を含めてリクエスト
+            const requestBody = {
+                isActive: false,
+                retirementDate: result.retirementDate.trim()
+            };
+
             const data = await fetchWithAuth.handleApiCall(
-                () => fetchWithAuth.put(`/api/admin/employee-management/${employeeId}/deactivate`),
+                () => fetchWithAuth.put(`/api/admin/employee-management/${employeeId}/status`, requestBody),
                 '退職処理に失敗しました'
             );
 
@@ -3889,21 +3954,28 @@ class AdminScreen {
     /**
      * 退職処理確認モーダル表示
      * @param {string} employeeName - 社員名
-     * @returns {Promise<boolean>} - 確認されたかどうか
+     * @returns {Promise<{confirmed: boolean, retirementDate: string|null}>} - 確認されたかどうかと退職日
      */
     async showDeactivateEmployeeModal(employeeName) {
         const modalEl = document.getElementById('deactivateEmployeeModal');
         const nameEl = document.getElementById('deactivateEmployeeName');
+        const retirementDateEl = document.getElementById('retirementDate');
         const confirmBtn = document.getElementById('deactivateEmployeeConfirmButton');
         const cancelBtn = document.getElementById('deactivateEmployeeCancelButton');
 
         if (!modalEl || !nameEl || !confirmBtn || !cancelBtn) {
             // フォールバック: 標準のconfirmダイアログ
-            return confirm(`${employeeName} を退職処理しますか？`);
+            const confirmed = confirm(`${employeeName} を退職処理しますか？`);
+            return { confirmed, retirementDate: null };
         }
 
         // 社員名を設定
         nameEl.textContent = employeeName;
+        
+        // 退職日フィールドをリセット
+        if (retirementDateEl) {
+            retirementDateEl.value = '';
+        }
 
         const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
         
@@ -3924,17 +3996,18 @@ class AdminScreen {
             };
 
             const onConfirm = () => {
+                const retirementDate = retirementDateEl ? retirementDateEl.value.trim() : null;
                 modal.hide();
-                finalize(true);
+                finalize({ confirmed: true, retirementDate: retirementDate || null });
             };
 
             const onCancel = () => {
                 modal.hide();
-                finalize(false);
+                finalize({ confirmed: false, retirementDate: null });
             };
 
             const onHidden = () => {
-                finalize(false);
+                finalize({ confirmed: false, retirementDate: null });
             };
 
             confirmBtn.addEventListener('click', onConfirm);
@@ -4359,19 +4432,11 @@ class AdminScreen {
                 if (errorIconEl) errorIconEl.classList.add('d-none');
             };
 
-            // 姓フィールドの入力リスナー
-            const lastNameEl = document.getElementById('employeeLastName');
-            if (lastNameEl) {
-                lastNameEl.addEventListener('input', () => {
-                    clearErrorState(lastNameEl, null);
-                });
-            }
-
-            // 名フィールドの入力リスナー
-            const firstNameEl = document.getElementById('employeeFirstName');
-            if (firstNameEl) {
-                firstNameEl.addEventListener('input', () => {
-                    clearErrorState(firstNameEl, null);
+            // 名前フィールドの入力リスナー
+            const fullNameEl = document.getElementById('employeeFullName');
+            if (fullNameEl) {
+                fullNameEl.addEventListener('input', () => {
+                    clearErrorState(fullNameEl, null);
                 });
             }
 
@@ -4434,12 +4499,31 @@ class AdminScreen {
         if (!form) return;
 
         const formData = new FormData(form);
+        
+        // 名前フィールドから苗字と名前に分割
+        const fullName = formData.get('fullName')?.trim() || '';
+        let lastName = '';
+        let firstName = '';
+        
+        if (fullName) {
+            // スペース（全角/半角）で分割
+            const parts = fullName.split(/[\s　]+/).filter(part => part.length > 0);
+            if (parts.length > 0) {
+                lastName = parts[0];
+                firstName = parts.slice(1).join(' ') || '';
+            } else {
+                // スペースがない場合は全体を苗字とする
+                lastName = fullName;
+            }
+        }
+        
         const employeeData = {
             username: 'emp', // ユーザー名はempで固定（バックエンドで自動採番）
             password: formData.get('password')?.trim(),
-            lastName: formData.get('lastName')?.trim(),
-            firstName: formData.get('firstName')?.trim(),
-            birthday: formData.get('birthday')?.trim() || null
+            lastName: lastName,
+            firstName: firstName,
+            birthday: formData.get('birthday')?.trim() || null,
+            hireDate: formData.get('hireDate')?.trim() || null
         };
 
         // バリデーション（一括エラーメッセージ表示）
@@ -4449,13 +4533,13 @@ class AdminScreen {
         if (errorMessageEl) errorMessageEl.classList.add('d-none');
         
         // 個別フィールドのエラー状態をリセット
-        const lastNameEl = document.getElementById('employeeLastName');
-        const firstNameEl = document.getElementById('employeeFirstName');
+        const fullNameEl = document.getElementById('employeeFullName');
         const passwordEl = document.getElementById('employeePassword');
+        const hireDateEl = document.getElementById('employeeHireDate');
         
-        if (lastNameEl) lastNameEl.classList.remove('is-invalid');
-        if (firstNameEl) firstNameEl.classList.remove('is-invalid');
+        if (fullNameEl) fullNameEl.classList.remove('is-invalid');
         if (passwordEl) passwordEl.classList.remove('is-invalid');
+        if (hireDateEl) hireDateEl.classList.remove('is-invalid');
         
         
         let hasError = false;
@@ -4465,14 +4549,14 @@ class AdminScreen {
             if (passwordEl) passwordEl.classList.add('is-invalid');
         }
         
-        if (!employeeData.lastName) {
+        if (!fullName || !lastName) {
             hasError = true;
-            if (lastNameEl) lastNameEl.classList.add('is-invalid');
+            if (fullNameEl) fullNameEl.classList.add('is-invalid');
         }
         
-        if (!employeeData.firstName) {
+        if (!employeeData.hireDate) {
             hasError = true;
-            if (firstNameEl) firstNameEl.classList.add('is-invalid');
+            if (hireDateEl) hireDateEl.classList.add('is-invalid');
         }
         
         if (hasError) {

@@ -35,6 +35,12 @@ public class Employee {
     @Column(name = "birthday")
     private LocalDate birthday;
     
+    @Column(name = "hire_date")
+    private LocalDate hireDate;
+    
+    @Column(name = "retirement_date")
+    private LocalDate retirementDate;
+    
     @Column(name = "is_active", nullable = false, columnDefinition = "BOOLEAN DEFAULT TRUE")
     private Boolean isActive = true;
     
@@ -141,6 +147,12 @@ public class Employee {
 
     public LocalDate getBirthday() { return birthday; }
     public void setBirthday(LocalDate birthday) { this.birthday = birthday; }
+
+    public LocalDate getHireDate() { return hireDate; }
+    public void setHireDate(LocalDate hireDate) { this.hireDate = hireDate; }
+
+    public LocalDate getRetirementDate() { return retirementDate; }
+    public void setRetirementDate(LocalDate retirementDate) { this.retirementDate = retirementDate; }
 
     /**
      * 退職済みかどうかを判定

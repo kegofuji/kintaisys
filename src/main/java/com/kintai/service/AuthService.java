@@ -12,6 +12,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.util.Optional;
 
 @Service
@@ -46,9 +47,25 @@ public class AuthService {
             
             // 退職者チェック
             Optional<Employee> employeeOpt = employeeRepository.findByEmployeeId(user.getEmployeeId());
-            if (employeeOpt.isPresent() && !employeeOpt.get().getIsActive()) {
-                // 退職者の場合は認証失敗
-                return Optional.empty();
+            if (employeeOpt.isPresent()) {
+                Employee employee = employeeOpt.get();
+                
+                // isActiveがfalseの場合（退職済み）は認証失敗
+                if (!employee.getIsActive()) {
+                    return Optional.empty();
+                }
+                
+                LocalDate today = LocalDate.now();
+                
+                // 入社日チェック: 入社日が設定されている場合、今日が入社日より前ならログイン不可
+                if (employee.getHireDate() != null && today.isBefore(employee.getHireDate())) {
+                    return Optional.empty();
+                }
+                
+                // 退職日チェック: 退職日が設定されている場合、今日が退職日以降ならログイン不可
+                if (employee.getRetirementDate() != null && !today.isBefore(employee.getRetirementDate())) {
+                    return Optional.empty();
+                }
             }
             
             if (passwordEncoder.matches(password, user.getPassword())) {
@@ -79,9 +96,9 @@ public class AuthService {
     }
     
     /**
-     * 退職者チェック
+     * 退職者チェック（ログイン可能かチェック）
      * @param username ユーザー名
-     * @return 退職者の場合true
+     * @return ログインできない場合true（退職済み、入社日前、退職日以降）
      */
     public boolean isRetiredEmployee(String username) {
         Optional<UserAccount> userOpt = userAccountRepository.findByUsername(username);
@@ -91,10 +108,55 @@ public class AuthService {
             if (employeeOpt.isPresent()) {
                 Employee employee = employeeOpt.get();
                 // isActiveがfalseの場合（退職済み）をチェック
-                return !employee.getIsActive();
+                if (!employee.getIsActive()) {
+                    return true;
+                }
+                
+                LocalDate today = LocalDate.now();
+                
+                // 入社日チェック: 入社日が設定されている場合、今日が入社日より前ならログイン不可
+                if (employee.getHireDate() != null && today.isBefore(employee.getHireDate())) {
+                    return true;
+                }
+                
+                // 退職日チェック: 退職日が設定されている場合、今日が退職日以降ならログイン不可
+                if (employee.getRetirementDate() != null && !today.isBefore(employee.getRetirementDate())) {
+                    return true;
+                }
             }
         }
         return false;
+    }
+    
+    /**
+     * ログイン不可理由を取得
+     * @param username ユーザー名
+     * @return ログイン不可理由（nullの場合はログイン可能）
+     */
+    public String getLoginRestrictionReason(String username) {
+        Optional<UserAccount> userOpt = userAccountRepository.findByUsername(username);
+        if (userOpt.isPresent()) {
+            UserAccount user = userOpt.get();
+            Optional<Employee> employeeOpt = employeeRepository.findByEmployeeId(user.getEmployeeId());
+            if (employeeOpt.isPresent()) {
+                Employee employee = employeeOpt.get();
+                
+                if (!employee.getIsActive()) {
+                    return "退職者のためログインできません";
+                }
+                
+                LocalDate today = LocalDate.now();
+                
+                if (employee.getHireDate() != null && today.isBefore(employee.getHireDate())) {
+                    return "入社日（" + employee.getHireDate() + "）までログインできません";
+                }
+                
+                if (employee.getRetirementDate() != null && !today.isBefore(employee.getRetirementDate())) {
+                    return "退職日（" + employee.getRetirementDate() + "）以降はログインできません";
+                }
+            }
+        }
+        return null;
     }
     
     /**
@@ -110,7 +172,7 @@ public class AuthService {
             return new AuthResult(adminOpt.get(), null, "ADMIN");
         }
         
-        // 退職者チェック
+        // 従業員のログイン可否をチェック（入社日前、退職日以降、isActive=false）
         if (isRetiredEmployee(username)) {
             return new AuthResult(null, null, "RETIRED");
         }

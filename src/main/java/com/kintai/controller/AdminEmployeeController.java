@@ -106,6 +106,15 @@ public class AdminEmployeeController {
                 body.put("message", "パスワードは4文字以上で入力してください");
                 return ResponseEntity.badRequest().body(body);
             }
+            
+            // 入社日の必須チェック
+            if (req.hireDate == null || req.hireDate.isBlank()) {
+                System.out.println("入社日が未設定");
+                Map<String, Object> body = new HashMap<>();
+                body.put("success", false);
+                body.put("message", "入社日は必須です");
+                return ResponseEntity.badRequest().body(body);
+            }
 
             // ユーザー名の重複チェックは不要（自動生成のため）
 
@@ -131,6 +140,15 @@ public class AdminEmployeeController {
                 try {
                     emp.setBirthday(java.time.LocalDate.parse(req.birthday));
                 } catch (Exception ignored) {}
+            }
+            // 入社日を設定（必須なので必ず設定される）
+            try {
+                emp.setHireDate(java.time.LocalDate.parse(req.hireDate));
+            } catch (Exception e) {
+                Map<String, Object> body = new HashMap<>();
+                body.put("success", false);
+                body.put("message", "入社日の形式が正しくありません");
+                return ResponseEntity.badRequest().body(body);
             }
             emp = employeeRepository.save(emp);
             System.out.println("社員作成完了: ID=" + emp.getEmployeeId());
@@ -213,7 +231,26 @@ public class AdminEmployeeController {
                 .map(emp -> {
                     boolean isActive = req.isActive != null ? req.isActive : Boolean.TRUE;
                     emp.setIsActive(isActive);
-                    // retirementDateフィールドは削除されたため、isActiveフラグのみで管理
+                    // 退職処理の場合、退職日を設定（必須）
+                    if (!isActive) {
+                        if (req.retirementDate == null || req.retirementDate.isBlank()) {
+                            Map<String, Object> body = new HashMap<>();
+                            body.put("success", false);
+                            body.put("message", "退職日は必須です");
+                            return ResponseEntity.badRequest().body(body);
+                        }
+                        try {
+                            emp.setRetirementDate(java.time.LocalDate.parse(req.retirementDate));
+                        } catch (Exception e) {
+                            Map<String, Object> body = new HashMap<>();
+                            body.put("success", false);
+                            body.put("message", "退職日の形式が正しくありません");
+                            return ResponseEntity.badRequest().body(body);
+                        }
+                    } else if (isActive) {
+                        // 復職処理の場合、退職日をクリア
+                        emp.setRetirementDate(null);
+                    }
                     employeeRepository.save(emp);
                     
                     // UserAccountのenabledフラグも更新
@@ -295,6 +332,7 @@ public class AdminEmployeeController {
     /** リクエストDTO */
     public static class StatusUpdateRequest {
         public Boolean isActive;
+        public String retirementDate; // YYYY-MM-DD
     }
 
     /** 追加用DTO */
@@ -305,6 +343,7 @@ public class AdminEmployeeController {
         public String lastName;
         public String firstName;
         public String birthday; // YYYY-MM-DD
+        public String hireDate; // YYYY-MM-DD
         
         @Override
         public String toString() {
@@ -315,6 +354,7 @@ public class AdminEmployeeController {
                     ", lastName='" + lastName + '\'' +
                     ", firstName='" + firstName + '\'' +
                     ", birthday='" + birthday + '\'' +
+                    ", hireDate='" + hireDate + '\'' +
                     '}';
         }
     }
@@ -332,6 +372,20 @@ public class AdminEmployeeController {
                         body.put("message", "名前は必須です");
                         return ResponseEntity.badRequest().body(body);
                     }
+                    
+                    if (req.hireDate == null || req.hireDate.isBlank()) {
+                        Map<String, Object> body = new HashMap<>();
+                        body.put("success", false);
+                        body.put("message", "入社日は必須です");
+                        return ResponseEntity.badRequest().body(body);
+                    }
+                    
+                    if (req.retirementDate == null || req.retirementDate.isBlank()) {
+                        Map<String, Object> body = new HashMap<>();
+                        body.put("success", false);
+                        body.put("message", "退職日は必須です");
+                        return ResponseEntity.badRequest().body(body);
+                    }
 
                     emp.setLastName(req.lastName);
                     emp.setFirstName(req.firstName);
@@ -340,6 +394,24 @@ public class AdminEmployeeController {
                         try { emp.setBirthday(java.time.LocalDate.parse(req.birthday)); } catch (Exception ignored) {}
                     } else {
                         emp.setBirthday(null);
+                    }
+                    // 入社日を設定
+                    try {
+                        emp.setHireDate(java.time.LocalDate.parse(req.hireDate));
+                    } catch (Exception e) {
+                        Map<String, Object> body = new HashMap<>();
+                        body.put("success", false);
+                        body.put("message", "入社日の形式が正しくありません");
+                        return ResponseEntity.badRequest().body(body);
+                    }
+                    // 退職日を設定
+                    try {
+                        emp.setRetirementDate(java.time.LocalDate.parse(req.retirementDate));
+                    } catch (Exception e) {
+                        Map<String, Object> body = new HashMap<>();
+                        body.put("success", false);
+                        body.put("message", "退職日の形式が正しくありません");
+                        return ResponseEntity.badRequest().body(body);
                     }
                     employeeRepository.save(emp);
 
@@ -368,6 +440,8 @@ public class AdminEmployeeController {
         public String lastName;
         public String firstName;
         public String birthday; // YYYY-MM-DD or null
+        public String hireDate; // YYYY-MM-DD (必須)
+        public String retirementDate; // YYYY-MM-DD (必須)
     }
 }
 

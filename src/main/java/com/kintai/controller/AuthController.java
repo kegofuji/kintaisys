@@ -121,8 +121,10 @@ public class AuthController {
             String role = authResult.getRole();
             
             if ("RETIRED".equals(role)) {
+                // ログイン不可理由を取得
+                String reason = authService.getLoginRestrictionReason(loginRequest.getUsername());
                 response.put("success", false);
-                response.put("message", "退職者はログインできません");
+                response.put("message", reason != null ? reason : "ログインできません");
             } else {
                 response.put("success", false);
                 response.put("message", "ユーザー名またはパスワードが正しくありません");
