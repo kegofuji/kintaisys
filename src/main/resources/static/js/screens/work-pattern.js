@@ -48,6 +48,7 @@ class WorkPatternScreen {
         this.lastRequestsSignature = '';
         this.requestsLoading = false;
         this.screenCard = null;
+        this.summaryInitialLoadComplete = false;
     }
 
     async init() {
@@ -111,6 +112,7 @@ class WorkPatternScreen {
         this.currentSummaryContainer = document.getElementById('workPatternCurrentSummary');
         if (this.currentSummaryContainer) {
             this.renderDefaultSummary();
+            this.setSummaryMessage('勤務時間を読み込み中です...', false, { hideSummary: true });
         }
         this.screenCard = document.querySelector('#workPatternScreen .card');
         this.startDateInput = document.getElementById('workPatternStartDate');
@@ -1297,8 +1299,9 @@ class WorkPatternScreen {
             this.setSummaryMessage('');
             return this.lastSummaryData;
         }
-        if (!silent) {
-            this.setSummaryMessage('勤務時間を読み込み中です...', false);
+        const shouldShowLoading = !silent && !this.summaryInitialLoadComplete;
+        if (shouldShowLoading) {
+            this.setSummaryMessage('勤務時間を読み込み中です...', false, { hideSummary: true });
         }
         try {
             const response = await fetchWithAuth.handleApiCall(
@@ -1364,10 +1367,14 @@ class WorkPatternScreen {
                 this.setSummaryMessage('勤務時間を取得できませんでした。', true);
             }
             return null;
+        } finally {
+            if (!silent) {
+                this.summaryInitialLoadComplete = true;
+            }
         }
     }
 
-    setSummaryMessage(message, isError = false) {
+    setSummaryMessage(message, isError = false, options = {}) {
         if (!this.currentSummaryContainer) {
             return;
         }
@@ -1375,7 +1382,7 @@ class WorkPatternScreen {
         if (!statusElement) {
             statusElement = document.createElement('div');
             statusElement.dataset.summaryStatus = 'true';
-            statusElement.className = 'mt-2 small';
+            statusElement.className = 'mt-2 small text-nowrap';
             this.currentSummaryContainer.appendChild(statusElement);
         }
         const text = typeof message === 'string' ? message.trim() : '';
@@ -1387,6 +1394,20 @@ class WorkPatternScreen {
             statusElement.classList.remove('text-danger');
             statusElement.classList.add('text-muted');
         }
+        const hideSummary = Boolean(options && options.hideSummary && text.length > 0);
+        this.toggleSummaryContentVisibility(!hideSummary);
+    }
+
+    toggleSummaryContentVisibility(shouldShow) {
+        if (!this.currentSummaryContainer) {
+            return;
+        }
+        Array.from(this.currentSummaryContainer.children).forEach((child) => {
+            if (child.dataset && child.dataset.summaryStatus === 'true') {
+                return;
+            }
+            child.hidden = !shouldShow;
+        });
     }
 
     renderCurrentSummary(summary, options = {}) {
@@ -1420,7 +1441,9 @@ class WorkPatternScreen {
             <div class="mt-1">適用期間: <span class="text-body">${this.escapeHtml(periodText)}</span></div>
             <div class="mt-2 small text-muted" data-summary-status hidden></div>
         `.trim();
-        this.summaryLoaded = Boolean(options && options.isFetched);
+        if (options && Object.prototype.hasOwnProperty.call(options, 'isFetched') && options.isFetched) {
+            this.summaryLoaded = true;
+        }
         this.lastSummarySignature = this.generateSummarySignature(summary);
         this.lastSummaryData = summary;
         if (!options || !options.preserveStatus) {
