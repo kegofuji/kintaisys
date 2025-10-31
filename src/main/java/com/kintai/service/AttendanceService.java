@@ -378,55 +378,6 @@ public class AttendanceService {
         throw new AttendanceException("INTERNAL_ERROR", "予期しないエラーが発生しました");
     }
 
-    /**
-     * 休憩時間を更新
-     * @param attendanceId 勤怠ID
-     * @param requestedBreakMinutes 休憩時間（分）
-     * @return 更新後のレスポンス
-     */
-    public ClockResponse updateBreakMinutes(Long attendanceId, Integer requestedBreakMinutes) {
-        if (attendanceId == null) {
-            throw new AttendanceException(AttendanceException.INVALID_REQUEST, "勤怠IDが指定されていません");
-        }
-        if (requestedBreakMinutes == null || requestedBreakMinutes < 0) {
-            throw new AttendanceException(AttendanceException.INVALID_BREAK_VALUE, "休憩時間は0以上の分数で指定してください");
-        }
-
-        AttendanceRecord record = attendanceRecordRepository.findById(attendanceId)
-                .orElseThrow(() -> new AttendanceException(
-                        AttendanceException.REQUEST_NOT_FOUND,
-                        "勤怠記録が見つかりません: " + attendanceId));
-
-        if (Boolean.TRUE.equals(record.getAttendanceFixedFlag())) {
-            throw new AttendanceException(AttendanceException.FIXED_ATTENDANCE, "確定済みの勤怠は編集できません");
-        }
-
-        if (hasApprovedAdjustment(record)) {
-            throw new AttendanceException(AttendanceException.BREAK_NOT_EDITABLE,
-                    "承認済みの打刻修正が適用された勤怠は休憩時間を編集できません");
-        }
-        if (record.getClockInTime() == null || record.getClockOutTime() == null) {
-            throw new AttendanceException(AttendanceException.BREAK_NOT_EDITABLE, "退勤後に休憩時間を編集できます");
-        }
-
-        int sanitizedBreak = timeCalculator.resolveBreakMinutes(record.getClockInTime(), record.getClockOutTime(), requestedBreakMinutes);
-        record.setBreakMinutes(sanitizedBreak);
-
-        timeCalculator.calculateAttendanceMetrics(record);
-        if (workPatternChangeRequestService != null) {
-            workPatternChangeRequestService.applyPatternMetrics(record);
-        }
-        int overtimeMinutes = safeInt(record.getOvertimeMinutes());
-        int nightShiftMinutes = safeInt(record.getNightShiftMinutes());
-        updateAttendanceStatus(record, overtimeMinutes, nightShiftMinutes);
-        timeCalculator.normalizeMetrics(record);
-
-        AttendanceRecord saved = attendanceRecordRepository.save(record);
-
-        ClockResponse response = new ClockResponse(true, "休憩時間を更新しました", toClockData(saved));
-        setUserInfoToResponse(response);
-        return response;
-    }
     
     /**
      * 勤怠ステータスを更新

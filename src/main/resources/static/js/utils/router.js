@@ -27,7 +27,21 @@ class Router {
      * 初期表示時のルート処理
      */
     initializeCurrentRoute() {
-        const initialPath = this.normalizePath(window.location.pathname);
+        let initialPath = this.normalizePath(window.location.pathname);
+
+        // /history/YYYYMM のディープリンクをサポート
+        const historyMatch = initialPath.match(/^\/history\/(\d{6})$/);
+        if (historyMatch) {
+            const yyyymm = historyMatch[1];
+            const year = parseInt(yyyymm.slice(0, 4), 10);
+            const month = parseInt(yyyymm.slice(4), 10);
+            if (!Number.isNaN(year) && !Number.isNaN(month) && month >= 1 && month <= 12) {
+                if (typeof window.setNavigationPrefill === 'function') {
+                    window.setNavigationPrefill('/history', { year, month });
+                }
+                initialPath = '/history';
+            }
+        }
 
         if (initialPath === '/') {
             this.navigate('/login', { updateHistory: true, replace: true });
@@ -97,6 +111,20 @@ class Router {
         } = normalizedOptions;
 
         let normalizedPath = this.normalizePath(path);
+
+        // /history/YYYYMM のディープリンクを /history に解決してプレフィルを付与
+        const historyMatch = normalizedPath.match(/^\/history\/(\d{6})$/);
+        if (historyMatch) {
+            const yyyymm = historyMatch[1];
+            const year = parseInt(yyyymm.slice(0, 4), 10);
+            const month = parseInt(yyyymm.slice(4), 10);
+            if (!Number.isNaN(year) && !Number.isNaN(month) && month >= 1 && month <= 12) {
+                if (typeof window.setNavigationPrefill === 'function') {
+                    window.setNavigationPrefill('/history', { year, month });
+                }
+                normalizedPath = '/history';
+            }
+        }
 
         if (normalizedPath === '/') {
             normalizedPath = '/dashboard';
@@ -193,6 +221,11 @@ class Router {
             // historyScreenが表示された場合、カレンダー要素を確実に表示する
             if (screenId === 'historyScreen' && window.historyScreen && typeof window.historyScreen.initializeElements === 'function') {
                 setTimeout(() => {
+                    // タイトルを更新（管理者が閲覧している場合）
+                    if (typeof window.historyScreen.updateHistoryTitle === 'function') {
+                        window.historyScreen.updateHistoryTitle();
+                    }
+
                     const calendarGrid = document.getElementById('calendarGrid');
                     if (calendarGrid && window.historyScreen.calendarGrid) {
                         // カレンダーが表示されていない場合は再生成
@@ -265,6 +298,10 @@ class Router {
                                     console.error('カレンダーデータの再読み込みに失敗:', error);
                                 });
                             }
+                        }
+                        // タイトルを更新（管理者が閲覧している場合）
+                        if (typeof window.historyScreen.updateHistoryTitle === 'function') {
+                            window.historyScreen.updateHistoryTitle();
                         }
                     }
                 } else {

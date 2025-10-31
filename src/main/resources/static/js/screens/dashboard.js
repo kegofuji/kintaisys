@@ -12,15 +12,7 @@ class DashboardScreen {
         this.monthSelect = null;
         this.logoutBtn = null;
         this.breakTimeElement = null;
-        this.editBreakTimeBtn = null;
         this.currentAttendance = null;
-        this.breakTimeModalElement = null;
-        this.breakTimeModal = null;
-        this.breakTimeInput = null;
-        this.breakTimeError = null;
-        this.saveBreakTimeBtn = null;
-        this.breakTimeForm = null;
-        this.isSavingBreakTime = false;
     }
 
     /**
@@ -111,16 +103,6 @@ class DashboardScreen {
         this.monthSelect = document.getElementById('historyMonthSelect');
         this.logoutBtn = document.getElementById('logoutBtn');
         this.breakTimeElement = document.getElementById('breakTime');
-        this.editBreakTimeBtn = document.getElementById('editBreakTimeBtn');
-        this.breakTimeModalElement = document.getElementById('breakTimeModal');
-        this.breakTimeInput = document.getElementById('breakTimeInput');
-        this.breakTimeError = document.getElementById('breakTimeError');
-        this.saveBreakTimeBtn = document.getElementById('saveBreakTimeBtn');
-        this.breakTimeForm = document.getElementById('breakTimeForm');
-
-        if (this.breakTimeModalElement && window.bootstrap?.Modal) {
-            this.breakTimeModal = window.bootstrap.Modal.getOrCreateInstance(this.breakTimeModalElement);
-        }
     }
 
     /**
@@ -145,21 +127,6 @@ class DashboardScreen {
 
         if (this.logoutBtn) {
             this.logoutBtn.addEventListener('click', () => this.handleLogout());
-        }
-
-        if (this.editBreakTimeBtn) {
-            this.editBreakTimeBtn.addEventListener('click', () => this.handleBreakTimeEdit());
-        }
-
-        if (this.saveBreakTimeBtn) {
-            this.saveBreakTimeBtn.addEventListener('click', () => this.saveBreakTime());
-        }
-
-        if (this.breakTimeForm) {
-            this.breakTimeForm.addEventListener('submit', (event) => {
-                event.preventDefault();
-                this.saveBreakTime();
-            });
         }
     }
 
@@ -252,159 +219,6 @@ class DashboardScreen {
             // エラー時は状態を再同期のみ実行
             await this.loadTodayAttendance();
             await this.loadAttendanceHistory();
-        }
-    }
-
-    /**
-     * 休憩時間編集
-     */
-    handleBreakTimeEdit() {
-        if (!this.currentAttendance || !this.currentAttendance.attendanceId) {
-            this.showAlert('休憩時間は退勤後に編集できます', 'info');
-            return;
-        }
-
-        if (!this.currentAttendance.clockOutTime) {
-            this.showAlert('退勤打刻後に休憩時間を編集できます', 'info');
-            return;
-        }
-
-        if (this.normalizeBoolean(this.currentAttendance.hasApprovedAdjustment)) {
-            this.showAlert('承認済みの打刻修正が適用されているため編集できません', 'danger');
-            return;
-        }
-
-        if (this.currentAttendance.attendanceFixed) {
-            this.showAlert('確定済みの勤怠は編集できません', 'danger');
-            return;
-        }
-
-        if (!this.breakTimeModal || !this.breakTimeInput) {
-            this.showAlert('モーダルを初期化できませんでした', 'danger');
-            return;
-        }
-
-        const currentBreak = this.currentAttendance.breakMinutes ?? 0;
-        this.breakTimeInput.value = TimeUtils.formatMinutesToTime(currentBreak);
-        this.clearBreakTimeError();
-        this.breakTimeInput.classList.remove('is-invalid');
-        this.breakTimeInput.removeAttribute('aria-invalid');
-        this.setBreakModalSavingState(false);
-
-        this.breakTimeModal.show();
-        setTimeout(() => {
-            try {
-                this.breakTimeInput.focus();
-                this.breakTimeInput.select();
-            } catch (error) {
-                console.debug('休憩時間入力フォーカス失敗:', error);
-            }
-        }, 0);
-    }
-
-    /**
-     * 休憩時間保存
-     */
-    async saveBreakTime() {
-        if (!this.currentAttendance || !this.currentAttendance.attendanceId || !this.breakTimeInput) {
-            return;
-        }
-
-        if (this.normalizeBoolean(this.currentAttendance.hasApprovedAdjustment)) {
-            this.showBreakTimeError('承認済みの打刻修正が適用されているため編集できません');
-            return;
-        }
-
-        if (!this.currentAttendance.clockOutTime) {
-            this.showAlert('退勤打刻後に休憩時間を編集できます', 'info');
-            return;
-        }
-
-        if (this.currentAttendance.attendanceFixed) {
-            this.showAlert('確定済みの勤怠は編集できません', 'danger');
-            return;
-        }
-
-        const rawValue = this.breakTimeInput.value ? this.breakTimeInput.value.trim() : '';
-        const pattern = /^\d{1,2}:[0-5]\d$/;
-
-        if (!pattern.test(rawValue)) {
-            this.breakTimeInput.classList.add('is-invalid');
-            this.breakTimeInput.setAttribute('aria-invalid', 'true');
-            this.showBreakTimeError('休憩時間はHH:MM形式で入力してください');
-            return;
-        }
-
-        const breakMinutes = TimeUtils.timeStringToMinutes(rawValue);
-
-        const start = this.currentAttendance.clockInTime ? new Date(this.currentAttendance.clockInTime) : null;
-        const end = this.currentAttendance.clockOutTime ? new Date(this.currentAttendance.clockOutTime) : null;
-        if (!start || !end || Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) {
-            this.showBreakTimeError('勤務時間の取得に失敗しました。再読み込み後にお試しください');
-            return;
-        }
-
-        const totalMinutes = Math.floor((end - start) / (1000 * 60));
-        const requiredMinutes = TimeUtils.calculateRequiredBreakMinutes(totalMinutes);
-        if (requiredMinutes > 0 && breakMinutes < requiredMinutes) {
-            this.breakTimeInput.classList.add('is-invalid');
-            this.breakTimeInput.setAttribute('aria-invalid', 'true');
-            this.showBreakTimeError('休憩時間が法定通りではありません');
-            return;
-        }
-
-        this.clearBreakTimeError();
-        this.breakTimeInput.classList.remove('is-invalid');
-        this.breakTimeInput.removeAttribute('aria-invalid');
-        this.setBreakModalSavingState(true);
-
-        try {
-            const response = await fetchWithAuth.put(
-                `/api/attendance/${this.currentAttendance.attendanceId}/break`,
-                { breakMinutes }
-            );
-
-            const result = await response.json().catch(() => null);
-            if (response.ok && result && result.success) {
-                await this.loadTodayAttendance();
-                await this.loadAttendanceHistory();
-                await this.refreshLinkedScreens();
-                this.breakTimeModal.hide();
-            } else {
-                const message = result?.message || '休憩時間の更新に失敗しました';
-                this.showBreakTimeError(message);
-            }
-        } catch (error) {
-            console.error('休憩時間更新エラー:', error);
-            this.showBreakTimeError('休憩時間の更新に失敗しました');
-        } finally {
-            this.setBreakModalSavingState(false);
-        }
-    }
-
-    showBreakTimeError(message) {
-        if (this.breakTimeError) {
-            this.breakTimeError.textContent = message;
-            this.breakTimeError.classList.remove('d-none');
-        } else {
-            this.showAlert(message, 'danger');
-        }
-    }
-
-    clearBreakTimeError() {
-        if (this.breakTimeError) {
-            this.breakTimeError.textContent = '';
-            this.breakTimeError.classList.add('d-none');
-        }
-    }
-
-    setBreakModalSavingState(isSaving) {
-        this.isSavingBreakTime = isSaving;
-        if (this.saveBreakTimeBtn) {
-            this.saveBreakTimeBtn.disabled = isSaving;
-        }
-        if (this.breakTimeInput) {
-            this.breakTimeInput.disabled = isSaving;
         }
     }
 
@@ -576,36 +390,6 @@ class DashboardScreen {
                 this.breakTimeElement.textContent = TimeUtils.formatMinutesToTime(effectiveBreakMinutes);
             } else {
                 this.breakTimeElement.textContent = '--:--';
-            }
-        }
-
-        if (this.editBreakTimeBtn) {
-            // 承認済みの打刻修正がある場合は鉛筆ボタンを完全に非表示
-            if (hasApprovedAdjustment) {
-                this.editBreakTimeBtn.style.display = 'none';
-                return;
-            }
-            
-            // 承認済みでない場合は通常の表示制御を行う
-            this.editBreakTimeBtn.style.display = '';
-            const canEditBreak = !!(attendanceForState
-                && attendanceForState.clockInTime
-                && attendanceForState.clockOutTime
-                && !attendanceForState.attendanceFixed);
-            this.editBreakTimeBtn.disabled = !canEditBreak;
-            this.editBreakTimeBtn.classList.toggle('disabled', !canEditBreak);
-            if (!canEditBreak) {
-                this.editBreakTimeBtn.setAttribute('aria-disabled', 'true');
-                if (!attendanceForState?.clockOutTime) {
-                    this.editBreakTimeBtn.title = '退勤打刻後に編集できます';
-                } else if (attendanceForState?.attendanceFixed) {
-                    this.editBreakTimeBtn.title = '確定済みの勤怠は編集できません';
-                } else {
-                    this.editBreakTimeBtn.title = '';
-                }
-            } else {
-                this.editBreakTimeBtn.removeAttribute('aria-disabled');
-                this.editBreakTimeBtn.title = '';
             }
         }
 

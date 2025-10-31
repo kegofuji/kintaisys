@@ -1534,9 +1534,9 @@ class AdminScreen {
 
         // パスワード強度チェックは撤廃
 
-        // 編集・退職処理ボタン（イベント委譲）: アイコン<i>内クリックにも反応するようclosestを使用
+        // 編集・退職処理・勤怠履歴ボタン（イベント委譲）: アイコン<i>内クリックにも反応するようclosestを使用
         document.addEventListener('click', (e) => {
-            const btn = e.target.closest('.edit-employee-btn, .deactivate-employee-btn');
+            const btn = e.target.closest('.edit-employee-btn, .deactivate-employee-btn, .history-employee-btn');
             if (!btn) return;
             if (btn.classList.contains('edit-employee-btn')) {
                 const employeeId = btn.getAttribute('data-employee-id');
@@ -1544,6 +1544,9 @@ class AdminScreen {
             } else if (btn.classList.contains('deactivate-employee-btn')) {
                 const employeeId = btn.getAttribute('data-employee-id');
                 this.deactivateEmployee(parseInt(employeeId));
+            } else if (btn.classList.contains('history-employee-btn')) {
+                const employeeId = btn.getAttribute('data-employee-id');
+                this.showEmployeeHistory(parseInt(employeeId));
             }
         });
     }
@@ -1824,6 +1827,9 @@ class AdminScreen {
             const editButton = `<button class="btn btn-sm btn-outline-primary me-1 edit-employee-btn" data-employee-id="${employee.employeeId}">
                      <i class="fas fa-edit"></i> 編集
                    </button>`;
+            const historyButton = `<button class="btn btn-sm btn-outline-primary me-1 history-employee-btn" data-employee-id="${employee.employeeId}">
+                     <i class="fas fa-history"></i> 勤怠履歴
+                   </button>`;
             const deactivateButton = employee.isActive 
                 ? `<button class="btn btn-sm ${deactivateClass} deactivate-employee-btn" data-employee-id="${employee.employeeId}">
                      <i class="fas fa-user-times"></i> ${deactivateText}
@@ -1842,6 +1848,7 @@ class AdminScreen {
                 <td><span class="${statusClass}">${statusText}</span></td>
                 <td>
                     ${editButton}
+                    ${historyButton}
                     ${vacationAdjustButton}
                     ${deactivateButton}
                 </td>
@@ -3766,6 +3773,85 @@ class AdminScreen {
     }
 
     /**
+     * 社員の勤怠履歴を表示
+     * @param {number} employeeId - 社員ID
+     */
+    showEmployeeHistory(employeeId) {
+        // 対象社員をキャッシュから取得
+        const employee = (this.employeeCache || []).find(emp => emp.employeeId === employeeId);
+        if (!employee) {
+            this.showAlert('社員情報が見つかりません', 'danger');
+            return;
+        }
+
+        // 元のcurrentEmployeeIdを保存（存在する場合）
+        const originalEmployeeId = window.currentEmployeeId;
+
+        // 指定された社員IDを一時的に設定
+        window.currentEmployeeId = employeeId;
+        
+        // 元の値を復元するためのフラグを設定（管理者画面に戻ったときに復元するため）
+        window._adminViewingEmployeeId = employeeId;
+        window._originalEmployeeId = originalEmployeeId;
+        
+        // 管理者が閲覧している社員名を保存（タイトル表示用）
+        const employeeName = this.getDisplayEmployeeName(employee);
+        window._adminViewingEmployeeName = employeeName;
+
+        // 履歴画面に遷移
+        if (window.router && typeof window.router.navigate === 'function') {
+            window.router.navigate('/history');
+        } else {
+            // routerが利用できない場合は直接URLを変更
+            window.location.href = '/history';
+        }
+
+        // 履歴画面の初期化を待ってから、指定された社員IDでデータを読み込む
+        setTimeout(() => {
+            if (window.historyScreen) {
+                // タイトルを更新
+                if (typeof window.historyScreen.updateHistoryTitle === 'function') {
+                    window.historyScreen.updateHistoryTitle();
+                }
+
+                // 履歴画面が既に初期化されている場合は、データを再読み込み
+                if (window.historyScreen.initialized) {
+                    window.historyScreen.loadCalendarData(true).then(() => {
+                        if (typeof window.historyScreen.generateCalendar === 'function') {
+                            window.historyScreen.generateCalendar();
+                        }
+                    }).catch(error => {
+                        console.error('勤怠履歴の読み込みに失敗:', error);
+                    });
+                } else {
+                    // まだ初期化されていない場合は、初期化を待つ
+                    const checkInitialized = setInterval(() => {
+                        if (window.historyScreen && window.historyScreen.initialized) {
+                            clearInterval(checkInitialized);
+                            // タイトルを更新
+                            if (typeof window.historyScreen.updateHistoryTitle === 'function') {
+                                window.historyScreen.updateHistoryTitle();
+                            }
+                            window.historyScreen.loadCalendarData(true).then(() => {
+                                if (typeof window.historyScreen.generateCalendar === 'function') {
+                                    window.historyScreen.generateCalendar();
+                                }
+                            }).catch(error => {
+                                console.error('勤怠履歴の読み込みに失敗:', error);
+                            });
+                        }
+                    }, 100);
+
+                    // タイムアウト（5秒）
+                    setTimeout(() => {
+                        clearInterval(checkInitialized);
+                    }, 5000);
+                }
+            }
+        }, 100);
+    }
+
+    /**
      * 社員退職処理
      * @param {number} employeeId - 社員ID
      */
@@ -3993,10 +4079,14 @@ class AdminScreen {
                 console.log('勤怠履歴画面を更新中...');
                 try {
                     if (typeof window.historyScreen.loadCalendarData === 'function') {
-                        await window.historyScreen.loadCalendarData();
+                        await window.historyScreen.loadCalendarData(true);
                     }
                     if (typeof window.historyScreen.generateCalendar === 'function') {
                         window.historyScreen.generateCalendar();
+                    }
+                    // 所定労働日数を更新
+                    if (typeof window.historyScreen.updatePrescribedWorkingDays === 'function') {
+                        window.historyScreen.updatePrescribedWorkingDays();
                     }
                     console.log('勤怠履歴画面の更新完了');
                 } catch (error) {

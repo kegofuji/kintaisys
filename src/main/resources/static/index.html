@@ -576,7 +576,7 @@
                                 
                                 <!-- 勤怠情報 -->
                                 <div class="card bg-primary text-white">
-                                    <div class="card-body">
+                                    <div class="card-body position-relative">
                                         <div id="attendanceInfo">
                                             <div class="row g-3 g-md-0">
                                                 <div class="col-6 col-md-3">
@@ -593,12 +593,7 @@
                                                 </div>
                                                 <div class="col-6 col-md-3">
                                                     <div class="text-center">
-                                                        <div class="fw-bold d-flex justify-content-center align-items-center gap-2">
-                                                            <span>休憩時間</span>
-                                                            <button id="editBreakTimeBtn" type="button" class="btn btn-link btn-sm p-0 text-white" title="休憩時間を編集" aria-label="休憩時間を編集">
-                                                                <i class="fas fa-pen"></i>
-                                                            </button>
-                                                        </div>
+                                                        <div class="fw-bold">休憩時間</div>
                                                         <div id="breakTime" class="h5">--:--</div>
                                                     </div>
                                                 </div>
@@ -626,6 +621,7 @@
                             勤怠履歴
                         </h5>
                         <div class="d-flex justify-content-end align-items-center">
+                            <span id="prescribedWorkingDays" class="me-3 text-muted small" style="font-weight: 500;">今月所定労働日数：<span id="prescribedWorkingDaysValue">-</span>日</span>
                             <select id="historyMonthSelect" class="form-select form-select-sm me-3" style="width: 160px;">
                                 <option value="">月を選択</option>
                             </select>
@@ -677,34 +673,6 @@
                                     </div>
                                 </div>
                             </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- 休憩時間編集モーダル -->
-            <div class="modal fade" id="breakTimeModal" tabindex="-1" aria-labelledby="breakTimeModalLabel" aria-hidden="true">
-                <div class="modal-dialog">
-                    <div class="modal-content">
-                        <div class="modal-header">
-                            <h5 class="modal-title" id="breakTimeModalLabel">休憩時間の編集</h5>
-                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                        </div>
-                        <div class="modal-body">
-                            <form id="breakTimeForm" novalidate>
-                                <div class="mb-3">
-                                    <label for="breakTimeInput" class="form-label">休憩時間 (HH:MM)</label>
-                                    <input type="text" class="form-control" id="breakTimeInput" placeholder="例: 1:00" pattern="^[0-9]{1,2}:[0-5][0-9]$" required>
-                                    <div class="form-text">
-                                        実働6時間未満は0分、6時間以上は45分、8時間以上は60分が自動計算されます。
-                                    </div>
-                                </div>
-                            </form>
-                            <div id="breakTimeError" class="text-danger small d-none"></div>
-                        </div>
-                        <div class="modal-footer">
-                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
-                            <button type="button" class="btn btn-primary" id="saveBreakTimeBtn">保存</button>
                         </div>
                     </div>
                 </div>

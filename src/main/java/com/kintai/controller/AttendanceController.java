@@ -1,6 +1,5 @@
 package com.kintai.controller;
 
-import com.kintai.dto.BreakTimeUpdateRequest;
 import com.kintai.dto.ClockInRequest;
 import com.kintai.dto.ClockOutRequest;
 import com.kintai.dto.ClockResponse;
@@ -66,29 +65,6 @@ public class AttendanceController {
         }
     }
     
-    /**
-     * 休憩時間更新API
-     * @param attendanceId 勤怠ID
-     * @param request 更新リクエスト
-     * @return 更新後の打刻レスポンス
-     */
-    @PutMapping("/{attendanceId}/break")
-    public ResponseEntity<ClockResponse> updateBreakTime(
-            @PathVariable Long attendanceId,
-            @RequestBody BreakTimeUpdateRequest request) {
-        try {
-            Integer breakMinutes = request != null ? request.getBreakMinutes() : null;
-            ClockResponse response = attendanceService.updateBreakMinutes(attendanceId, breakMinutes);
-            return ResponseEntity.ok(response);
-        } catch (AttendanceException e) {
-            ClockResponse errorResponse = new ClockResponse(false, e.getErrorCode(), e.getMessage());
-            return ResponseEntity.badRequest().body(errorResponse);
-        } catch (Exception e) {
-            ClockResponse errorResponse = new ClockResponse(false, "INTERNAL_ERROR", "内部エラーが発生しました");
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
-        }
-    }
-
     
     /**
      * ヘルスチェックAPI
