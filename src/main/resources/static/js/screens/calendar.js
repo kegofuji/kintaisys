@@ -646,6 +646,62 @@ class CalendarScreen {
         switch (action.key) {
             case 'adjustment':
                 payload.clockInDate = isoDate;
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+                payload.clockOutDate = isoDate;
+=======
+>>>>>>> theirs
+=======
+                payload.clockOutDate = isoDate;
+>>>>>>> theirs
+=======
+                payload.clockOutDate = isoDate;
+>>>>>>> theirs
+=======
+                payload.clockOutDate = isoDate;
+>>>>>>> theirs
+=======
+                payload.clockOutDate = isoDate;
+>>>>>>> theirs
+=======
+                payload.clockOutDate = isoDate;
+>>>>>>> theirs
+=======
+                payload.clockOutDate = isoDate;
+>>>>>>> theirs
+=======
+                payload.clockOutDate = isoDate;
+>>>>>>> theirs
+=======
+                payload.clockOutDate = isoDate;
+>>>>>>> theirs
+=======
+                payload.clockOutDate = isoDate;
+>>>>>>> theirs
+=======
+                payload.clockOutDate = isoDate;
+>>>>>>> theirs
+=======
+                payload.clockOutDate = isoDate;
+>>>>>>> theirs
+=======
+                payload.clockOutDate = isoDate;
+>>>>>>> theirs
+=======
+                payload.clockOutDate = isoDate;
+>>>>>>> theirs
                 break;
             case 'workPattern':
                 payload.endDate = isoDate;

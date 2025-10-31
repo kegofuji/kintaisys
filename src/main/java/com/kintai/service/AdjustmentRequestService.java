@@ -55,11 +55,11 @@ public class AdjustmentRequestService {
         // 2. 出勤時間と退勤時間のバリデーション（双方必須）
         LocalDateTime newClockIn = requestDto.getNewClockIn();
         LocalDateTime newClockOut = requestDto.getNewClockOut();
-        if (newClockIn == null && newClockOut == null) {
-            throw new AttendanceException(AttendanceException.INVALID_TIME_PAIR, "出勤または退勤のいずれかは入力してください");
+        if (newClockIn == null || newClockOut == null) {
+            throw new AttendanceException(AttendanceException.INVALID_TIME_PAIR, "出勤と退勤の時刻はセットで入力してください");
         }
-
-        if (newClockIn != null && newClockOut != null && newClockIn.isAfter(newClockOut)) {
+        
+        if (newClockIn.isAfter(newClockOut)) {
             throw new AttendanceException("INVALID_TIME_ORDER", "出勤時間は退勤時間より前である必要があります");
         }
 
@@ -82,10 +82,6 @@ public class AdjustmentRequestService {
             targetDate = newClockIn.toLocalDate();
             requestDto.setTargetDate(targetDate);
         }
-        if (targetDate == null && newClockOut != null) {
-            targetDate = newClockOut.toLocalDate();
-            requestDto.setTargetDate(targetDate);
-        }
 
         if (targetDate == null) {
             throw new AttendanceException(AttendanceException.INVALID_REQUEST, "対象日が指定されていません");
@@ -104,27 +100,22 @@ public class AdjustmentRequestService {
         // 7. 修正申請を作成
         AdjustmentRequest adjustmentRequest = new AdjustmentRequest(
                 employeeId, targetDate, newClockIn, newClockOut, requestDto.getReason());
-        Integer originalBreak = null;
+        int sanitizedBreak = timeCalculator.resolveBreakMinutes(newClockIn, newClockOut, requestDto.getBreakMinutes());
+        adjustmentRequest.setNewBreakMinutes(sanitizedBreak);
+
         if (currentRecord != null) {
             adjustmentRequest.setOriginalClockIn(currentRecord.getClockInTime());
             adjustmentRequest.setOriginalClockOut(currentRecord.getClockOutTime());
+            Integer originalBreak = null;
             if (currentRecord.getClockInTime() != null && currentRecord.getClockOutTime() != null) {
                 originalBreak = timeCalculator.resolveBreakMinutes(
                         currentRecord.getClockInTime(),
                         currentRecord.getClockOutTime(),
                         currentRecord.getBreakMinutes()
                 );
-            } else if (currentRecord.getBreakMinutes() != null) {
-                originalBreak = Math.max(0, currentRecord.getBreakMinutes());
             }
             adjustmentRequest.setOriginalBreakMinutes(originalBreak);
         }
-
-        int sanitizedBreak = timeCalculator.resolveBreakMinutes(newClockIn, newClockOut, requestDto.getBreakMinutes());
-        if ((newClockIn == null || newClockOut == null) && requestDto.getBreakMinutes() == null && originalBreak != null) {
-            sanitizedBreak = originalBreak;
-        }
-        adjustmentRequest.setNewBreakMinutes(sanitizedBreak);
 
         return adjustmentRequestRepository.save(adjustmentRequest);
     }
@@ -156,28 +147,12 @@ public class AdjustmentRequestService {
         }
         
         // 4. 勤怠記録を更新
-        LocalDateTime currentClockIn = attendanceRecord.getClockInTime();
-        LocalDateTime currentClockOut = attendanceRecord.getClockOutTime();
-        Integer existingBreakMinutes = attendanceRecord.getBreakMinutes();
-
-        LocalDateTime effectiveClockIn = adjustmentRequest.getNewClockIn() != null
-                ? adjustmentRequest.getNewClockIn()
-                : currentClockIn;
-        LocalDateTime effectiveClockOut = adjustmentRequest.getNewClockOut() != null
-                ? adjustmentRequest.getNewClockOut()
-                : currentClockOut;
-
-        attendanceRecord.setClockInTime(effectiveClockIn);
-        attendanceRecord.setClockOutTime(effectiveClockOut);
-
-        Integer requestedBreakMinutes = adjustmentRequest.getNewBreakMinutes();
-        if (requestedBreakMinutes == null && existingBreakMinutes != null) {
-            requestedBreakMinutes = existingBreakMinutes;
-        }
+        attendanceRecord.setClockInTime(adjustmentRequest.getNewClockIn());
+        attendanceRecord.setClockOutTime(adjustmentRequest.getNewClockOut());
         int sanitizedBreak = timeCalculator.resolveBreakMinutes(
-                effectiveClockIn,
-                effectiveClockOut,
-                requestedBreakMinutes
+                adjustmentRequest.getNewClockIn(),
+                adjustmentRequest.getNewClockOut(),
+                adjustmentRequest.getNewBreakMinutes()
         );
         attendanceRecord.setBreakMinutes(sanitizedBreak);
         adjustmentRequest.setNewBreakMinutes(sanitizedBreak);
