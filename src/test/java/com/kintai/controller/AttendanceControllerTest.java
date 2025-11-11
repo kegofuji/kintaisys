@@ -2,6 +2,7 @@ package com.kintai.controller;
 
 import com.kintai.entity.AttendanceRecord;
 import com.kintai.entity.Employee;
+import com.kintai.entity.UserAccount;
 import com.kintai.repository.AttendanceRecordRepository;
 import com.kintai.repository.EmployeeRepository;
 import org.hamcrest.Matchers;
@@ -11,6 +12,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContext;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -46,6 +50,17 @@ class AttendanceControllerTest {
 
     @Test
     void getAttendanceRecordReturnsExistingData() throws Exception {
+        // テスト用の認証情報を設定
+        UserAccount userAccount = new UserAccount("testuser", "password", UserAccount.UserRole.EMPLOYEE, employee.getEmployeeId());
+        UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
+                userAccount,
+                userAccount.getPassword(),
+                userAccount.getAuthorities()
+        );
+        SecurityContext context = SecurityContextHolder.createEmptyContext();
+        context.setAuthentication(authentication);
+        SecurityContextHolder.setContext(context);
+        
         LocalDateTime clockIn = targetDate.atTime(9, 0);
         LocalDateTime clockOut = targetDate.atTime(18, 0);
 
@@ -66,6 +81,17 @@ class AttendanceControllerTest {
 
     @Test
     void getAttendanceRecordWithoutDataReturnsNull() throws Exception {
+        // テスト用の認証情報を設定
+        UserAccount userAccount = new UserAccount("testuser", "password", UserAccount.UserRole.EMPLOYEE, employee.getEmployeeId());
+        UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
+                userAccount,
+                userAccount.getPassword(),
+                userAccount.getAuthorities()
+        );
+        SecurityContext context = SecurityContextHolder.createEmptyContext();
+        context.setAuthentication(authentication);
+        SecurityContextHolder.setContext(context);
+        
         LocalDate futureDate = targetDate.plusDays(10);
 
         mockMvc.perform(get("/api/attendance/history/{employeeId}/{date}", employee.getEmployeeId(), futureDate)
