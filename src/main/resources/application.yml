@@ -1,0 +1,90 @@
+spring:
+  application:
+    name: kintai
+  profiles:
+    active: dev  # デフォルトはdevプロファイル
+  mvc:
+    pathmatch:
+      matching-strategy: ant_path_matcher
+  web:
+    resources:
+      static-locations: classpath:/static/
+      cache:
+        period: 0
+  datasource:
+    url: jdbc:mysql://127.0.0.1:3306/kintai?useSSL=false&serverTimezone=Asia/Tokyo&characterEncoding=utf8&allowPublicKeyRetrieval=true&useUnicode=true
+    username: kintai
+    password: kintai
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: true
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+        format_sql: true
+  flyway:
+    enabled: false
+
+---
+# devプロファイル設定
+spring:
+  config:
+    activate:
+      on-profile: dev
+  datasource:
+    url: jdbc:h2:mem:testdb
+    username: sa
+    password: 
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: true
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+        format_sql: true
+  h2:
+    console:
+      enabled: true
+  flyway:
+    enabled: false
+
+---
+# prodプロファイル設定
+spring:
+  config:
+    activate:
+      on-profile: prod
+  datasource:
+    url: ${DATABASE_URL}
+    username: ${DB_USERNAME:root}
+    password: root${DB_PASSWORD:}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+        format_sql: false
+  flyway:
+    enabled: false
+    url: ${DATABASE_URL}
+    user: ${DB_USERNAME:root}
+    password: root${DB_PASSWORD:}
+
+server:
+  port: ${PORT:8080}
+  servlet:
+    session:
+      timeout: 10m
+
+logging:
+  level:
+    com.kintai: DEBUG
+    org.springframework.web: DEBUG
+

@@ -1,0 +1,35 @@
+{
+  "name": "kintai-integration-tests",
+  "version": "1.0.0",
+  "description": "勤怠管理システム 結合テストスイート",
+  "scripts": {
+    "test:integration": "./test_integration.sh",
+    "test:ui": "npx playwright test test_ui.spec.js --project=chromium",
+    "test:ui:headed": "npx playwright test test_ui.spec.js --project=chromium --headed",
+    "test:ui:all": "npx playwright test test_ui.spec.js",
+    "test:pdf": "pytest test_pdf_integration.py -v",
+    "test:all": "./run_all_tests.sh",
+    "test:setup": "python test_data_manager.py setup",
+    "test:cleanup": "python test_data_manager.py cleanup",
+    "test:status": "python test_data_manager.py status",
+    "test:validate": "python test_data_manager.py validate",
+    "playwright:install": "npx playwright install",
+    "playwright:show-report": "npx playwright show-report",
+    "start:test-server": "mvn spring-boot:run -Dspring-boot.run.profiles=test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.55.0"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "keywords": [
+    "integration-test",
+    "playwright",
+    "pytest",
+    "kintai",
+    "attendance-management"
+  ],
+  "author": "Kintai Development Team",
+  "license": "MIT"
+}
